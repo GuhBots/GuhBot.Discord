@@ -37,6 +37,8 @@ The `applications.commands` scope lets the bot register slash commands. A server
 | `DISCORD_TOKEN` | The test bot's token | The production bot's token |
 | `DEV_GUILD_ID` | Your test server's ID | Empty |
 | `OWNER_GUILD_ID` | Your test server's ID, to try owner commands | The server where you run owner commands |
+| `MODULES` | Empty, or only the modules you are testing | Empty for every module, or the modules to turn on |
+| `ARCHIVIST_GUILD_IDS` | Your test server's ID, to try the Archivist module | The servers that use the Archivist module |
 | `STATUS_CHANNEL_ID` | Empty, or a test channel | The channel for startup and shutdown messages |
 | `SUPPORT_URL`, `WEBSITE_URL`, `TOPGG_URL`, `DISCORDBOTLIST_URL` | Optional | The links to show. Leave one empty to hide it |
 
@@ -47,6 +49,8 @@ The code is the only source of the application's commands. Each time the bot log
 * **With `DEV_GUILD_ID`:** Commands are registered in that server only and update at once. No commands are registered globally. Use this while developing.
 * **Without it:** Commands are registered globally, in every server. Discord can take up to an hour to show changes everywhere.
 * **Owner commands:** These are registered only in `OWNER_GUILD_ID`, in either mode.
+* **Modules limited to some servers:** Their commands are registered only in the servers their setting lists, such as `ARCHIVIST_GUILD_IDS`, in either mode.
+* **Modules that are off:** Their commands are not registered, so turning a module off and restarting the bot removes its commands.
 
 The sync keeps the application's Activity entry point command, named `launch`, because Discord does not let a bot remove it this way. Servers that invited the bot without the `applications.commands` scope cannot hold server commands, so the bot skips them and reports how many there are.
 

@@ -2,6 +2,8 @@
 
 Every slash command, grouped by its /help module. The "Original" column gives the GuhBot.Prime prefix command and its aliases. Slash commands have no aliases, so each command keeps one name.
 
+The `MODULES` setting chooses which modules are on, as [Discord Setup](guides/discord-setup.md#fill-in-the-settings) describes. A module that is off has no commands and is missing from /help.
+
 All commands work only in servers, as the original bot did. Each command has a per-user cooldown in each server, carried over from the original.
 
 ## Fun
@@ -67,11 +69,22 @@ Each command is shown only to members with the matching permission. The bot also
 | `/dab [member]` | `dab` | |
 | `/fart [user]` | `fart` | Hidden from /help |
 
-## Meta
+## Archivist
+
+Archiving tools for specific servers. The module is new and has no counterpart in the original bot. It works only in the servers listed in `ARCHIVIST_GUILD_IDS`, and /help shows it only there.
 
 | Command | Original | Notes |
 | --- | --- | --- |
-| `/help [module]` | `help` | Lists modules, or the commands in one module |
+| `/archivist` | None | A placeholder that replies "WIP" |
+
+## Meta
+
+Meta is always on, because it holds /help.
+
+
+| Command | Original | Notes |
+| --- | --- | --- |
+| `/help [module]` | `help` | Lists the modules that work in this server, or the commands in one module. Suggests module names as you type |
 | `/stats` | `stats`, `statistics`, `info` | Shows Node.js and discord.js versions in place of Python and discord.py |
 | `/ping` | `ping`, `latency` | |
 | `/support` | `support`, `invite` | The bot invite is built from the running bot's ID. Other links come from settings |
