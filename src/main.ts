@@ -36,6 +36,17 @@ client.once("clientReady", async () => {
   await announce(client, ":wave: Hello everyone! I'm back online!");
 });
 
+// Sync commands again when the bot joins a server, so that a newly joined
+// development or owner server gets its commands without a restart.
+client.on("guildCreate", async (guild) => {
+  console.log(`Joined ${guild.name} (${guild.id}), refreshing commands`);
+  try {
+    await client.initApplicationCommands();
+  } catch (error) {
+    console.error(`Could not refresh commands after joining ${guild.id}:`, error);
+  }
+});
+
 client.on("interactionCreate", async (interaction: Interaction) => {
   try {
     await client.executeInteraction(interaction);

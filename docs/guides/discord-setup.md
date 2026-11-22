@@ -42,7 +42,7 @@ The `applications.commands` scope lets the bot register slash commands. A server
 
 ## How Commands Are Registered
 
-When the bot logs in, it sends its commands to Discord.
+When the bot logs in, and again whenever it joins a server, it sends its commands to Discord.
 
 * **With `DEV_GUILD_ID`:** Commands are registered in that server only and update at once. Use this while developing.
 * **Without it:** Commands are registered globally, in every server. Discord can take up to an hour to show changes everywhere.
