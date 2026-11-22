@@ -1,6 +1,6 @@
 {
   "name": "guhbot-discord",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "GuhBot, a Discord bot with slash commands, built with discord.ts (discordx).",
   "private": true,
   "type": "module",
