@@ -2,6 +2,7 @@ import "reflect-metadata";
 import { GatewayIntentBits, type Interaction } from "discord.js";
 import { Client } from "discordx";
 import { config, readToken } from "./config.js";
+import { syncAllCommands, syncGuildCommands } from "./lib/command-sync.js";
 import { replyError } from "./lib/embeds.js";
 import { announce, shutdown } from "./lib/lifecycle.js";
 import { startPresence } from "./lib/presence.js";
@@ -30,20 +31,26 @@ const client = new Client({
 });
 
 client.once("clientReady", async () => {
-  await client.initApplicationCommands();
   startPresence(client);
   console.log(`Logged in as ${client.user?.tag}, version ${config.version}`);
   await announce(client, ":wave: Hello everyone! I'm back online!");
+  // The code is the only source of commands. This registers its commands and
+  // removes every other command, globally and in each server.
+  try {
+    await syncAllCommands(client);
+  } catch (error) {
+    console.error("Could not sync commands:", error);
+  }
 });
 
-// Sync commands again when the bot joins a server, so that a newly joined
+// Sync a server's commands when the bot joins it, so that a newly joined
 // development or owner server gets its commands without a restart.
 client.on("guildCreate", async (guild) => {
-  console.log(`Joined ${guild.name} (${guild.id}), refreshing commands`);
+  console.log(`Joined ${guild.name} (${guild.id})`);
   try {
-    await client.initApplicationCommands();
+    await syncGuildCommands(client, guild);
   } catch (error) {
-    console.error(`Could not refresh commands after joining ${guild.id}:`, error);
+    console.error(`Could not sync commands after joining ${guild.id}:`, error);
   }
 });
 
