@@ -30,6 +30,7 @@ Add or update definitions when terminology changes, and link to them from other 
 | SSH | Secure Shell, used to log in to another machine's command line |
 | USB | Universal Serial Bus |
 | VS Code | Visual Studio Code, a code editor |
+| WIP | Work in progress. The placeholder `/archivist` command replies with it |
 | WSL | Windows Subsystem for Linux |
 | YAML | A configuration file format, used by `compose.yaml` and the GitHub workflows |
 
@@ -47,6 +48,7 @@ Add or update definitions when terminology changes, and link to them from other 
 | Guild | Discord's internal name for a server |
 | Image | A packaged snapshot of an application and everything it needs to run, built from a Dockerfile |
 | Intent | A category of Discord events the bot subscribes to. Privileged intents, such as Message Content, must be turned on in the Developer Portal |
+| Module | A group of commands and listeners that the `MODULES` setting turns on or off. Each module is one /help category |
 | Monorepo | A repository containing multiple projects or components maintained together |
 | README | A file that introduces a repository or directory and explains what it contains |
 | Registry | A server that stores images for machines to download, such as GHCR |

@@ -1,35 +1,25 @@
 import "reflect-metadata";
-import {
-  DiscordAPIError,
-  GatewayIntentBits,
-  type Interaction,
-  RESTJSONErrorCodes,
-} from "discord.js";
+import { DiscordAPIError, type Interaction, RESTJSONErrorCodes } from "discord.js";
 import { Client } from "discordx";
 import { config, readToken } from "./config.js";
 import { syncAllCommands, syncGuildCommands } from "./lib/command-sync.js";
 import { replyError } from "./lib/embeds.js";
 import { announce, shutdown } from "./lib/lifecycle.js";
 import { startPresence } from "./lib/presence.js";
+import { loadModules, requiredIntents } from "./modules.js";
 
-// Importing a module registers its commands and listeners with discordx.
-import "./commands/fun.js";
-import "./commands/games.js";
-import "./commands/images.js";
-import "./commands/meta.js";
-import "./commands/misc.js";
-import "./commands/moderation.js";
-import "./commands/roleplay.js";
-import "./events/afk.js";
+// Importing a module's files registers its commands and listeners with
+// discordx. A module that is off never loads, so the command sync removes
+// its commands from Discord.
+await loadModules();
 
 if (config.ownerGuildId) {
   await import("./commands/owner.js");
 }
 
 const client = new Client({
-  // Neither intent is privileged. Guild Messages lets the AFK listener see
-  // who talks and who they mention.
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages],
+  // Only the intents the enabled modules need. None of them is privileged.
+  intents: requiredIntents(),
   // In development, register every command in one guild so changes appear at once.
   botGuilds: config.devGuildId ? [config.devGuildId] : undefined,
   silent: false,

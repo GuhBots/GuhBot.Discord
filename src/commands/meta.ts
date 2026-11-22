@@ -1,6 +1,7 @@
 import { cpus, totalmem } from "node:os";
 import {
   ApplicationCommandOptionType,
+  type AutocompleteInteraction,
   type CommandInteraction,
   MessageFlags,
   OAuth2Scopes,
@@ -12,15 +13,18 @@ import {
   Guard,
   MetadataStorage,
   Slash,
-  SlashChoice,
   SlashOption,
 } from "discordx";
 import { Category, type ICategory } from "@discordx/utilities";
 import { config } from "../config.js";
-import { CATEGORIES, type CategoryName, GUILD_ONLY, HIDDEN_COMMANDS } from "../lib/categories.js";
+import { GUILD_ONLY, HIDDEN_COMMANDS } from "../lib/categories.js";
 import { Cooldown } from "../lib/cooldown.js";
-import { baseEmbed, userAuthor } from "../lib/embeds.js";
+import { baseEmbed, replyError, userAuthor } from "../lib/embeds.js";
 import { pick } from "../lib/random.js";
+import { type BotModule, ENABLED_MODULES, isAvailableIn } from "../modules.js";
+
+/** Discord shows at most this many autocomplete suggestions. */
+const MAX_SUGGESTIONS = 25;
 
 const CPU_SAMPLE_MS = 200;
 
@@ -37,12 +41,30 @@ function usage(command: DApplicationCommand): string {
 }
 
 /** Commands in a /help module, in the order they were declared. */
-function commandsIn(category: CategoryName): DApplicationCommand[] {
+function commandsIn(module: BotModule): DApplicationCommand[] {
   return MetadataStorage.instance.applicationCommandSlashesFlat.filter(
     (command) =>
-      (command as DApplicationCommand & ICategory).category === category &&
+      (command as DApplicationCommand & ICategory).category === module.name &&
       !HIDDEN_COMMANDS.has(command.name),
   );
+}
+
+/** The loaded modules that work in a server, which are the ones /help shows there. */
+function modulesIn(guildId: string | null): BotModule[] {
+  return ENABLED_MODULES.filter((module) => isAvailableIn(module, guildId));
+}
+
+/**
+ * Suggests module names for /help. Choices would be the same in every
+ * server, so autocomplete keeps server-limited modules out of other servers.
+ */
+async function suggestModules(interaction: AutocompleteInteraction): Promise<void> {
+  const typed = interaction.options.getFocused().toLowerCase();
+  const names = modulesIn(interaction.guildId)
+    .map((module) => module.name)
+    .filter((name) => name.toLowerCase().includes(typed))
+    .slice(0, MAX_SUGGESTIONS);
+  await interaction.respond(names.map((name) => ({ name, value: name })));
 }
 
 /** Formats seconds as the original bot did, one unit per line. */
@@ -122,31 +144,42 @@ export class Meta {
   @Slash({ name: "help", description: "Displays this message", ...GUILD_ONLY })
   @Guard(Cooldown(5, 2))
   async help(
-    @SlashChoice(...Object.keys(CATEGORIES))
     @SlashOption({
       name: "module",
       description: "Show the commands in one module",
       type: ApplicationCommandOptionType.String,
       required: false,
+      autocomplete: suggestModules,
     })
-    module: CategoryName | undefined,
+    moduleName: string | undefined,
     interaction: CommandInteraction,
   ): Promise<void> {
+    const available = modulesIn(interaction.guildId);
     const embed = baseEmbed(interaction)
       .setAuthor(userAuthor(interaction.user))
       .setThumbnail(interaction.client.user.displayAvatarURL());
 
-    if (!module) {
+    if (!moduleName) {
       embed
         .setTitle("🔧 Module List")
         .setDescription("Do `/help [module]` for more info on a specific module.")
-        .addFields(
-          Object.entries(CATEGORIES).map(([name, description]) => ({ name, value: description })),
-        );
+        .addFields(available.map((module) => ({ name: module.name, value: module.description })));
     } else {
+      // Autocomplete only suggests names, so the member can still type anything.
+      const module = available.find(
+        (candidate) => candidate.name.toLowerCase() === moduleName.trim().toLowerCase(),
+      );
+      if (!module) {
+        await replyError(
+          interaction,
+          "Unknown module",
+          `There is no \`${moduleName.slice(0, 100)}\` module here. Do \`/help\` to list the modules.`,
+        );
+        return;
+      }
       embed
-        .setTitle(`🚧 ${module} Command List`)
-        .setDescription(`**${module} - ${CATEGORIES[module]}**`)
+        .setTitle(`🚧 ${module.name} Command List`)
+        .setDescription(`**${module.name} - ${module.description}**`)
         .addFields(
           commandsIn(module).map((command) => ({
             name: usage(command),
