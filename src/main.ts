@@ -1,5 +1,10 @@
 import "reflect-metadata";
-import { GatewayIntentBits, type Interaction } from "discord.js";
+import {
+  DiscordAPIError,
+  GatewayIntentBits,
+  type Interaction,
+  RESTJSONErrorCodes,
+} from "discord.js";
 import { Client } from "discordx";
 import { config, readToken } from "./config.js";
 import { syncAllCommands, syncGuildCommands } from "./lib/command-sync.js";
@@ -54,14 +59,37 @@ client.on("guildCreate", async (guild) => {
   }
 });
 
+/** Discord's deadline for the first reply to an interaction. */
+const INTERACTION_REPLY_WINDOW_MS = 3_000;
+
+/** Unknown interaction (10062) or already acknowledged (40060). */
+function isLostInteraction(error: unknown): error is DiscordAPIError {
+  return (
+    error instanceof DiscordAPIError &&
+    (error.code === RESTJSONErrorCodes.UnknownInteraction ||
+      error.code === RESTJSONErrorCodes.InteractionHasAlreadyBeenAcknowledged)
+  );
+}
+
 client.on("interactionCreate", async (interaction: Interaction) => {
   try {
     await client.executeInteraction(interaction);
   } catch (error) {
-    console.error(
-      `Error in ${interaction.isCommand() ? `/${interaction.commandName}` : "interaction"}:`,
-      error,
-    );
+    const name = interaction.isCommand() ? `/${interaction.commandName}` : "interaction";
+    const ageMs = Date.now() - interaction.createdTimestamp;
+    if (isLostInteraction(error)) {
+      // Replying again would fail the same way, so only log it. Discord allows
+      // 3 seconds for the first reply. A younger interaction that is already
+      // gone was almost certainly answered by another copy of the bot.
+      console.warn(
+        `${name} was already answered or expired after ${ageMs}ms (${error.code}).` +
+          (ageMs < INTERACTION_REPLY_WINDOW_MS
+            ? " Another copy of the bot is probably running with the same token."
+            : ""),
+      );
+      return;
+    }
+    console.error(`Error in ${name} after ${ageMs}ms:`, error);
     if (interaction.isCommand()) {
       const message = error instanceof Error ? error.message : String(error);
       await replyError(
