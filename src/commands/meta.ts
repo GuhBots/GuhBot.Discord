@@ -206,7 +206,7 @@ export class Meta {
         },
         ...linkFields(interaction),
       )
-      .setFooter({ text: `GuhBean#8433 | ${botName}` })
+      .setFooter({ text: `@guhbean | ${botName}` })
       .setAuthor({ name: botName, iconURL: client.user.displayAvatarURL() })
       .setThumbnail(client.user.displayAvatarURL());
     await interaction.editReply({ embeds: [embed] });
@@ -241,7 +241,7 @@ export class Meta {
       .addFields(linkFields(interaction))
       .setAuthor({ name: client.user.username, iconURL: client.user.displayAvatarURL() })
       .setThumbnail("https://media.giphy.com/media/9ZOyRdXL7ZVKg/giphy.gif")
-      .setFooter({ text: "GuhBean#8433 | GuhBot" });
+      .setFooter({ text: "@guhbean | GuhBot" });
     await interaction.reply({ embeds: [embed] });
   }
 
