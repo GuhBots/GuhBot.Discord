@@ -22,3 +22,19 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run ${{ matrix.check }} check
         run: python3 tools/scripts/run_checks.py ${{ matrix.check }}
+
+  typescript:
+    name: check/typescript
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # Keep in sync with NODE_VERSION in the Dockerfile.
+          node-version: 24.22.3
+          cache: npm
+      - run: npm ci
+      - name: Type check and formatting
+        run: npm run check
+      - name: Compile
+        run: npm run build

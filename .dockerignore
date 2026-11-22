@@ -8,4 +8,8 @@
 .git
 .devcontainer
 
-# Add build outputs, dependency directories, and local caches here.
+# Build outputs, dependencies, and local data. The build stage installs
+# and compiles its own.
+node_modules
+build
+data

@@ -10,3 +10,6 @@ set -eu
 if ! git config --global --get-all safe.directory | grep -qxF "$PWD"; then
     git config --global --add safe.directory "$PWD"
 fi
+
+# Install the bot's dependencies. npm ci matches package-lock.json exactly.
+npm ci

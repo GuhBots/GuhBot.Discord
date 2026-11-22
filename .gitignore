@@ -8,4 +8,7 @@
 .DS_Store
 Thumbs.db
 
-# Add tool-specific caches, build outputs, and local configuration as needed.
+# Node.js dependencies, compiled output, and the local SQLite database
+node_modules/
+build/
+data/
