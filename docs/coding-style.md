@@ -44,7 +44,19 @@ This applies to documentation, code comments, and schema comments.
 
 ## Language-Specific Rules
 
-No language-specific rules are defined in the base. Add a subsection for each language used by a derived template or repository.
+### TypeScript
+
+These rules cover `src/`. [src/README.md](../src/README.md) explains its layout.
+
+* **Formatting:** Prettier formats the code, configured in `.prettierrc.json`. `npm run format` applies it and `npm run check` verifies it. `.prettierignore` leaves Markdown and the template's YAML and dev container files to their own conventions.
+* **Type checking:** `tsconfig.json` enables strict mode and reports unused code. `npm run check` runs the type checker.
+* **Modules:** The project uses ECMAScript (ES) modules. Import local files with a `.js` extension, as Node.js requires, even though the source file ends in `.ts`.
+* **Naming:** Use `camelCase` for functions and values, `PascalCase` for classes and types, and `UPPER_SNAKE_CASE` for module-level constants. Name files in lowercase with hyphens.
+* **Commands:** Group commands by /help category, one discordx class per file. Read settings from `config.ts`, never from `process.env` directly.
+* **Errors:** Let unexpected errors propagate. The handler in `main.ts` logs them and replies with an error embed. Catch errors only where the bot can recover, such as when a member has closed their direct messages.
+* **Tests:** No automated tests exist yet. Verify command changes by running the bot against a test server, as [Discord Setup](guides/discord-setup.md) describes.
+
+Add a subsection for each further language the repository uses.
 
 Each subsection should state the following, where applicable.
 
