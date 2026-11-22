@@ -1,6 +1,6 @@
 // Shared development environment. See README.md in this directory.
 {
-    "name": "Development",
+    "name": "GuhBot.Discord",
     "build": {
         "dockerfile": "../Dockerfile",
         "context": "..",
@@ -11,7 +11,7 @@
     // Editor settings are optional. The container works the same from a shell.
     "customizations": {
         "vscode": {
-            "extensions": ["editorconfig.editorconfig"]
+            "extensions": ["editorconfig.editorconfig", "esbenp.prettier-vscode"]
         }
     }
 }
