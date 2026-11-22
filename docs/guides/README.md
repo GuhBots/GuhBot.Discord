@@ -4,6 +4,7 @@ Guides explain tasks, concepts, and workflows. Repository-wide guides live here.
 
 ## Available Guides
 
+* [Discord Setup](discord-setup.md) explains how to connect the bot to a Discord application and fill in its settings.
 * [Template Usage](template-usage.md) explains how to adopt the base and build derived templates.
 * [Self-Hosting](self-hosting.md) explains how to run the service on a Raspberry Pi, laptop, or server.
 * [Releasing](releasing.md) explains version numbers, how to create a release, and which images are published.
