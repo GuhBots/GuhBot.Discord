@@ -10,11 +10,11 @@ The bot's TypeScript source. `npm run build` compiles it to `build/`.
 | `config.ts` | Settings read from environment variables, and paths to `assets/` |
 | `commands/` | One module per /help category, plus `owner.ts` for owner commands |
 | `events/` | Gateway event listeners, such as the AFK listener |
-| `lib/` | Shared helpers for embeds, cooldowns, the database, presence, and shutdown |
+| `lib/` | Shared helpers for command sync, embeds, cooldowns, the database, presence, and shutdown |
 
 ## How Commands Are Registered
 
-Each command module declares a class with discordx's `@Discord` decorator. Its methods use `@Slash` for commands and `@SlashOption` for options. Importing the module registers the commands, so `main.ts` imports each module explicitly. When the bot logs in, `initApplicationCommands` sends the commands to Discord. It registers them globally, or only in `DEV_GUILD_ID` when that is set.
+Each command module declares a class with discordx's `@Discord` decorator. Its methods use `@Slash` for commands and `@SlashOption` for options. Importing the module registers the commands, so `main.ts` imports each module explicitly. When the bot logs in, `lib/command-sync.ts` sends the commands to Discord and deletes any command that the code does not define. It registers them globally, or only in `DEV_GUILD_ID` when that is set. It replaces discordx's `initApplicationCommands`, which never deletes stale global commands when no global commands remain, and which drops the Activity entry point command.
 
 Owner commands in `commands/owner.ts` use `@Guild` to register only in `OWNER_GUILD_ID`. `main.ts` imports the module only when that setting exists.
 

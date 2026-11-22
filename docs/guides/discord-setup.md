@@ -42,12 +42,15 @@ The `applications.commands` scope lets the bot register slash commands. A server
 
 ## How Commands Are Registered
 
-When the bot logs in, and again whenever it joins a server, it sends its commands to Discord.
+The code is the only source of the application's commands. Each time the bot logs in, it registers the commands in the code and deletes every other command registered for the application, globally and in every server it is in. When it joins a server, it syncs that server's commands.
 
-* **With `DEV_GUILD_ID`:** Commands are registered in that server only and update at once. Use this while developing.
+* **With `DEV_GUILD_ID`:** Commands are registered in that server only and update at once. No commands are registered globally. Use this while developing.
 * **Without it:** Commands are registered globally, in every server. Discord can take up to an hour to show changes everywhere.
+* **Owner commands:** These are registered only in `OWNER_GUILD_ID`, in either mode.
 
-The bot replaces any commands that Discord has registered for it in the same place, so removed commands disappear on the next start. Commands registered in a development server stay there after `DEV_GUILD_ID` is cleared, so a server that has both shows each command twice. Keep development servers separate from the servers the production bot serves.
+The sync keeps the application's Activity entry point command, named `launch`, because Discord does not let a bot remove it this way. Servers that invited the bot without the `applications.commands` scope cannot hold server commands, so the bot skips them and reports how many there are.
+
+Because the sync deletes commands it does not know, only one program may register commands for an application. Two codebases sharing a token would delete each other's commands.
 
 ## Expected Result
 
