@@ -2,6 +2,7 @@ import {
   ApplicationCommandOptionType,
   type CommandInteraction,
   EmbedBuilder,
+  GuildMember,
   MessageFlags,
   PermissionFlagsBits,
   type User,
@@ -75,10 +76,10 @@ export class Fun {
       type: ApplicationCommandOptionType.User,
       required: false,
     })
-    user: User | undefined,
+    user: GuildMember | User | undefined,
     interaction: CommandInteraction,
   ): Promise<void> {
-    const target = user ?? interaction.user;
+    const target = user instanceof GuildMember ? user.user : (user ?? interaction.user);
     const member = interaction.guild?.members.resolve(target.id);
     const inches = Math.floor(Math.random() * 21);
     const embed = new EmbedBuilder()

@@ -12,6 +12,29 @@ function optional(name: string): string | undefined {
   return value ? value : undefined;
 }
 
+/** Reads a comma-separated list, ignoring blank entries. Returns undefined when unset. */
+function optionalList(name: string): string[] | undefined {
+  const items = optional(name)
+    ?.split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return items?.length ? items : undefined;
+}
+
+const SNOWFLAKE = /^\d{17,20}$/;
+
+/** Reads a comma-separated list of Discord IDs, and fails on anything that is not an ID. */
+function idList(name: string): string[] {
+  const ids = optionalList(name) ?? [];
+  const invalid = ids.filter((id) => !SNOWFLAKE.test(id));
+  if (invalid.length) {
+    throw new Error(
+      `${name} must hold Discord IDs separated by commas. Invalid: ${invalid.join(", ")}`,
+    );
+  }
+  return ids;
+}
+
 /** Reads the bot token. Only the entry point calls this, so imports never need it. */
 export function readToken(): string {
   const token = optional("DISCORD_TOKEN");
@@ -31,6 +54,13 @@ export const config = {
   devGuildId: optional("DEV_GUILD_ID"),
   /** The only guild where owner commands are registered. Owner commands are off when unset. */
   ownerGuildId: optional("OWNER_GUILD_ID"),
+  /**
+   * Lowercase names of the modules to load. Every module loads when unset.
+   * `modules.ts` checks the names.
+   */
+  modules: optionalList("MODULES")?.map((name) => name.toLowerCase()),
+  /** The servers where the Archivist module works. The module is off when empty. */
+  archivistGuildIds: idList("ARCHIVIST_GUILD_IDS"),
   /** Receives startup and shutdown announcements when set. */
   statusChannelId: optional("STATUS_CHANNEL_ID"),
   /** Holds the SQLite database. The container image sets it to the /data volume. */
