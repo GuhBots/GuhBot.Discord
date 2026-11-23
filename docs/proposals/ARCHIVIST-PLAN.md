@@ -39,7 +39,7 @@ Keep this file at `docs/proposals/ARCHIVIST-PLAN.md` and do not create a competi
 | `R13` | Public Google Drive original-file links from contributors' own folders, without folder registration or Google user login |
 | `R14` | Permanent record deletion, reference blockers, retained media, no trash, and no deletion log |
 | `R15` | Lightweight per-archive edit logs with before and after values, removing a deleted record's own entries |
-| `R16` | Contributor operation parity between Discord and web, with most contributions expected through Discord |
+| `R16` | Every contributor operation on the web, with uploads and quick edits also in Discord. Detailed history editing and character merge are web-only |
 | `R17` | Personal timezone and date-order preferences in `guhbot.db`, without shifting date-only values or rewriting history |
 | `R18` | Missing-media requests require temporal information, a person, and a description, with no assignees |
 | `R19` | Contributor-configured per-archive upload announcements that remain unchanged after edits or deletion |
@@ -847,8 +847,7 @@ Owner commands use `/archivist-admin` in `OWNER_GUILD_ID` to preserve the existi
 | `/archivist archive list` | List only accessible archives, or all for the owner |
 | `/archivist artifact add` | Archive, description, and exactly one attachment or Drive file link. Optional dates and links to existing records. Return saved record or duplicate review |
 | `/archivist artifact show`, `edit`, `delete` | Archive and artifact ID. Edit requires current version. Delete follows confirmation and cleanup rules |
-| `/archivist entity create`, `show`, `edit`, `delete` | Archive, entity kind, and ID where relevant. Kind is character, account, server, or channel. A bot is an account kind |
-| `/archivist entity merge` | Two characters, chosen survivor, current versions, and reviewed conflicts. Not a merge of archives |
+| `/archivist entity create`, `show`, `edit`, `delete` | Archive, entity kind, and ID where relevant. Kind is character, account, server, or channel. A bot is an account kind. Edit changes a record's own fields, such as names, Discord ID, linked character, place, and lane color. Dated history and character merge are edited on the website |
 | `/archivist event create`, `show`, `edit`, `delete` | Archive, event fields or ID, and current version for mutation. Enforce date and anchor blockers |
 | `/archivist request create`, `show`, `edit` | Archive and missing-media request fields or ID. Creation requires description, people, and temporal constraint |
 | `/archivist request resolve` | Request, current version, and found-artifact IDs. Require at least one valid same-archive artifact |
@@ -867,7 +866,7 @@ The owner approved this intake flow on 2026-11-23.
 * **Short IDs.** Replies show the first eight characters of a record ID. Every command accepts any unique prefix of at least eight characters, and asks for more when a prefix matches several records.
 * **Duplicate review.** Nothing is saved until the contributor ticks the differences to apply, then confirms. It lists replaced fields with their current and new values, and links to add. Unticked items are left alone, links are only added, and the original file is never replaced.
 
-Show full details and edit forms with controls appropriate to Discord limits. Use a preview and continuation controls for long descriptions rather than dropping required data. All contributor operations have web controls with equivalent validation and outcomes. Owner administration does not require a web administration panel.
+Show full details and edit forms with controls appropriate to Discord limits. Use a preview and continuation controls for long descriptions rather than dropping required data. All contributor operations have web controls with equivalent validation and outcomes. Dated history (aliases, account names and avatars, main accounts, ownership, bot owners, server names, icons, and owners, channel names, memberships, and introductions) and character merge are edited only on the website, where the whole record is visible. Owner administration does not require a web administration panel.
 
 ### Web Routes
 
@@ -975,7 +974,7 @@ Complete the entire hosted-app scope through these internal milestones.
 | `M5` Release Validation | Complete export and clean restore, migration compatibility, performance, CI, and operating documentation | Zip opens without bot state or source access, required checks run in CI, performance results name the host, and configured live-source and local-hosting rehearsals pass |
 | `M6` Future Viewer | Excluded from this build | A separate future project may use the published archive contract |
 
-Before building the `M2` Discord intake flow, show the owner the exact command, people selection, reply, and duplicate-review steps. Before building the `M4` views, publish a clickable prototype with fake data for the owner's review. Record the agreed layout, tray, and view decisions in this plan. The prototype is not reused as application code.
+Before building the `M2` Discord intake flow, show the owner the exact command, people selection, reply, and duplicate-review steps. Before building the `M4` views, publish a clickable prototype with fake data for the owner's review. The owner asked on 2026-11-23 to see it during `M3`. Record the agreed layout, tray, and view decisions in this plan. The prototype is not reused as application code.
 
 ### Required Automated Scenarios
 
@@ -1031,6 +1030,8 @@ The owner's accepted batches A through F are reconciled here. Later clarificatio
 | Discord intake | Comma-separated people with autocomplete, separate exact and estimate date fields, a private reply with Edit, Add people, Someone unidentified, and Delete, short IDs, and tick-to-apply duplicate review |
 | Typed dates | Common written forms are accepted. Each person chooses year-month-day, month-day-year, or day-month-year for all-number dates, defaulting to year-month-day. Dates display with month names for everyone |
 | Exports | Owner-only, from `/archivist-admin export`. The zip is written on the host and kept until the owner deletes it. No Discord or web download |
+| Editing split | Discord is for uploads and quick edits. Dated history editing and character merge are website-only, because editing is easier with the whole record in view |
+| Prototype timing | The clickable prototype is built during `M3`, so layout feedback arrives before the `M4` views are built |
 | Command shape | `/a` is a short alias of `/archivist` with the same commands. The archive option comes last in every command, because contributors change it least |
 | Drive without a key | Public Drive links download from Google's public download address without setup. An optional `GOOGLE_DRIVE_API_KEY` switches to the official Drive API |
 | Formats | Images, videos, and audio are accepted: JPEG, PNG, WebP, GIF, MP4, MOV, WebM, MKV, AVI, MP3, M4A, WAV, Ogg, and FLAC |
