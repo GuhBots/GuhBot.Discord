@@ -27,7 +27,7 @@ export function shorten(text: string, limit: number, note = "…"): string {
 }
 
 /**
- * A stored date as people read it, with the month's name so no one misreads
+ * A stored date as contributors read it, with the month's name so no one misreads
  * the order, and in the archive's timezone where it has a time.
  */
 export function dateText(date: StoredDate, archiveTimeZone: string): string {
@@ -70,7 +70,7 @@ export function interpretationNote(artifact: ArtifactDetails): string | null {
 export interface ArtifactView {
   archiveName: string;
   archiveTimeZone: string;
-  peopleNames: string[];
+  characterNames: string[];
   /** Set when a preview image is attached to the message. */
   hasPreviewAttachment: boolean;
   /** Set for public announcements, which credit the contributor. */
@@ -80,11 +80,11 @@ export interface ArtifactView {
 }
 
 /** Who is in an artifact, noting when someone in it is not identified yet. */
-export function peopleText(names: string[], unidentifiedPeople: boolean): string {
-  if (!unidentifiedPeople) return names.length ? names.join(", ") : "Nobody linked yet";
+export function charactersText(names: string[], unidentifiedCharacters: boolean): string {
+  if (!unidentifiedCharacters) return names.length ? names.join(", ") : "No characters linked yet";
   return names.length
-    ? `${names.join(", ")}, and someone not identified yet`
-    : "Someone not identified yet";
+    ? `${names.join(", ")}, and an unidentified character`
+    : "An unidentified character";
 }
 
 /** The embed for an artifact, used in private replies and public announcements. */
@@ -101,8 +101,11 @@ export function artifactEmbed(artifact: ArtifactDetails, view: ArtifactView): Em
     )
     .addFields(
       {
-        name: "People",
-        value: shorten(peopleText(view.peopleNames, artifact.unidentifiedPeople), FIELD_LIMIT),
+        name: "Characters",
+        value: shorten(
+          charactersText(view.characterNames, artifact.unidentifiedCharacters),
+          FIELD_LIMIT,
+        ),
       },
       {
         name: "Date",
@@ -132,7 +135,7 @@ const DIFFERENCE_LABELS: Record<DuplicateDifference["key"], string> = {
   description: "Description",
   exactDate: "Exact date",
   estimatedDate: "Estimated date",
-  people: "Add people",
+  characters: "Add characters",
   accounts: "Add accounts",
   servers: "Add servers",
   channels: "Add channels",
@@ -192,7 +195,7 @@ export function eventWhen(event: EventDetails, archiveTimeZone: string): string 
 export interface EventView {
   archiveName: string;
   archiveTimeZone: string;
-  peopleNames: string[];
+  characterNames: string[];
   placeNames: string[];
 }
 
@@ -205,8 +208,8 @@ export function eventEmbed(event: EventDetails, view: EventView): EmbedBuilder {
     .addFields(
       { name: "When", value: shorten(eventWhen(event, view.archiveTimeZone), FIELD_LIMIT) },
       {
-        name: "People",
-        value: shorten(view.peopleNames.join(", ") || "Nobody linked yet", FIELD_LIMIT),
+        name: "Characters",
+        value: shorten(view.characterNames.join(", ") || "No characters linked yet", FIELD_LIMIT),
       },
       { name: "Places", value: shorten(view.placeNames.join(", ") || "None linked", FIELD_LIMIT) },
       {
@@ -227,7 +230,7 @@ export function eventEmbed(event: EventDetails, view: EventView): EmbedBuilder {
 /** The embed for a missing-media request. */
 export function requestEmbed(
   request: RequestDetails,
-  view: { archiveName: string; peopleNames: string[]; eventNames: string[] },
+  view: { archiveName: string; characterNames: string[]; eventNames: string[] },
 ): EmbedBuilder {
   const status =
     request.status === "resolved"
@@ -241,7 +244,7 @@ export function requestEmbed(
     .setDescription(shorten(request.description, EMBED_DESCRIPTION_LIMIT, "…"))
     .addFields(
       { name: "When", value: shorten(request.wording, FIELD_LIMIT) },
-      { name: "People", value: shorten(view.peopleNames.join(", "), FIELD_LIMIT) },
+      { name: "Characters", value: shorten(view.characterNames.join(", "), FIELD_LIMIT) },
       { name: "Status", value: shorten(status, FIELD_LIMIT) },
     )
     .setFooter({

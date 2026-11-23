@@ -2,14 +2,14 @@ import type Database from "better-sqlite3";
 import { ArchivistError } from "./errors.js";
 
 /**
- * Picking people by name, as Discord intake does. A comma-separated list is
+ * Picking characters by name, as Discord intake does. A comma-separated list is
  * matched against known names and aliases, ignoring case. A name shared by
  * several characters needs its short ID, such as `Alex (3f9a1c2e)`, which
  * autocomplete supplies. Unknown names are refused, never created.
  */
 
 const SHORT_ID_LENGTH = 8;
-const MAX_PEOPLE = 25;
+const MAX_CHARACTERS = 25;
 const MAX_SUGGESTIONS = 25;
 const MAX_CHOICE_LENGTH = 100;
 const WITH_ID = /^(.*?)\s*\(([0-9a-f-]{8,36})\)$/i;
@@ -76,7 +76,7 @@ interface NameEntry {
   keys: string[];
 }
 
-function characterNames(db: Database.Database): NameEntry[] {
+function nameEntries(db: Database.Database): NameEntry[] {
   const rows = db
     .prepare(
       `SELECT c.id, c.known_name AS knownName, a.name AS alias
@@ -103,21 +103,25 @@ function splitNames(text: string): string[] {
     .filter(Boolean);
 }
 
-/** Resolves a comma-separated list of people to character IDs. */
-export function resolvePeople(db: Database.Database, text: unknown): string[] {
+/** Resolves a comma-separated list of characters to character IDs. */
+export function resolveCharacters(db: Database.Database, text: unknown): string[] {
   if (text === undefined || text === null || text === "") return [];
   if (typeof text !== "string") {
-    throw new ArchivistError("invalid_input", "People must be names separated by commas.", {
-      field: "people",
+    throw new ArchivistError("invalid_input", "Characters must be names separated by commas.", {
+      field: "characters",
     });
   }
   const names = splitNames(text);
-  if (names.length > MAX_PEOPLE) {
-    throw new ArchivistError("invalid_input", `Add at most ${MAX_PEOPLE} people at a time.`, {
-      field: "people",
-    });
+  if (names.length > MAX_CHARACTERS) {
+    throw new ArchivistError(
+      "invalid_input",
+      `Add at most ${MAX_CHARACTERS} characters at a time.`,
+      {
+        field: "characters",
+      },
+    );
   }
-  const entries = characterNames(db);
+  const entries = nameEntries(db);
   const ids = new Set<string>();
   for (const name of names) {
     const tagged = WITH_ID.exec(name);
@@ -131,14 +135,14 @@ export function resolvePeople(db: Database.Database, text: unknown): string[] {
       throw new ArchivistError(
         "invalid_input",
         `${name} is not in this archive. Create the character first, then add them.`,
-        { field: "people", name },
+        { field: "characters", name },
       );
     }
     if (matches.length > 1) {
       throw new ArchivistError(
         "invalid_input",
         `${name} matches several characters. Pick one from the suggestions, such as ${name} (${matches[0]!.id.slice(0, SHORT_ID_LENGTH)}).`,
-        { field: "people", name },
+        { field: "characters", name },
       );
     }
     ids.add(matches[0]!.id);
@@ -194,7 +198,7 @@ function label(entry: NameEntry, entries: NameEntry[]): string {
  * Suggests completions for the last name in a comma-separated list. Each
  * suggestion keeps the names already typed, so picking one fills the list.
  */
-export function suggestPeople(
+export function suggestCharacters(
   db: Database.Database,
   typed: string,
 ): { name: string; value: string }[] {
@@ -203,7 +207,7 @@ export function suggestPeople(
   const done = parts.map((part) => part.trim()).filter(Boolean);
   const prefix = done.length ? `${done.join(", ")}, ` : "";
   const taken = new Set(done.map(fold));
-  const entries = characterNames(db);
+  const entries = nameEntries(db);
   const starts: { name: string; value: string }[] = [];
   const contains: { name: string; value: string }[] = [];
   for (const entry of entries) {
@@ -224,7 +228,7 @@ export function suggestPeople(
 }
 
 /** The known names of characters, in the order given, for replies. */
-export function peopleNames(db: Database.Database, ids: readonly string[]): string[] {
+export function characterNames(db: Database.Database, ids: readonly string[]): string[] {
   const statement = db.prepare("SELECT known_name AS name FROM characters WHERE id = ?");
   return ids.map((id) => (statement.get(id) as { name: string } | undefined)?.name ?? "Unknown");
 }

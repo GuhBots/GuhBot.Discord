@@ -27,7 +27,7 @@ import {
   updateEntity,
 } from "../archivist/entities.js";
 import { ArchivistError } from "../archivist/errors.js";
-import { resolvePeople, resolveShortId } from "../archivist/people.js";
+import { resolveCharacters, resolveShortId } from "../archivist/lookup.js";
 import { resolveArchiveSelection } from "../archivist/preferences.js";
 import { searchArtifacts, searchEntities } from "../archivist/search.js";
 import { actorOf, archivist } from "./archivist.js";
@@ -173,7 +173,7 @@ function formRow(
   return new ActionRowBuilder<TextInputBuilder>().addComponents(input);
 }
 
-/** Shows the edit form for an entity's own fields, bound to the version the person saw. */
+/** Shows the edit form for an entity's own fields, bound to the version the contributor saw. */
 export async function showEntityForm(
   interaction: CommandInteraction | ButtonInteraction,
   archiveId: string,
@@ -254,7 +254,7 @@ export async function submitEntityForm(interaction: ModalSubmitInteraction): Pro
   if (kind === "account" && character !== undefined) {
     if (!character) characterId = null;
     else {
-      const found = resolvePeople(openStore(context, archiveId).db, character);
+      const found = resolveCharacters(openStore(context, archiveId).db, character);
       if (found.length !== 1) {
         throw new ArchivistError("invalid_input", "Give one character for the account.", {
           field: "character",

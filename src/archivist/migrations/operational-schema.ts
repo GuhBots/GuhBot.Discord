@@ -97,7 +97,7 @@ export const OPERATIONAL_MIGRATIONS: readonly Migration[] = [
     `,
   },
   {
-    // Each person's order for all-number dates, chosen by the owner on 2026-11-23.
+    // Each contributor's order for all-number dates, chosen by the owner on 2026-11-23.
     version: 2,
     sql: `
     CREATE TABLE archivist_date_orders (

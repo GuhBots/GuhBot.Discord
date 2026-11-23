@@ -104,7 +104,7 @@ test("a new artifact keeps its original and falls back to the file date", async 
 
   assert.equal(artifact.version, 1);
   assert.equal(artifact.createdBy, MEMBER.userId);
-  assert.equal(artifact.unidentifiedPeople, false);
+  assert.equal(artifact.unidentifiedCharacters, false);
   assert.equal(artifact.dates.selected?.basis, "file");
   assert.equal(artifact.dates.selected?.date.archiveDay, "2019-07-15");
   assert.equal(artifact.media.readable, true);
@@ -272,32 +272,34 @@ test("a stale edit is refused with the current values, and identical edits chang
   assert.equal(log(fixture).length, linesBefore);
 });
 
-test("the unidentified-people flag is set and cleared like any other edit", async (t) => {
+test("the unidentified-character flag is set and cleared like any other edit", async (t) => {
   const fixture = setup(t);
   const artifact = await addArtifact(fixture);
   const base = { archiveId: fixture.archiveId, id: artifact.id };
   const flagged = updateArtifact(fixture.context, MEMBER, {
     ...base,
     expectedVersion: 1,
-    unidentifiedPeople: true,
+    unidentifiedCharacters: true,
   });
-  assert.equal(flagged.unidentifiedPeople, true);
-  assert.deepEqual(log(fixture).at(-1)?.changes, { unidentifiedPeople: { old: false, new: true } });
+  assert.equal(flagged.unidentifiedCharacters, true);
+  assert.deepEqual(log(fixture).at(-1)?.changes, {
+    unidentifiedCharacters: { old: false, new: true },
+  });
   assert.throws(
     () =>
       updateArtifact(fixture.context, MEMBER, {
         ...base,
         expectedVersion: 2,
-        unidentifiedPeople: "yes",
+        unidentifiedCharacters: "yes",
       }),
     fails("invalid_input"),
   );
   const cleared = updateArtifact(fixture.context, MEMBER, {
     ...base,
     expectedVersion: 2,
-    unidentifiedPeople: false,
+    unidentifiedCharacters: false,
   });
-  assert.equal(cleared.unidentifiedPeople, false);
+  assert.equal(cleared.unidentifiedCharacters, false);
   assert.equal(cleared.version, 3);
 });
 
@@ -318,21 +320,21 @@ test("links must name existing records in the same archive", async (t) => {
   });
 
   await assert.rejects(
-    addArtifact(fixture, { links: { people: [sam.id, outsider.id] } }),
+    addArtifact(fixture, { links: { characters: [sam.id, outsider.id] } }),
     (error: unknown) =>
       fails("invalid_input")(error) &&
       JSON.stringify((error as ArchivistError).details.missing) === JSON.stringify([outsider.id]),
   );
-  const artifact = await addArtifact(fixture, { links: { people: [sam.id] } });
+  const artifact = await addArtifact(fixture, { links: { characters: [sam.id] } });
   const updated = updateArtifact(fixture.context, MEMBER, {
     archiveId: fixture.archiveId,
     id: artifact.id,
     expectedVersion: 1,
-    addLinks: { people: [lee.id] },
-    removeLinks: { people: [sam.id] },
+    addLinks: { characters: [lee.id] },
+    removeLinks: { characters: [sam.id] },
   });
-  assert.deepEqual(updated.links.people, [lee.id]);
-  assert.deepEqual(log(fixture).at(-1)?.changes.people, { old: [sam.id], new: [lee.id] });
+  assert.deepEqual(updated.links.characters, [lee.id]);
+  assert.deepEqual(log(fixture).at(-1)?.changes.characters, { old: [sam.id], new: [lee.id] });
 });
 
 test("deleting an artifact keeps its media and removes only its own log lines", async (t) => {
@@ -341,9 +343,9 @@ test("deleting an artifact keeps its media and removes only its own log lines", 
     archiveId: fixture.archiveId,
     knownName: "Sam",
   });
-  const kept = await addArtifact(fixture, { links: { people: [sam.id] } });
+  const kept = await addArtifact(fixture, { links: { characters: [sam.id] } });
   const removed = await addArtifact(fixture, {
-    links: { people: [sam.id] },
+    links: { characters: [sam.id] },
     exactDate: "2019-07-14",
   });
   updateArtifact(fixture.context, MEMBER, {
@@ -377,7 +379,7 @@ test("deleting an artifact keeps its media and removes only its own log lines", 
   assert.equal(dateRowCount(fixture), datesBefore - 2);
   assert.deepEqual(
     getArtifact(fixture.context, MEMBER, { archiveId: fixture.archiveId, id: kept.id }).links
-      .people,
+      .characters,
     [sam.id],
   );
 });
@@ -412,7 +414,7 @@ test("deleting a resolved request's last found artifact reopens it", async (t) =
   assert.deepEqual(log(fixture).at(-1)?.changes.status, { old: "resolved", new: "needed" });
 });
 
-test("linked people, accounts, servers, and channels cannot be deleted until unlinked", async (t) => {
+test("linked characters, accounts, servers, and channels cannot be deleted until unlinked", async (t) => {
   const fixture = setup(t);
   const archiveId = fixture.archiveId;
   const sam = createCharacter(fixture.context, MEMBER, { archiveId, knownName: "Sam" });
@@ -431,7 +433,7 @@ test("linked people, accounts, servers, and channels cannot be deleted until unl
   });
   const artifact = await addArtifact(fixture, {
     links: {
-      people: [sam.id],
+      characters: [sam.id],
       servers: [server.id],
       channels: [channel.id],
       accounts: [account.id],
@@ -477,7 +479,7 @@ test("linked people, accounts, servers, and channels cannot be deleted until unl
     id: artifact.id,
     expectedVersion: 1,
     removeLinks: {
-      people: [sam.id],
+      characters: [sam.id],
       servers: [server.id],
       channels: [channel.id],
       accounts: [account.id],
@@ -514,9 +516,9 @@ test("linked people, accounts, servers, and channels cannot be deleted until unl
     false,
   );
   const artifactEntry = entries.findLast(
-    (entry) => entry.id === artifact.id && entry.changes.people,
+    (entry) => entry.id === artifact.id && entry.changes.characters,
   );
-  assert.deepEqual(artifactEntry?.changes.people, { old: [sam.id], new: [] });
+  assert.deepEqual(artifactEntry?.changes.characters, { old: [sam.id], new: [] });
   assert.ok(getArtifact(fixture.context, MEMBER, { archiveId, id: artifact.id }));
 });
 
@@ -604,7 +606,7 @@ test("entity rules for channels, accounts, Discord IDs, and colors", (t) => {
   );
 });
 
-test("people outside the archive cannot add or read artifacts", async (t) => {
+test("characters outside the archive cannot add or read artifacts", async (t) => {
   const fixture = setup(t);
   const artifact = await addArtifact(fixture);
   await assert.rejects(addArtifact(fixture, {}, OTHER), fails("archive_not_found"));

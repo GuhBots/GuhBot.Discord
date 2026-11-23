@@ -14,7 +14,7 @@ import {
 import { prepareOperationalDatabase } from "./operational-database.js";
 import { archiveFolder, archivistPaths, type ArchivistPaths } from "./paths.js";
 
-/** The person performing an operation. Adapters decide `isOwner` from the bot's owner rule. */
+/** The contributor performing an operation. Adapters decide `isOwner` from the bot's owner rule. */
 export interface Actor {
   userId: string;
   isOwner: boolean;

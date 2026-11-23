@@ -24,8 +24,8 @@ Keep this file at `docs/proposals/ARCHIVIST-PLAN.md` and do not create a competi
 
 | ID | Accepted Requirement |
 | --- | --- |
-| `R01` | One original file per artifact, required description, optional people and date overrides, and source-based duplicate reuse with reviewed changes |
-| `R02` | People separate from accounts, independent identities inside each archive, and artifacts linked to multiple people and events |
+| `R01` | One original file per artifact, required description, optional character and date overrides, and source-based duplicate reuse with reviewed changes |
+| `R02` | Characters separate from accounts, independent identities inside each archive, and artifacts linked to multiple characters and events |
 | `R03` | Exact occurrence, estimated occurrence, then embedded original file metadata as date precedence |
 | `R04` | Owner-created named archives with explicit archive selection, a remembered last selection in Discord, and independent local folders |
 | `R05` | Optional web listener started and stopped only by the bot owner |
@@ -41,7 +41,7 @@ Keep this file at `docs/proposals/ARCHIVIST-PLAN.md` and do not create a competi
 | `R15` | Lightweight per-archive edit logs with before and after values, removing a deleted record's own entries |
 | `R16` | Every contributor operation on the web, with uploads and quick edits also in Discord. Detailed history editing and character merge are web-only |
 | `R17` | Personal timezone and date-order preferences in `guhbot.db`, without shifting date-only values or rewriting history |
-| `R18` | Missing-media requests require temporal information, a person, and a description, with no assignees |
+| `R18` | Missing-media requests require temporal information, a character, and a description, with no assignees |
 | `R19` | Contributor-configured per-archive upload announcements that remain unchanged after edits or deletion |
 
 ## Existing Repository And Build Structure
@@ -110,11 +110,11 @@ Use seven-day absolute server-side sessions in bot operational storage and provi
 
 ### Accepted Sources And Formats
 
-Accept one direct Discord attachment, one web upload, or one publicly readable Drive binary file link per submission. Accept images (`.jpg`, `.jpeg`, `.png`, `.webp`, and `.gif`), videos (`.mp4`, `.mov`, `.webm`, `.mkv`, and `.avi`), and audio (`.mp3`, `.m4a`, `.wav`, `.ogg`, and `.flac`), up to 104,857,600 bytes per original. Only still images get a generated preview. Videos and audio are shown by kind and file name, and a browser that cannot play a format offers the original for download. Discord's own upload limits also apply. Validate actual file format rather than trusting the name. Do not transcode originals or infer people or dates from image text automatically.
+Accept one direct Discord attachment, one web upload, or one publicly readable Drive binary file link per submission. Accept images (`.jpg`, `.jpeg`, `.png`, `.webp`, and `.gif`), videos (`.mp4`, `.mov`, `.webm`, `.mkv`, and `.avi`), and audio (`.mp3`, `.m4a`, `.wav`, `.ogg`, and `.flac`), up to 104,857,600 bytes per original. Only still images get a generated preview. Videos and audio are shown by kind and file name, and a browser that cannot play a format offers the original for download. Discord's own upload limits also apply. Validate actual file format rather than trusting the name. Do not transcode originals or infer characters or dates from image text automatically.
 
 Preserve received original bytes unchanged, including embedded metadata. Generate previews separately. Preview failure uses a placeholder and does not invalidate the original. Failed original preservation creates no completed artifact or metadata-only draft. Return an actionable retry error. Temporary partial files are not archive records and are cleaned after failure or expiry.
 
-Exclude arbitrary website downloads, Google Photos share-page import, Picker, Discord message-link import, batch folder import, automatic folder synchronization, and automatic replacement of archived original media. A new submission must contain a non-blank description. People and occurrence-date overrides may be added later. Relationships supplied at intake must reference existing records in the selected archive. Intake does not create characters or other entities.
+Exclude arbitrary website downloads, Google Photos share-page import, Picker, Discord message-link import, batch folder import, automatic folder synchronization, and automatic replacement of archived original media. A new submission must contain a non-blank description. Characters and occurrence-date overrides may be added later. Relationships supplied at intake must reference existing records in the selected archive. Intake does not create characters or other entities.
 
 ### Public Drive Contract
 
@@ -183,13 +183,13 @@ Introductions are directed character links with optional dates and multiple intr
 
 Support guild channels, threads, direct messages, and group chats. Guild channels and threads have a server. Direct messages and group chats do not. Historical servers, channels, and accounts may lack external Discord IDs. Keep depicted locations separate from the submission guild, channel, and message.
 
-Artifacts may reference multiple people, accounts, servers, channels, and events. Events may reference multiple people, servers, and channels. All relationships are local to their archive. Character merge is explicit, chooses a survivor, preserves aliases, reassigns links after conflict review, and never auto-merges matching names. Known Discord account IDs are unique inside an archive.
+Artifacts may reference multiple characters, accounts, servers, channels, and events. Events may reference multiple characters, servers, and channels. All relationships are local to their archive. Character merge is explicit, chooses a survivor, preserves aliases, reassigns links after conflict review, and never auto-merges matching names. Known Discord account IDs are unique inside an archive.
 
-Store a yes/no flag that someone in an artifact is not identified yet. It starts unset. Contributors set it when they know someone in the artifact is unidentified, and clear it once that person is found. Zero linked people does not by itself mean anyone is unidentified, and linking someone does not prove everyone was identified.
+Store a yes/no flag that a character in an artifact is not identified yet. It starts unset. Contributors set it when they know a character in the artifact is unidentified, and clear it once that character is found. Zero linked characters does not by itself mean anyone is unidentified, and linking a character does not prove every character was identified.
 
 ## Research Board And Missing Media
 
-This is a research backlog, not workload management. Do not add assignees or work-allocation features. Priorities are critical for unreadable preserved media, high for incomplete people and missing account links, medium for undated artifacts and events without evidence, and low for explicitly requested profile or location research. Do not generate a task for every blank optional field. An artifact receives a missing-people card only while its unidentified-people flag is set.
+This is a research backlog, not workload management. Do not add assignees or work-allocation features. Priorities are critical for unreadable preserved media, high for unidentified characters and missing account links, medium for undated artifacts and events without evidence, and low for explicitly requested profile or location research. Do not generate a task for every blank optional field. An artifact receives a missing-characters card only while its unidentified-characters flag is set.
 
 ### Missing-Media Requests
 
@@ -235,7 +235,7 @@ Serialize archive mutations. Coordinate database changes and file writes through
 
 ## Artifact Replies And Upload History
 
-Reply privately to a Discord submitter with the saved artifact ID, selected date basis, and embed preview. If an archive has a configured destination, also post there for every newly created artifact, including web submissions. Include archive name, artifact ID, description, identified people, selected date and basis, contributor, and an image preview or appropriate file/video representation. Unknown people and dates remain clearly labeled.
+Reply privately to a Discord submitter with the saved artifact ID, selected date basis, and embed preview. If an archive has a configured destination, also post there for every newly created artifact, including web submissions. Include archive name, artifact ID, description, identified characters, selected date and basis, contributor, and an image preview or appropriate file/video representation. Unidentified characters and unknown dates remain clearly labeled.
 
 Contributors configure one destination per archive using exactly `/set-artifact-logs-channel` and `/remove-artifact-logs-channel`. The setting applies to everyone's new artifacts for that archive. Changing or removing it affects future posts only. The web app offers equivalent contributor controls. Keep destination and delivery state in `guhbot.db`.
 
@@ -255,7 +255,7 @@ A top bar holds the archive switcher, view switcher, search, calendar, and accou
 
 ### Shared Search And Filters
 
-Search character and account names and aliases, artifact descriptions, and event titles and descriptions using case-insensitive Unicode-normalized substring matching. No media-text extraction. Filters cover character, account, server, channel, event, media type, date basis, the unidentified-people flag, and date range. Require every selected category to match and allow any selected value within a category. Keep filters shared across views within an archive. Clearing or switching archives clears incompatible IDs.
+Search character and account names and aliases, artifact descriptions, and event titles and descriptions using case-insensitive Unicode-normalized substring matching. No media-text extraction. Filters cover character, account, server, channel, event, media type, date basis, the unidentified-characters flag, and date range. Require every selected category to match and allow any selected value within a category. Keep filters shared across views within an archive. Clearing or switching archives clears incompatible IDs.
 
 Default ordering is oldest first with stable ID tie-breaking. Put undated artifacts in an explicit searchable section rather than inventing dates. Date filters include duration and occurrence-window records whose bounds overlap the selected interval. Restrict graph counts and heatmap counts to the filtered records. Page lists and fetch only the visible timeline window.
 
@@ -265,7 +265,7 @@ The timeline stacks server and group-chat lanes above an event band and a month/
 
 The owner selects a main server whose lane is always shown, closest to the event band. Every server and group chat has its own solid lane color, assigned automatically from a palette that reads well on the dark theme and editable afterward. A record in a guild channel or thread belongs to its server's lane. Direct messages and records with no known server or group chat use an Unassigned lane. Secondary lanes group filtered activity whose gaps are at most 90 calendar days, disappearing across larger gaps and reappearing with the same identity. The threshold is an archive setting. A lane may be drawn branching from the main lane, but branches do not assert ancestry. Show a record linked to several lanes on each of them with one underlying record ID. Whether a single server's object view shows its channels as lanes is decided in the prototype review.
 
-Artifacts appear as one dot per lane and day. At coarser zoom, a dot covers a week or month. A darker green means more artifacts in that period. A dot with a dashed outline contains at least one artifact whose selected date is estimated or comes from file metadata. Selecting a dot opens a gallery of that period's artifacts in historical order. The gallery shows a large preview, description, people, and date with its basis, with previous and next controls, a thumbnail strip, and a link to full details. Retain every item in detail and list access.
+Artifacts appear as one dot per lane and day. At coarser zoom, a dot covers a week or month. A darker green means more artifacts in that period. A dot with a dashed outline contains at least one artifact whose selected date is estimated or comes from file metadata. Selecting a dot opens a gallery of that period's artifacts in historical order. The gallery shows a large preview, description, characters, and date with its basis, with previous and next controls, a thumbnail strip, and a link to full details. Retain every item in detail and list access.
 
 Ranged events appear in the event band as labeled strips in their event color. Overlapping events are placed in parallel rows so none hides another. A duration is a solid strip, and an occurrence window is a dashed strip. Event colors are assigned automatically from the palette and are editable. Events do not recolor lanes.
 
@@ -307,9 +307,9 @@ The schema below fixes column names, storage types, nullability, defaults, uniqu
 
 Artifact `selected_date_id` equals the first non-null exact, estimated, or file date. Exact assertions may use `day` or `instant`. Artifact estimates use `day`. File metadata may use any date kind. Event estimates and all uncertainty windows use calendar days. Check start and end ordering in shared validation, including instant order when both bounds are instants.
 
-History rows and relationship rows are owned or linked data edited through their parent operation. Log them using the affected surviving parent record identity. Character merges reassign both current and historical references, including request people, bot owners, and main accounts, before deleting the losing character and removing its own earlier log entries. Conflicting current account ownership requires a reviewed choice.
+History rows and relationship rows are owned or linked data edited through their parent operation. Log them using the affected surviving parent record identity. Character merges reassign both current and historical references, including request characters, bot owners, and main accounts, before deleting the losing character and removing its own earlier log entries. Conflicting current account ownership requires a reviewed choice.
 
-For request creation, validate at least one `request_people` row in the transaction before commit. A resolved request must have at least one linked found artifact. Removing the final found-artifact link, including by artifact deletion, reopens a resolved request to Needed. Preserve its original temporal assertion. An event used as `anchor_event_id` cannot be deleted, even if the request is Resolved or Unrecoverable, until that assertion is replaced.
+For request creation, validate at least one `request_characters` row (`request_people` before schema version 3) in the transaction before commit. A resolved request must have at least one linked found artifact. Removing the final found-artifact link, including by artifact deletion, reopens a resolved request to Needed. Preserve its original temporal assertion. An event used as `anchor_event_id` cannot be deleted, even if the request is Resolved or Unrecoverable, until that assertion is replaced.
 
 ### Embedded Metadata Field Map
 
@@ -722,6 +722,20 @@ unidentified_people INTEGER NOT NULL DEFAULT 0 CHECK (unidentified_people IN (0,
 -- events: drop CHECK (certainty <> 'exact' OR length(trim(coalesce(exact_basis, ''))) > 0)
 ```
 
+Migration version 3 applies the owner's 2026-11-23 terminology decision to say "character" rather than "people". The three link tables and their reverse indexes, the artifact flag column, and one board card kind are renamed. `gap_cards` is rebuilt the same way as in version 2, because its kind list is a `CHECK` constraint. Every row is kept. Edit-log lines written before version 3 keep the old field names `people` and `unidentifiedPeople`, since the log is never rewritten.
+
+```sql
+PRAGMA user_version = 3;
+
+ALTER TABLE artifact_people RENAME TO artifact_characters;
+ALTER TABLE event_people RENAME TO event_characters;
+ALTER TABLE request_people RENAME TO request_characters;
+-- each *_people_reverse index is recreated as *_characters_reverse
+ALTER TABLE artifacts RENAME COLUMN unidentified_people TO unidentified_characters;
+
+-- gap_cards: kind 'missing_people' becomes 'missing_characters'
+```
+
 ### Operational Schema Draft
 
 Apply this additive migration in `guhbot.db`. Preserve the existing AFK table and its values. Use `archivist_schema` for this feature's operational migration version instead of claiming ownership of the whole database's version. Pending form data and staged upload tokens expire after 15 minutes and may live in memory. A bot restart invalidates those pending actions, not saved archive data or unexpired server-side login sessions.
@@ -849,16 +863,16 @@ Owner commands use `/archivist-admin` in `OWNER_GUILD_ID` to preserve the existi
 | `/archivist artifact show`, `edit`, `delete` | Archive and artifact ID. Edit requires current version. Delete follows confirmation and cleanup rules |
 | `/archivist entity create`, `show`, `edit`, `delete` | Archive, entity kind, and ID where relevant. Kind is character, account, server, or channel. A bot is an account kind. Edit changes a record's own fields, such as names, Discord ID, linked character, place, and lane color. Delete reports what still links to the record before showing the confirmation. Dated history and character merge are edited on the website |
 | `/archivist event create`, `show`, `edit`, `delete` | Archive, event fields or ID, and current version for mutation. Enforce date and anchor blockers. Check delete blockers before showing the confirmation |
-| `/archivist request create`, `show`, `edit` | Archive and missing-media request fields or ID. Creation requires description, people, and temporal constraint |
+| `/archivist request create`, `show`, `edit` | Archive and missing-media request fields or ID. Creation requires description, characters, and temporal constraint |
 | `/archivist preferences show`, `timezone`, `date-order`, `reset` | Self-service named timezone and all-number date order. Reset clears both, falling back to the selected archive timezone and year-month-day |
 | `/set-artifact-logs-channel` | Required archive and optional channel, defaulting to current channel. Configure one destination for all new artifacts in that archive |
 | `/remove-artifact-logs-channel` | Required archive. Remove future delivery setting, preserving old messages |
 
 The owner approved this intake flow on 2026-11-23.
 
-* **People.** One `people` field takes names separated by commas, with autocomplete suggesting the next name. Names match a character's known name or alias. A name that matches several characters, or none, is refused with a message naming it. Autocomplete then offers the characters with their short IDs, such as `Alex (3f9a1c2e)`. Contributors add more people, and the events the artifact shows, from the reply.
+* **Characters.** One `characters` field takes names separated by commas, with autocomplete suggesting the next name. Names match a character's known name or alias. A name that matches several characters, or none, is refused with a message naming it. Autocomplete then offers the characters with their short IDs, such as `Alex (3f9a1c2e)`. Contributors add more characters, and the events the artifact shows, from the reply.
 * **Dates.** Separate `exact_date`, and `estimated_day` with `estimate_reason`, fields. An exact date needs no basis. An estimate needs its reason. With neither, the file's own date is used.
-* **Reply.** A private reply names the archive and the artifact's short ID, then shows the description, people, the selected date with its basis, and a preview. It has Edit, Add people, Someone unidentified, and Delete buttons. Someone unidentified sets the unidentified-people flag and then reads Everyone identified, which clears it. Delete asks for confirmation.
+* **Reply.** A private reply names the archive and the artifact's short ID, then shows the description, characters, the selected date with its basis, and a preview. It has Edit, Add characters/events, Someone unidentified, and Delete buttons. Someone unidentified sets the unidentified-characters flag and then reads Everyone identified, which clears it. Delete asks for confirmation.
 * **Short IDs.** Replies show the first eight characters of a record ID. Every command accepts any unique prefix of at least eight characters, and asks for more when a prefix matches several records.
 * **Duplicate review.** Nothing is saved until the contributor ticks the differences to apply, then confirms. It lists replaced fields with their current and new values, and links to add. Unticked items are left alone, links are only added, and the original file is never replaced.
 
@@ -892,7 +906,7 @@ Serve frontend and backend from the same origin. Prefix archive routes with `/ap
 
 The bracket notation in the table abbreviates separate collection and item routes, not a literal route string. Historical record and archive-setting mutations return the current record and version. Requests take `expectedVersion` on their changes and deletion. Operational membership, preference, and announcement-setting commands apply atomically without historical record versions. Source-specific fields and ordinary editable columns come from the schema and date contract. Relationship updates explicitly list additions and removals. A duplicate-review operation accepts additions only.
 
-Lists accept `limit` from 1 to 100, default 50, and an opaque cursor with stable ordering. Shared filters use repeated IDs by category, optional text query, media types, date bases, the unidentified-people flag, and inclusive `fromDay` and `toDay`. Board lists default to priority then creation time and stable ID. Relative request constraints filter as open-ended intervals, not artificial occurrence days. A timeline request requires a viewport and zoom. Return clusters and counts rather than every offscreen record.
+Lists accept `limit` from 1 to 100, default 50, and an opaque cursor with stable ordering. Shared filters use repeated IDs by category, optional text query, media types, date bases, the unidentified-characters flag, and inclusive `fromDay` and `toDay`. Board lists default to priority then creation time and stable ID. Relative request constraints filter as open-ended intervals, not artificial occurrence days. A timeline request requires a viewport and zoom. Return clusters and counts rather than every offscreen record.
 
 Errors use `{code, message, details}`. Use `400` for invalid input, `401` for no session, `404` for missing or inaccessible archives, `403` for denied operations within a visible archive, `409` for stale versions or reference blockers, `413` for oversized media, `415` for unsupported formats, `429` for retryable upstream rate limits, and `503` for an unavailable dependency. Include current version and field differences on version conflicts. Do not expose credentials or internal paths in errors.
 
@@ -970,18 +984,18 @@ Complete the entire hosted-app scope through these internal milestones.
 | `M5` Release Validation | Complete export and clean restore, migration compatibility, performance, CI, and operating documentation | Zip opens without bot state or source access, required checks run in CI, performance results name the host, and configured live-source and local-hosting rehearsals pass |
 | `M6` Future Viewer | Excluded from this build | A separate future project may use the published archive contract |
 
-Before building the `M2` Discord intake flow, show the owner the exact command, people selection, reply, and duplicate-review steps. Before building the `M4` views, publish a clickable prototype with fake data for the owner's review. The owner asked on 2026-11-23 to see it during `M3`. Record the agreed layout, tray, and view decisions in this plan. The prototype is not reused as application code.
+Before building the `M2` Discord intake flow, show the owner the exact command, character selection, reply, and duplicate-review steps. Before building the `M4` views, publish a clickable prototype with fake data for the owner's review. The owner asked on 2026-11-23 to see it during `M3`. Record the agreed layout, tray, and view decisions in this plan. The prototype is not reused as application code.
 
 ### Required Automated Scenarios
 
 * Preserve original image and video bytes, metadata, one-original cardinality, derived previews, and explicit unknown dates. Preview failure does not discard a good original.
 * Reject invalid dates, missing descriptions, links to records that do not exist in the selected archive, oversized or unsupported files, private sources, and partial original downloads without creating completed artifacts.
 * Verify remembered archive selection. An omitted archive uses the contributor's last explicit selection, missing or revoked access requires a selection, unregistration clears it, and every reply names the archive.
-* Verify that the unidentified-people flag creates a missing-people card and an artifact without the flag does not.
+* Verify that the unidentified-characters flag creates a missing-characters card and an artifact without the flag does not.
 * Verify source identity rather than content matching, reuse on duplicate links, chosen metadata changes only, cancellation, expiry, concurrency, and reintake after deletion.
 * Verify exact, estimated, file-date, and undated precedence, preservation of lower-priority assertions, unknown source timezones, personal defaults, explicit offsets, date-only stability, daylight-saving ambiguity, and fixed shared day buckets.
 * Verify both event range meanings and evidence-free creation, gap creation and clearing, disputed reasons, and one artifact supporting multiple events.
-* Verify all missing-media temporal forms, required people and description, open bounds, dynamic before-start and after-end event anchors, correction propagation, deletion blockers, and accepted board transitions.
+* Verify all missing-media temporal forms, required characters and description, open bounds, dynamic before-start and after-end event anchors, correction propagation, deletion blockers, and accepted board transitions.
 * Verify linked-identity deletion blockers, surviving evidence, media retention, log-entry removal for deleted records, unchanged other logs, and unchanged upload-history messages.
 * Verify temporary-file and journal recovery after failures at each database, media, log, and operational-state boundary. No half-applied mutation may be exported.
 * Verify owner versus member privileges, archive isolation, denied direct API and media access, invalid sessions, same-origin mutation checks, and revocation during an open session.
@@ -1010,23 +1024,24 @@ The owner's accepted batches A through F are reconciled here. Later clarificatio
 | Portable storage | One folder per archive with SQLite, media, and edit log; complete zip exports |
 | Source evolution | Google Photos and a common shared folder were considered, then replaced by contributors' public Drive file links. No Google user login or source registration |
 | Contribution | Discord primary, equivalent web operations, owner-only infrastructure administration, and contributor announcement settings |
-| Research backlog | No assignees; missing-media requests require temporal information, a person, and description; Needed, Resolved, and Unrecoverable buckets |
+| Research backlog | No assignees; missing-media requests require temporal information, a character, and description; Needed, Resolved, and Unrecoverable buckets |
 | Relative requests | Before event start, after event end, follow corrected dates, and block anchored-event deletion |
 | Deletion | Permanent archive record deletion, retained media, removed own edit entries, no deletion log, and unchanged external upload-history messages |
 | Scope | Full hosted app and all five views, with separate standalone viewer later |
 | Archive selection | Discord commands may omit the archive and reuse the contributor's last explicit selection, stored in `guhbot.db`. Replies always name the archive |
 | Intake links | Intake links only existing records. Contributors create a missing character before linking it |
-| Identification cards | A yes/no unidentified-people flag, set from a button on the artifact reply rather than an intake field. Missing-people cards come only from the flag |
+| Identification cards | A yes/no unidentified-characters flag, set from a button on the artifact reply rather than an intake field. Missing-characters cards come only from the flag |
 | Intake volume | One artifact per submission, with thousands expected over time. Keep each Discord intake to as few steps as possible |
 | Confirmed as specified | Any archive member may permanently delete permitted records. Artifact estimates remain single calendar days |
 | Web layout | Three columns from the owner's sketch, with servers and group chats on the left, the current view in the center, all characters on the right, and a per-view tray of actions |
 | Timeline lanes | Servers and group chats get solid, editable lane colors. Dashes mean uncertainty. Events do not recolor lanes |
 | Timeline marks | One green dot per day, shaded by count, opening a gallery. Ranged events form labeled parallel strips in a band. Red arrows mark single-day events. Server name and icon changes get their own arrow color |
 | Main accounts | Characters have a dated main-account history, and their pictures follow it along the timeline |
-| Discord intake | Comma-separated people with autocomplete, separate exact and estimate date fields, a private reply with Edit, Add people, Someone unidentified, and Delete, short IDs, and tick-to-apply duplicate review |
-| Typed dates | Common written forms are accepted. Each person chooses year-month-day, month-day-year, or day-month-year for all-number dates, defaulting to year-month-day. Dates display with month names for everyone |
+| Discord intake | Comma-separated characters with autocomplete, separate exact and estimate date fields, a private reply with Edit, Add characters/events, Someone unidentified, and Delete, short IDs, and tick-to-apply duplicate review |
+| Typed dates | Common written forms are accepted. Each contributor chooses year-month-day, month-day-year, or day-month-year for all-number dates, defaulting to year-month-day. Dates display with month names for everyone |
 | Exports | Owner-only, from `/archivist-admin export`. The zip is written on the host and kept until the owner deletes it. No Discord or web download |
 | Editing split | Discord is for uploads and quick edits. Dated history editing and character merge are website-only, because editing is easier with the whole record in view |
+| Terminology | Say "character" for the archive's records of real people, never "person" or "people", in the interface, the code, and the schema. Archive schema version 3 renames the stored names. Discord users are contributors |
 | Research on the website | The research board, manual research flags, and moving missing-media requests between buckets are website-only. Derived gap cards clear themselves when the data is added. A request resolves when someone links the artifact that has the media, since the archive cannot tell by itself that an upload is the missing media. Deletes that would be refused are refused before the confirmation button appears |
 | Prototype timing | The clickable prototype is built during `M3`, so layout feedback arrives before the `M4` views are built |
 | Command shape | `/a` is a short alias of `/archivist` with the same commands. The archive option comes last in every command, because contributors change it least |

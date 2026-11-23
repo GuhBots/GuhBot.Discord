@@ -71,7 +71,7 @@ Each command is shown only to members with the matching permission. The bot also
 
 ## Archivist
 
-Archiving tools for specific servers, described in the [Archivist plan](proposals/ARCHIVIST-PLAN.md). The module is new and has no counterpart in the original bot. It works only in the servers listed in `ARCHIVIST_GUILD_IDS`, and /help shows it only there. Only people on an archive's whitelist, and the bot owner, can use that archive. Replies are private.
+Archiving tools for specific servers, described in the [Archivist plan](proposals/ARCHIVIST-PLAN.md). The module is new and has no counterpart in the original bot. It works only in the servers listed in `ARCHIVIST_GUILD_IDS`, and /help shows it only there. Only contributors on an archive's whitelist, and the bot owner, can use that archive. Replies are private.
 
 Archivist is being built in milestones. These commands exist so far.
 
@@ -82,19 +82,19 @@ Archivist is being built in milestones. These commands exist so far.
 | `/archivist preferences timezone <timezone>` | None | Sets the timezone your typed times are read in when you don't add a zone. Suggests timezone names as you type |
 | `/archivist preferences date-order <order>` | None | Sets how all-number dates such as 03/04/2019 are read: year-month-day (the default), month-day-year, or day-month-year |
 | `/archivist preferences reset` | None | Clears both, so typed times use each archive's timezone and all-number dates are read year first |
-| `/archivist artifact add <description> [file] [drive_link] [people] [exact_date] [estimated_day] [estimate_reason] [event] [archive]` | None | Archives one file or one public Google Drive file link. People are names separated by commas, with suggestions. An exact date needs no explanation, and an estimated day needs a reason. A time typed without a zone is confirmed before saving. A file already in the archive opens a review of what to change instead. `event` links one event it shows. The reply has Edit, Add people, Someone unidentified, and Delete buttons. Add people also links more events. Someone unidentified marks that someone in it is not identified yet, and pressing it again clears the mark |
-| `/archivist artifact show <id> [archive]` | None | Shows an artifact with its Edit, Add people, and Delete buttons. Suggests artifacts by description |
+| `/archivist artifact add <description> [file] [drive_link] [characters] [exact_date] [estimated_day] [estimate_reason] [event] [archive]` | None | Archives one file or one public Google Drive file link. Characters are names separated by commas, with suggestions. An exact date needs no explanation, and an estimated day needs a reason. A time typed without a zone is confirmed before saving. A file already in the archive opens a review of what to change instead. `event` links one event it shows. The reply has Edit, Add characters/events, Someone unidentified, and Delete buttons. Add characters/events links more characters and the events it shows. Someone unidentified marks that a character in it is not identified yet, and pressing it again clears the mark |
+| `/archivist artifact show <id> [archive]` | None | Shows an artifact with its Edit, Add characters/events, and Delete buttons. Suggests artifacts by description |
 | `/archivist artifact edit <id> [archive]` | None | Opens a form for the description and dates |
 | `/archivist artifact delete <id> [archive]` | None | Asks for confirmation, then deletes permanently. The media file stays in the archive |
 | `/archivist entity create <kind> <name> [...] [archive]` | None | Adds a character, account, server, or channel. Optional fields apply to one kind each, such as `birth_day` for characters or `server` for channels |
 | `/archivist entity show <kind> <id> [archive]` | None | Shows a character, account, server, or channel. Suggests them by name |
 | `/archivist entity edit <kind> <id> [archive]` | None | Opens a form for the record's own fields: names, Discord ID, linked character, account kind, or lane color. Show and create replies have an Edit button too. Dated history and merging characters are on the website |
 | `/archivist entity delete <kind> <id> [archive]` | None | Says what still links to it and stops, or asks for confirmation and deletes permanently |
-| `/archivist event create <title> <description> <kind> <start> [end] [certainty] [people] [server] [channel] [color] [archive]` | None | Records something that happened: one day, a range it lasted, or a range it happened sometime in. No evidence or explanation is needed. The strip color is picked for you if left empty |
+| `/archivist event create <title> <description> <kind> <start> [end] [certainty] [characters] [server] [channel] [color] [archive]` | None | Records something that happened: one day, a range it lasted, or a range it happened sometime in. No evidence or explanation is needed. The strip color is picked for you if left empty |
 | `/archivist event show <id> [archive]` | None | Shows an event with its Edit and Delete buttons. Suggests events by title |
 | `/archivist event edit <id> [kind] [certainty] [archive]` | None | Opens a form for the title, description, dates, and a disputed reason. `kind` and `certainty` change the kind of date |
 | `/archivist event delete <id> [archive]` | None | Asks for confirmation, then deletes permanently. While a missing-media request uses the event as its date, it is refused before the confirmation |
-| `/archivist request create <description> <people> <when> [day] [start] [end] [event] [notes] [archive]` | None | Puts missing media on the research board. `when` is around a day, between two days, before a day, or before or after an event. Requests tied to an event follow it if its dates are corrected |
+| `/archivist request create <description> <characters> <when> [day] [start] [end] [event] [notes] [archive]` | None | Puts missing media on the research board. `when` is around a day, between two days, before a day, or before or after an event. Requests tied to an event follow it if its dates are corrected |
 | `/archivist request show <id> [archive]` | None | Shows a request with an Edit button |
 | `/archivist request edit <id> [archive]` | None | Opens a form for the description and research notes |
 | `/set-artifact-logs-channel [channel] [archive]` | None | Announces every new artifact in the archive in a channel, this one by default. The bot must be able to post embeds and files there |

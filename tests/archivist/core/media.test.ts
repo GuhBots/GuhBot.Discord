@@ -142,7 +142,7 @@ test("an offset is never borrowed from another field", async (t) => {
   });
 });
 
-test("disagreeing capture tags leave the date for a person to review", async (t) => {
+test("disagreeing capture tags leave the date for a contributor to review", async (t) => {
   const { context } = makeArchivist(t);
   const file = await staged(context, (target) =>
     writeImage(target, "jpeg", {

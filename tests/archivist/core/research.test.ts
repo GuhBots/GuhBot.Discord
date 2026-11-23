@@ -103,7 +103,7 @@ test("events take a single day, a duration, or an occurrence window", (t) => {
     dateKind: "single",
     certainty: "exact",
     start: "Aug 3 2019 7pm",
-    links: { people: [sam.id] },
+    links: { characters: [sam.id] },
   });
   assert.equal(launch.start.kind, "instant");
   assert.equal(launch.end, null);
@@ -277,7 +277,7 @@ test("missing-media requests take each temporal form, and event anchors follow c
     createRequest(context, MEMBER, {
       archiveId,
       description: "Photos",
-      people: [sam.id],
+      characters: [sam.id],
       constraint,
     } as never);
 
@@ -305,7 +305,7 @@ test("missing-media requests take each temporal form, and event anchors follow c
       createRequest(context, MEMBER, {
         archiveId,
         description: "Photos",
-        people: [],
+        characters: [],
         constraint: { kind: "approximate_day", day: "2020-01-01" },
       }),
     fails("invalid_input"),
@@ -315,7 +315,7 @@ test("missing-media requests take each temporal form, and event anchors follow c
       createRequest(context, MEMBER, {
         archiveId,
         description: " ",
-        people: [lee.id],
+        characters: [lee.id],
         constraint: { kind: "approximate_day", day: "2020-01-01" },
       }),
     fails("invalid_input"),
@@ -353,7 +353,7 @@ test("requests move between Needed, Unrecoverable, and Resolved", async (t) => {
   const request = createRequest(context, MEMBER, {
     archiveId,
     description: "Recording of the birthday stream\nIt ran six hours.",
-    people: [sam.id],
+    characters: [sam.id],
     constraint: { kind: "approximate_day", day: "2020-12-05" },
     researchNotes: "Ask Theo.",
   });
@@ -364,7 +364,7 @@ test("requests move between Needed, Unrecoverable, and Resolved", async (t) => {
 
   assert.throws(() => move(1, { status: "unrecoverable" }), fails("invalid_input"));
   assert.throws(() => move(1, { status: "resolved" }), fails("invalid_input"));
-  assert.throws(() => move(1, { removePeople: [sam.id] }), fails("invalid_input"));
+  assert.throws(() => move(1, { removeCharacters: [sam.id] }), fails("invalid_input"));
   const lost = move(1, {
     status: "unrecoverable",
     unrecoverableReason: "The stream was never saved.",
@@ -372,7 +372,11 @@ test("requests move between Needed, Unrecoverable, and Resolved", async (t) => {
   assert.equal(lost.status, "unrecoverable");
 
   const found = await artifact(context, archiveId);
-  const resolved = move(2, { status: "resolved", foundArtifacts: [found.id], addPeople: [lee.id] });
+  const resolved = move(2, {
+    status: "resolved",
+    foundArtifacts: [found.id],
+    addCharacters: [lee.id],
+  });
   assert.equal(resolved.status, "resolved");
   assert.equal(resolved.unrecoverableReason, null);
   assert.deepEqual(resolved.foundArtifacts, [found.id]);
@@ -413,7 +417,7 @@ test("derived cards follow the data, and manual flags need a reason", async (t) 
     archiveId,
     id: dated.id,
     expectedVersion: 1,
-    unidentifiedPeople: true,
+    unidentifiedCharacters: true,
   });
 
   // Highest priority first. The test clock is frozen, so equal priorities are compared as a set.
@@ -429,7 +433,7 @@ test("derived cards follow the data, and manual flags need a reason", async (t) 
     [
       `critical unreadable_media ${damaged.id}`,
       `high account_character ${account.id}`,
-      `high missing_people ${dated.id}`,
+      `high missing_characters ${dated.id}`,
       `medium undated ${damaged.id}`,
       `medium undated ${undated.id}`,
     ].sort(),

@@ -33,7 +33,7 @@ import { getEvent } from "../archivist/events.js";
 import { getRequest } from "../archivist/requests.js";
 import { openStore } from "../archivist/context.js";
 import { ArchivistError } from "../archivist/errors.js";
-import { suggestPeople } from "../archivist/people.js";
+import { suggestCharacters } from "../archivist/lookup.js";
 import {
   getDateOrder,
   getTimeZone,
@@ -88,12 +88,12 @@ import {
   cancelZone,
   confirmDelete,
   confirmZone,
-  openAddPeople,
+  openAddLinks,
   openEdit,
   selectDifferences,
   showEditForm,
   startIntake,
-  submitAddPeople,
+  submitAddLinks,
   submitEdit,
   toggleUnidentified,
 } from "../lib/archivist-intake.js";
@@ -133,7 +133,7 @@ const archiveOption = {
 
 /**
  * The archive an autocomplete request is about: the one typed in the
- * command's archive field, or the person's remembered one. Suggestions never
+ * command's archive field, or the contributor's remembered one. Suggestions never
  * change the remembered archive.
  */
 async function suggestionArchive(interaction: AutocompleteInteraction): Promise<string | null> {
@@ -148,14 +148,14 @@ async function suggestionArchive(interaction: AutocompleteInteraction): Promise<
   }
 }
 
-async function suggestPeopleNames(interaction: AutocompleteInteraction): Promise<void> {
+async function suggestCharacterNames(interaction: AutocompleteInteraction): Promise<void> {
   const archiveId = await suggestionArchive(interaction);
   if (!archiveId) {
     await interaction.respond([]);
     return;
   }
   const db = openStore(archivist(), archiveId).db;
-  await interaction.respond(suggestPeople(db, interaction.options.getFocused()));
+  await interaction.respond(suggestCharacters(db, interaction.options.getFocused()));
 }
 
 const KIND_CHOICES = [
@@ -237,7 +237,7 @@ async function commandArtifact(
   };
 }
 
-/** Requires a server text channel the bot can post embeds and files in and the person can see. */
+/** Requires a server text channel the bot can post embeds and files in and the contributor can see. */
 function checkLogsChannel(interaction: CommandInteraction, channel: GuildBasedChannel | null) {
   if (!channel || !channel.isTextBased() || channel.isThread() || channel.isVoiceBased()) {
     throw new ArchivistError("invalid_input", "Choose a server text channel.", {
@@ -289,7 +289,7 @@ function contributorCommands(
     root,
   })
   @SlashGroup({ name: "artifact", description: "Add and manage artifacts", root })
-  @SlashGroup({ name: "entity", description: "People, accounts, servers, and channels", root })
+  @SlashGroup({ name: "entity", description: "Characters, accounts, servers, and channels", root })
   @SlashGroup({ name: "event", description: "Things that happened", root })
   @SlashGroup({ name: "request", description: "Media the archive is missing", root })
   class ArchivistCommands {
@@ -441,13 +441,13 @@ function contributorCommands(
       })
       driveLink: string | undefined,
       @SlashOption({
-        name: "people",
+        name: "characters",
         description: "Names separated by commas, such as Sam, Lee",
         type: ApplicationCommandOptionType.String,
         required: false,
-        autocomplete: suggestPeopleNames,
+        autocomplete: suggestCharacterNames,
       })
-      people: string | undefined,
+      characters: string | undefined,
       @SlashOption({
         name: "exact_date",
         description: "When it happened, such as 2019-07-15 or Jul 15 2019 6:30pm",
@@ -490,7 +490,7 @@ function contributorCommands(
           description,
           file,
           driveLink,
-          people,
+          characters,
           exactDate,
           estimatedDay,
           estimateReason,
@@ -632,10 +632,10 @@ function contributorCommands(
         autocomplete: suggestEntityIds,
       })
       parentChannel: string | undefined,
-      @SlashChoice({ name: "Person", value: "human" }, { name: "Bot", value: "bot" })
+      @SlashChoice({ name: "Human", value: "human" }, { name: "Bot", value: "bot" })
       @SlashOption({
         name: "account_kind",
-        description: "Account only: a person's account or a bot",
+        description: "Account only: a human's account or a bot",
         type: ApplicationCommandOptionType.String,
         required: false,
       })
@@ -787,13 +787,13 @@ function contributorCommands(
       })
       certainty: string | undefined,
       @SlashOption({
-        name: "people",
+        name: "characters",
         description: "Names separated by commas",
         type: ApplicationCommandOptionType.String,
         required: false,
-        autocomplete: suggestPeopleNames,
+        autocomplete: suggestCharacterNames,
       })
-      people: string | undefined,
+      characters: string | undefined,
       @SlashOption({
         name: "server",
         description: "The server it happened in",
@@ -830,7 +830,7 @@ function contributorCommands(
           certainty,
           start,
           end,
-          people,
+          characters,
           server,
           channel,
           color,
@@ -925,13 +925,13 @@ function contributorCommands(
       })
       description: string,
       @SlashOption({
-        name: "people",
+        name: "characters",
         description: "Who it involves, separated by commas",
         type: ApplicationCommandOptionType.String,
         required: true,
-        autocomplete: suggestPeopleNames,
+        autocomplete: suggestCharacterNames,
       })
-      people: string,
+      characters: string,
       @SlashChoice(...WHEN_CHOICES)
       @SlashOption({
         name: "when",
@@ -987,7 +987,7 @@ function contributorCommands(
         createRequestFromCommand(interaction, {
           archive,
           description,
-          people,
+          characters,
           when,
           day,
           start,
@@ -1118,14 +1118,14 @@ export class ArchivistComponents {
     await runArchivist(interaction, () => submitEdit(interaction));
   }
 
-  @ButtonComponent({ id: /^ax:people:/ })
-  async peopleOpen(interaction: ButtonInteraction): Promise<void> {
-    await runArchivist(interaction, () => openAddPeople(interaction));
+  @ButtonComponent({ id: /^ax:links:/ })
+  async linksOpen(interaction: ButtonInteraction): Promise<void> {
+    await runArchivist(interaction, () => openAddLinks(interaction));
   }
 
-  @ModalComponent({ id: /^ax:peoplem:/ })
-  async peopleSubmit(interaction: ModalSubmitInteraction): Promise<void> {
-    await runArchivist(interaction, () => submitAddPeople(interaction));
+  @ModalComponent({ id: /^ax:linksm:/ })
+  async linksSubmit(interaction: ModalSubmitInteraction): Promise<void> {
+    await runArchivist(interaction, () => submitAddLinks(interaction));
   }
 
   @ButtonComponent({ id: /^ax:unid:/ })

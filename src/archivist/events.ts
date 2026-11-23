@@ -8,7 +8,7 @@ import { colorValue, newId, optionalText, requiredText, TEXT_LIMITS, timestamp }
 import { cardsOf, syncGaps } from "./board.js";
 import { commitMutation } from "./mutations.js";
 import { nextColor } from "./palette.js";
-import { resolveShortId } from "./people.js";
+import { resolveShortId } from "./lookup.js";
 import { getDateOrder, inputTimeZone } from "./preferences.js";
 import {
   type ArchiveSession,
@@ -35,7 +35,7 @@ export type EventDateKind = "single" | "duration" | "occurrence_window";
 export type Certainty = "exact" | "estimated";
 
 const LINKS = {
-  people: { table: "event_people", column: "character_id", target: "characters" },
+  characters: { table: "event_characters", column: "character_id", target: "characters" },
   servers: { table: "event_servers", column: "server_id", target: "servers" },
   channels: { table: "event_channels", column: "channel_id", target: "channels" },
 } as const;
@@ -350,7 +350,7 @@ interface EditableEvent {
   end: string | null;
   color: string;
   disputedReason: string | null;
-  people: string[];
+  characters: string[];
   servers: string[];
   channels: string[];
   [key: string]: unknown;

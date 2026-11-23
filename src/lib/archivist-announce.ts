@@ -10,7 +10,7 @@ import { archiveDetails } from "../archivist/archives.js";
 import type { ArtifactDetails } from "../archivist/artifacts.js";
 import { type ArchivistContext, openStore } from "../archivist/context.js";
 import { mediaPaths } from "../archivist/media.js";
-import { peopleNames } from "../archivist/people.js";
+import { characterNames } from "../archivist/lookup.js";
 import { insideArchive } from "../archivist/paths.js";
 import { artifactEmbed, PREVIEW_ATTACHMENT } from "./archivist-format.js";
 
@@ -82,7 +82,7 @@ export async function announceArtifact(
   const embed = artifactEmbed(artifact, {
     archiveName: registeredArchive(context, archiveId)?.name ?? details.name,
     archiveTimeZone: details.timezone,
-    peopleNames: peopleNames(store.db, artifact.links.people),
+    characterNames: characterNames(store.db, artifact.links.characters),
     hasPreviewAttachment: preview !== null,
     addedBy: artifact.createdBy,
   });

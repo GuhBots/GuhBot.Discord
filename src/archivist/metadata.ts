@@ -167,7 +167,7 @@ export interface FileDateCandidate {
 export interface FileDate {
   /**
    * `found` gives a value. `absent` means no accepted tag holds a date.
-   * `conflict` and `malformed` need a person to set the date, because
+   * `conflict` and `malformed` need a contributor to set the date, because
    * guessing between disagreeing or damaged tags could invent history.
    */
   status: "found" | "absent" | "conflict" | "malformed";
@@ -321,7 +321,7 @@ const DETAIL: Record<DateValue["kind"], number> = { day: 0, unknown_local: 1, in
 /**
  * Picks the file date from original-capture tags first, then creation tags.
  * The first tier holding any date decides. Within it, a damaged tag or two
- * disagreeing tags leave the date unknown for a person to review.
+ * disagreeing tags leave the date unknown for a contributor to review.
  */
 export function extractFileDate(format: MediaFormat, tags: RawTags): FileDate {
   for (const tier of ["capture", "creation"] as const) {

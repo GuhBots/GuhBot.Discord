@@ -1,7 +1,7 @@
 import type { Migration } from "./runner.js";
 
 /** The newest archive schema version this build can read and write. */
-export const ARCHIVE_SCHEMA_VERSION = 2;
+export const ARCHIVE_SCHEMA_VERSION = 3;
 
 /**
  * Ordered migrations for each archive's `archive.db`. Never edit a released
@@ -471,6 +471,74 @@ export const ARCHIVE_MIGRATIONS: readonly Migration[] = [
     CREATE INDEX event_start_date ON events(start_date_id, id);
 
     CREATE INDEX event_end_date ON events(end_date_id);
+    `,
+  },
+  {
+    // The owner decided on 2026-11-23 to say "character" rather than
+    // "people" everywhere. Tables and the flag column are renamed in place.
+    // The card kind sits in a CHECK constraint, which SQLite cannot alter,
+    // so gap_cards is rebuilt with its data. Edit-log lines written earlier
+    // keep the old field names.
+    version: 3,
+    rebuildsTables: true,
+    sql: `
+    ALTER TABLE artifact_people RENAME TO artifact_characters;
+
+    DROP INDEX artifact_people_reverse;
+
+    CREATE INDEX artifact_characters_reverse ON artifact_characters(character_id, artifact_id);
+
+    ALTER TABLE event_people RENAME TO event_characters;
+
+    DROP INDEX event_people_reverse;
+
+    CREATE INDEX event_characters_reverse ON event_characters(character_id, event_id);
+
+    ALTER TABLE request_people RENAME TO request_characters;
+
+    DROP INDEX request_people_reverse;
+
+    CREATE INDEX request_characters_reverse ON request_characters(character_id, request_id);
+
+    ALTER TABLE artifacts RENAME COLUMN unidentified_people TO unidentified_characters;
+
+    CREATE TABLE gap_cards_v3 (
+      id TEXT PRIMARY KEY,
+      version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0),
+      created_at TEXT NOT NULL,
+      created_by TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      kind TEXT NOT NULL CHECK (kind IN ('unreadable_media', 'missing_characters', 'account_character', 'undated', 'missing_evidence', 'date_research', 'custom')),
+      artifact_id TEXT REFERENCES artifacts(id) ON DELETE CASCADE,
+      account_id TEXT REFERENCES accounts(id) ON DELETE CASCADE,
+      event_id TEXT REFERENCES events(id) ON DELETE CASCADE,
+      character_id TEXT REFERENCES characters(id) ON DELETE CASCADE,
+      server_id TEXT REFERENCES servers(id) ON DELETE CASCADE,
+      field_name TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'needed' CHECK (status IN ('needed', 'resolved', 'unrecoverable')),
+      priority TEXT NOT NULL CHECK (priority IN ('critical', 'high', 'medium', 'low')),
+      reason TEXT,
+      CHECK ((artifact_id IS NOT NULL) + (account_id IS NOT NULL) + (event_id IS NOT NULL) + (character_id IS NOT NULL) + (server_id IS NOT NULL) = 1),
+      CHECK (status <> 'unrecoverable' OR length(trim(coalesce(reason, ''))) > 0),
+      UNIQUE (kind, artifact_id, field_name),
+      UNIQUE (kind, account_id, field_name),
+      UNIQUE (kind, event_id, field_name),
+      UNIQUE (kind, character_id, field_name),
+      UNIQUE (kind, server_id, field_name)
+    );
+
+    INSERT INTO gap_cards_v3 (id, version, created_at, created_by, updated_at, kind, artifact_id,
+      account_id, event_id, character_id, server_id, field_name, status, priority, reason)
+    SELECT id, version, created_at, created_by, updated_at,
+      CASE kind WHEN 'missing_people' THEN 'missing_characters' ELSE kind END,
+      artifact_id, account_id, event_id, character_id, server_id, field_name, status, priority, reason
+    FROM gap_cards;
+
+    DROP TABLE gap_cards;
+
+    ALTER TABLE gap_cards_v3 RENAME TO gap_cards;
+
+    CREATE INDEX gap_status_priority ON gap_cards(status, priority, id);
     `,
   },
 ];

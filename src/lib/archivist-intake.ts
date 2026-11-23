@@ -50,7 +50,12 @@ import {
   MAX_MEDIA_BYTES,
   stageMedia,
 } from "../archivist/media.js";
-import { peopleNames, resolveEvents, resolvePeople, resolveShortId } from "../archivist/people.js";
+import {
+  characterNames,
+  resolveEvents,
+  resolveCharacters,
+  resolveShortId,
+} from "../archivist/lookup.js";
 import { getDateOrder, inputTimeZone, resolveArchiveSelection } from "../archivist/preferences.js";
 import { config } from "../config.js";
 import { actorOf, archivist } from "./archivist.js";
@@ -70,7 +75,7 @@ import { recall, remember } from "./archivist-pending.js";
 /**
  * The Discord artifact flow the owner approved: intake from an attachment or
  * a Drive link, a confirmation when a typed time has no zone, duplicate
- * review, and the reply's Edit, Add people, Someone unidentified, and Delete
+ * review, and the reply's Edit, Add characters/events, Someone unidentified, and Delete
  * buttons.
  */
 
@@ -106,7 +111,7 @@ export interface IntakeOptions {
   description: string;
   file?: Attachment;
   driveLink?: string;
-  people?: string;
+  characters?: string;
   exactDate?: string;
   estimatedDay?: string;
   estimateReason?: string;
@@ -132,7 +137,7 @@ function estimatePair(day?: string, reason?: string) {
   return { day, reason };
 }
 
-/** Custom IDs carry the archive, the record, and the version the person saw. */
+/** Custom IDs carry the archive, the record, and the version the contributor saw. */
 function recordId(action: string, archiveId: string, artifactId: string, version: number): string {
   return `ax:${action}:${archiveId}:${artifactId}:${version}`;
 }
@@ -151,7 +156,7 @@ function archiveName(context: ArchivistContext, archiveId: string): string {
 }
 
 /**
- * The private reply showing an artifact, with its Edit, Add people, Someone
+ * The private reply showing an artifact, with its Edit, Add characters/events, Someone
  * unidentified, and Delete buttons. The flag button reads "Everyone
  * identified" while the flag is set, and pressing it clears the flag.
  */
@@ -171,12 +176,12 @@ export function artifactReply(
       .setLabel("Edit")
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
-      .setCustomId(recordId("people", archiveId, artifact.id, artifact.version))
-      .setLabel("Add people")
+      .setCustomId(recordId("links", archiveId, artifact.id, artifact.version))
+      .setLabel("Add characters/events")
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(recordId("unid", archiveId, artifact.id, artifact.version))
-      .setLabel(artifact.unidentifiedPeople ? "Everyone identified" : "Someone unidentified")
+      .setLabel(artifact.unidentifiedCharacters ? "Everyone identified" : "Someone unidentified")
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(recordId("delete", archiveId, artifact.id, artifact.version))
@@ -189,7 +194,7 @@ export function artifactReply(
       artifactEmbed(artifact, {
         archiveName: archiveName(context, archiveId),
         archiveTimeZone: details.timezone,
-        peopleNames: peopleNames(store.db, artifact.links.people),
+        characterNames: characterNames(store.db, artifact.links.characters),
         eventNames: artifact.links.events.map(
           (id) =>
             (
@@ -253,7 +258,7 @@ export async function startIntake(
     exactDate: exactText(options.exactDate),
     estimatedDate: estimatePair(options.estimatedDay, options.estimateReason),
     links: {
-      people: resolvePeople(store.db, options.people),
+      characters: resolveCharacters(store.db, options.characters),
       events: options.event ? [resolveShortId(store.db, "events", options.event, "event")] : [],
     },
     submission: { guildId: interaction.guildId ?? undefined, channelId: interaction.channelId },
@@ -371,7 +376,7 @@ async function completeIntake(
   }
 }
 
-/** Shows what a resubmitted source would change. Nothing is saved until the person applies it. */
+/** Shows what a resubmitted source would change. Nothing is saved until the contributor applies it. */
 async function showDuplicateReview(
   context: ArchivistContext,
   actor: Actor,
@@ -402,7 +407,7 @@ async function showDuplicateReview(
     selected: [],
   } satisfies PendingReview);
   const names = (kind: string, ids: string[]) =>
-    kind === "people" ? peopleNames(store.db, ids) : ids.map((id) => id.slice(0, 8));
+    kind === "characters" ? characterNames(store.db, ids) : ids.map((id) => id.slice(0, 8));
   const menu = new StringSelectMenuBuilder()
     .setCustomId(`ax:dsel:${token}`)
     .setPlaceholder("Tick the changes to apply")
@@ -539,7 +544,7 @@ export async function openEdit(interaction: ButtonInteraction): Promise<void> {
   await showEditForm(interaction, archiveId, artifactId, version);
 }
 
-/** Shows the edit form for an artifact, bound to the version the person saw. */
+/** Shows the edit form for an artifact, bound to the version the contributor saw. */
 export async function showEditForm(
   interaction: ButtonInteraction | CommandInteraction,
   archiveId: string,
@@ -649,7 +654,7 @@ export async function submitEdit(interaction: ModalSubmitInteraction): Promise<v
   );
 }
 
-export async function openAddPeople(interaction: ButtonInteraction): Promise<void> {
+export async function openAddLinks(interaction: ButtonInteraction): Promise<void> {
   const { archiveId, artifactId, version } = parseRecordId(interaction.customId);
   getArtifact(archivist(), await actorOf(interaction), { archiveId, id: artifactId });
   const input = (id: string, label: string, placeholder: string) =>
@@ -664,32 +669,32 @@ export async function openAddPeople(interaction: ButtonInteraction): Promise<voi
     );
   await interaction.showModal(
     new ModalBuilder()
-      .setCustomId(recordId("peoplem", archiveId, artifactId, version))
-      .setTitle("Add people or events")
+      .setCustomId(recordId("linksm", archiveId, artifactId, version))
+      .setTitle("Add characters or events")
       .addComponents(
-        input("people", "People, separated by commas", "Sam, Lee, Alex (3f9a1c2e)"),
+        input("characters", "Characters, separated by commas", "Sam, Lee, Alex (3f9a1c2e)"),
         input("events", "Events it shows, by title or ID", "Summer season, First meetup"),
       ),
   );
 }
 
-export async function submitAddPeople(interaction: ModalSubmitInteraction): Promise<void> {
+export async function submitAddLinks(interaction: ModalSubmitInteraction): Promise<void> {
   const { archiveId, artifactId, version } = parseRecordId(interaction.customId);
   const context = archivist();
   const actor = await actorOf(interaction);
   getArtifact(context, actor, { archiveId, id: artifactId });
   const db = openStore(context, archiveId).db;
-  const people = resolvePeople(db, interaction.fields.getTextInputValue("people"));
+  const characters = resolveCharacters(db, interaction.fields.getTextInputValue("characters"));
   const events = resolveEvents(db, field(interaction, "events"));
-  if (people.length === 0 && events.length === 0) {
-    throw invalid("Add at least one person or event.", "people");
+  if (characters.length === 0 && events.length === 0) {
+    throw invalid("Add at least one character or event.", "characters");
   }
   await interaction.deferReply(ephemeral);
   const updated = updateArtifact(context, actor, {
     archiveId,
     id: artifactId,
     expectedVersion: version,
-    addLinks: { people, events },
+    addLinks: { characters, events },
   });
   await interaction.editReply(
     artifactReply(context, archiveId, updated, `Updated artifact \`${updated.id.slice(0, 8)}\`.`),
@@ -698,7 +703,7 @@ export async function submitAddPeople(interaction: ModalSubmitInteraction): Prom
 
 /**
  * Sets or clears the flag that someone in the artifact is not identified yet,
- * which the research board uses for missing-people cards. The same message
+ * which the research board uses for missing-character cards. The same message
  * is updated, so its buttons carry the new version.
  */
 export async function toggleUnidentified(interaction: ButtonInteraction): Promise<void> {
@@ -710,16 +715,16 @@ export async function toggleUnidentified(interaction: ButtonInteraction): Promis
     archiveId,
     id: artifactId,
     expectedVersion: version,
-    unidentifiedPeople: !current.unidentifiedPeople,
+    unidentifiedCharacters: !current.unidentifiedCharacters,
   });
   await interaction.update({
     ...artifactReply(
       context,
       archiveId,
       updated,
-      updated.unidentifiedPeople
-        ? `Artifact \`${updated.id.slice(0, 8)}\` is marked as having someone not identified yet.`
-        : `Artifact \`${updated.id.slice(0, 8)}\` is no longer marked as having someone unidentified.`,
+      updated.unidentifiedCharacters
+        ? `Artifact \`${updated.id.slice(0, 8)}\` is marked as having an unidentified character.`
+        : `Artifact \`${updated.id.slice(0, 8)}\` is no longer marked as having an unidentified character.`,
     ),
     attachments: [],
   });
@@ -730,7 +735,7 @@ export async function askDelete(interaction: ButtonInteraction): Promise<void> {
   await askDeleteFor(interaction, archiveId, artifactId, version);
 }
 
-/** Asks the person to confirm permanently deleting an artifact. */
+/** Asks the contributor to confirm permanently deleting an artifact. */
 export async function askDeleteFor(
   interaction: ButtonInteraction | CommandInteraction,
   archiveId: string,

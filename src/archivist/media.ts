@@ -53,7 +53,7 @@ export const MEDIA_TYPES: Record<MediaFormat, { mimeType: string; extension: str
   flac: { mimeType: "audio/flac", extension: "flac" },
 };
 
-/** What people are told the bot accepts, matching `detectFormat`. */
+/** What contributors are told the bot accepts, matching `detectFormat`. */
 export const ACCEPTED_FORMATS_TEXT =
   "images (JPEG, PNG, WebP, GIF), videos (MP4, MOV, WebM, MKV, AVI), and audio (MP3, M4A, WAV, Ogg, FLAC)";
 

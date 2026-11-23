@@ -12,7 +12,7 @@ import {
   eventEmbed,
   eventWhen,
   interpretationNote,
-  peopleText,
+  charactersText,
   requestEmbed,
   selectedDateText,
 } from "../../../src/lib/archivist-format.js";
@@ -41,8 +41,8 @@ function artifact(overrides: Partial<ArtifactDetails> = {}): ArtifactDetails {
       fileDateStatus: "found",
     },
     dates: { exact: null, estimated: null, file: null, selected: null },
-    unidentifiedPeople: false,
-    links: { people: [], accounts: [], servers: [], channels: [], events: [] },
+    unidentifiedCharacters: false,
+    links: { characters: [], accounts: [], servers: [], channels: [], events: [] },
     ...overrides,
   };
 }
@@ -140,11 +140,11 @@ test("instants show in the archive's timezone, and typed times explain how they 
   assert.match(interpretationNote(offset) ?? "", /its own offset, -04:00/);
 });
 
-test("people text notes someone not identified yet", () => {
-  assert.equal(peopleText([], false), "Nobody linked yet");
-  assert.equal(peopleText(["Sam"], false), "Sam");
-  assert.equal(peopleText([], true), "Someone not identified yet");
-  assert.equal(peopleText(["Sam", "Lee"], true), "Sam, Lee, and someone not identified yet");
+test("the characters field notes an unidentified character", () => {
+  assert.equal(charactersText([], false), "No characters linked yet");
+  assert.equal(charactersText(["Sam"], false), "Sam");
+  assert.equal(charactersText([], true), "An unidentified character");
+  assert.equal(charactersText(["Sam", "Lee"], true), "Sam, Lee, and an unidentified character");
 });
 
 test("long descriptions are shortened only in the embed, with a pointer to the full text", () => {
@@ -152,7 +152,7 @@ test("long descriptions are shortened only in the embed, with a pointer to the f
   const embed = artifactEmbed(long, {
     archiveName: "History",
     archiveTimeZone: TORONTO,
-    peopleNames: [],
+    characterNames: [],
     hasPreviewAttachment: false,
   }).toJSON();
   assert.ok(embed.description!.length <= EMBED_DESCRIPTION_LIMIT);
@@ -160,19 +160,19 @@ test("long descriptions are shortened only in the embed, with a pointer to the f
   assert.equal(long.description.length, 25_000);
 });
 
-test("embeds name unknown people and missing previews plainly", () => {
+test("embeds name unknown characters and missing previews plainly", () => {
   const embed = artifactEmbed(
     artifact({ media: { ...artifact().media, hasPreview: false, readable: false } }),
     {
       archiveName: "History",
       archiveTimeZone: TORONTO,
-      peopleNames: [],
+      characterNames: [],
       hasPreviewAttachment: false,
       addedBy: "200000000000000002",
     },
   ).toJSON();
   const fields = Object.fromEntries(embed.fields!.map((field) => [field.name, field.value]));
-  assert.equal(fields.People, "Nobody linked yet");
+  assert.equal(fields.Characters, "No characters linked yet");
   assert.equal(fields["Added by"], "<@200000000000000002>");
   assert.match(fields.File!, /no preview/);
   assert.equal(embed.title, "History - artifact 3f9a1c2e");
@@ -185,10 +185,11 @@ test("review options fit Discord's limits", () => {
   );
   assert.equal(option.label, "Description");
   assert.ok(option.description.length <= 100);
-  const people = differenceOption({ key: "people", current: "", proposed: "id1,id2" }, (_, ids) =>
-    ids.map((id) => `name-${id}`),
+  const characters = differenceOption(
+    { key: "characters", current: "", proposed: "id1,id2" },
+    (_, ids) => ids.map((id) => `name-${id}`),
   );
-  assert.equal(people.description, "name-id1, name-id2");
+  assert.equal(characters.description, "name-id1, name-id2");
 });
 
 test("pending forms belong to one person, are used once, and expire", () => {
@@ -240,7 +241,7 @@ test("events say what their range means, and say when nothing supports them", ()
     exactBasis: null,
     disputedReason: "Lee says it was June.",
     color: "#eb459e",
-    links: { people: [], servers: [], channels: [] },
+    links: { characters: [], servers: [], channels: [] },
     supportingArtifacts: [],
   };
   assert.equal(
@@ -258,7 +259,7 @@ test("events say what their range means, and say when nothing supports them", ()
   const embed = eventEmbed(event, {
     archiveName: "History",
     archiveTimeZone: TORONTO,
-    peopleNames: ["Sam"],
+    characterNames: ["Sam"],
     placeNames: [],
   }).toJSON();
   const fields = Object.fromEntries(embed.fields!.map((field) => [field.name, field.value]));
@@ -284,12 +285,12 @@ test("a request shows its bucket and the reason it cannot be found", () => {
     priority: "medium",
     researchNotes: null,
     unrecoverableReason: "Nobody kept them.",
-    people: ["c1"],
+    characters: ["c1"],
     events: [],
     foundArtifacts: [],
   };
   const fields = Object.fromEntries(
-    requestEmbed(request, { archiveName: "History", peopleNames: ["Sam"], eventNames: [] })
+    requestEmbed(request, { archiveName: "History", characterNames: ["Sam"], eventNames: [] })
       .toJSON()
       .fields!.map((field) => [field.name, field.value]),
   );

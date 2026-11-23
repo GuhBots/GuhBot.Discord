@@ -7,7 +7,7 @@ import { ArchivistError } from "./errors.js";
 import { newId, optionalText, requiredText, TEXT_LIMITS, timestamp } from "./fields.js";
 import { eventSpan, readEvent } from "./events.js";
 import { commitMutation } from "./mutations.js";
-import { resolveShortId } from "./people.js";
+import { resolveShortId } from "./lookup.js";
 import { getDateOrder } from "./preferences.js";
 import {
   diffFields,
@@ -21,7 +21,7 @@ import { expectedVersionValue, staleVersion } from "./versions.js";
 
 /**
  * Missing-media requests: something the archive should have but nobody has
- * found yet. A request needs a description, at least one person, and one
+ * found yet. A request needs a description, at least one character, and one
  * temporal constraint. Requests start Needed, may move to Unrecoverable with
  * a reason, and are Resolved by linking the artifact that has it. There are
  * no assignees.
@@ -84,7 +84,7 @@ export interface RequestDetails {
   priority: Priority;
   researchNotes: string | null;
   unrecoverableReason: string | null;
-  people: string[];
+  characters: string[];
   events: string[];
   foundArtifacts: string[];
 }
@@ -107,7 +107,7 @@ interface RequestRow {
 }
 
 const LINKS = {
-  people: { table: "request_people", column: "character_id", target: "characters" },
+  characters: { table: "request_characters", column: "character_id", target: "characters" },
   events: { table: "request_events", column: "event_id", target: "events" },
   foundArtifacts: { table: "request_artifacts", column: "artifact_id", target: "artifacts" },
 } as const;
@@ -191,7 +191,7 @@ export function readRequest(db: Database.Database, id: string): RequestDetails |
     priority: row.priority,
     researchNotes: row.research_notes,
     unrecoverableReason: row.unrecoverable_reason,
-    people: linkIds(db, "people", row.id),
+    characters: linkIds(db, "characters", row.id),
     events: linkIds(db, "events", row.id),
     foundArtifacts: linkIds(db, "foundArtifacts", row.id),
   };
@@ -270,7 +270,7 @@ function constraintState(db: Database.Database, constraint: Constraint): string 
 export interface CreateRequestInput {
   archiveId: unknown;
   description: unknown;
-  people: unknown;
+  characters: unknown;
   constraint: ConstraintInput;
   events?: unknown;
   researchNotes?: unknown;
@@ -285,17 +285,17 @@ export function createRequest(
   const { store } = openForActor(context, actor, input.archiveId);
   const db = store.db;
   const description = requiredText("description", input.description, TEXT_LIMITS.description);
-  const people = idList("people", input.people);
-  if (people.length === 0) {
+  const characters = idList("characters", input.characters);
+  if (characters.length === 0) {
     throw new ArchivistError(
       "invalid_input",
-      "Name at least one person the missing media involves.",
+      "Name at least one character the missing media involves.",
       {
-        field: "people",
+        field: "characters",
       },
     );
   }
-  requireRecords(db, "characters", "people", people);
+  requireRecords(db, "characters", "characters", characters);
   const events = idList("events", input.events);
   requireRecords(db, "events", "events", events);
   const constraint = constraintValue(context, actor, db, input.constraint);
@@ -306,7 +306,7 @@ export function createRequest(
   const changes: Record<string, FieldChange> = {
     description: { old: null, new: description },
     when: { old: null, new: constraintState(db, constraint) },
-    people: { old: null, new: people },
+    characters: { old: null, new: characters },
     priority: { old: null, new: priority },
   };
   if (events.length) changes.events = { old: null, new: events };
@@ -333,16 +333,17 @@ export function createRequest(
           priority,
           researchNotes,
         );
-      const addPerson = target.prepare(
-        "INSERT INTO request_people (request_id, character_id) VALUES (?, ?)",
+      const addCharacter = target.prepare(
+        "INSERT INTO request_characters (request_id, character_id) VALUES (?, ?)",
       );
-      for (const person of people) addPerson.run(id, person);
+      for (const character of characters) addCharacter.run(id, character);
       const addEvent = target.prepare(
         "INSERT INTO request_events (request_id, event_id) VALUES (?, ?)",
       );
       for (const event of events) addEvent.run(id, event);
       // The plan asks for this check inside the transaction, before commit.
-      if (linkIds(target, "people", id).length === 0) throw new Error("A request needs a person.");
+      if (linkIds(target, "characters", id).length === 0)
+        throw new Error("A request needs a character.");
     },
     append: [logEntry(context, actor, "request", id, changes)],
   });
@@ -387,8 +388,8 @@ export interface UpdateRequestInput {
   constraint?: ConstraintInput;
   researchNotes?: unknown;
   priority?: unknown;
-  addPeople?: unknown;
-  removePeople?: unknown;
+  addCharacters?: unknown;
+  removeCharacters?: unknown;
   addEvents?: unknown;
   removeEvents?: unknown;
   /** Bucket moves. Resolved needs found artifacts, Unrecoverable a reason. */
@@ -403,7 +404,7 @@ interface EditableRequest {
   constraint: Constraint;
   researchNotes: string | null;
   priority: Priority;
-  people: string[];
+  characters: string[];
   events: string[];
   status: RequestStatus;
   foundArtifacts: string[];
@@ -416,7 +417,7 @@ const LOGGED = [
   "when",
   "researchNotes",
   "priority",
-  "people",
+  "characters",
   "events",
   "status",
   "foundArtifacts",
@@ -446,7 +447,7 @@ export function updateRequest(
     constraint: current.constraint,
     researchNotes: current.researchNotes,
     priority: current.priority,
-    people: current.people,
+    characters: current.characters,
     events: current.events,
     status: current.status,
     foundArtifacts: current.foundArtifacts,
@@ -469,7 +470,7 @@ export function updateRequest(
   }
   if (input.priority !== undefined) after.priority = priorityValue(input.priority);
   const edit = (
-    field: "people" | "events",
+    field: "characters" | "events",
     add: unknown,
     remove: unknown,
     table: "characters" | "events",
@@ -481,11 +482,11 @@ export function updateRequest(
     for (const value of additions) next.add(value);
     after[field] = [...next].sort();
   };
-  edit("people", input.addPeople, input.removePeople, "characters");
+  edit("characters", input.addCharacters, input.removeCharacters, "characters");
   edit("events", input.addEvents, input.removeEvents, "events");
-  if (after.people.length === 0) {
-    throw new ArchivistError("invalid_input", "A request needs at least one person.", {
-      field: "people",
+  if (after.characters.length === 0) {
+    throw new ArchivistError("invalid_input", "A request needs at least one character.", {
+      field: "characters",
     });
   }
 
@@ -564,7 +565,7 @@ export function updateRequest(
           id,
           current.version,
         );
-      for (const kind of ["people", "events", "foundArtifacts"] as const) {
+      for (const kind of ["characters", "events", "foundArtifacts"] as const) {
         if (!changes[kind]) continue;
         const { table, column } = LINKS[kind];
         target.prepare(`DELETE FROM ${table} WHERE request_id = ?`).run(id);

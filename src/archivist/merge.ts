@@ -6,12 +6,12 @@ import type { FieldChange } from "./edit-log.js";
 import { ArchivistError } from "./errors.js";
 import { newId, timestamp } from "./fields.js";
 import { commitMutation } from "./mutations.js";
-import { resolveShortId } from "./people.js";
+import { resolveShortId } from "./lookup.js";
 import { logEntry, notFoundRecord, openForActor } from "./records.js";
 import { expectedVersionValue, staleVersion } from "./versions.js";
 
 /**
- * Merging two characters who turn out to be the same person. Merging is
+ * Merging two character records that turn out to be the same character. Merging is
  * always explicit: a contributor chooses which record survives and how each
  * conflicting field is resolved. Matching names are never merged on their
  * own. The other record's known name becomes an alias, its aliases and
@@ -44,11 +44,11 @@ const FIELD_COLUMNS: Record<MergeField, keyof CharacterRow> = {
 
 /** Links a merge moves from the merged record to the survivor. */
 const MOVES: { label: string; table: string; column: string; unique: boolean }[] = [
-  { label: "artifacts", table: "artifact_people", column: "character_id", unique: true },
-  { label: "events", table: "event_people", column: "character_id", unique: true },
+  { label: "artifacts", table: "artifact_characters", column: "character_id", unique: true },
+  { label: "events", table: "event_characters", column: "character_id", unique: true },
   {
     label: "missing-media requests",
-    table: "request_people",
+    table: "request_characters",
     column: "character_id",
     unique: true,
   },

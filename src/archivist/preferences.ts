@@ -10,7 +10,7 @@ import { ArchivistError } from "./errors.js";
 import { timestamp } from "./fields.js";
 
 /**
- * Per-person settings kept in `guhbot.db`, outside every archive: a personal
+ * Per-contributor settings kept in `guhbot.db`, outside every archive: a personal
  * timezone and date order for reading typed dates, and the archive last
  * chosen in Discord.
  */

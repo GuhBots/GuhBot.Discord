@@ -14,7 +14,11 @@ import { addMember } from "../../../src/archivist/members.js";
 import { ArchivistError, type ErrorCode } from "../../../src/archivist/errors.js";
 import { createStagingFolder, stageMedia } from "../../../src/archivist/media.js";
 import { closeMetadataReader } from "../../../src/archivist/metadata.js";
-import { resolvePeople, resolveShortId, suggestPeople } from "../../../src/archivist/people.js";
+import {
+  resolveCharacters,
+  resolveShortId,
+  suggestCharacters,
+} from "../../../src/archivist/lookup.js";
 import { makeArchivist, MEMBER, OWNER } from "../helpers/context.js";
 import { closeFixtureWriter, writeImage } from "../helpers/media.js";
 
@@ -29,7 +33,7 @@ function fails(code: ErrorCode) {
 
 function setup(t: TestContext) {
   const { context } = makeArchivist(t);
-  const { archiveId } = createArchive(context, OWNER, { name: "People" });
+  const { archiveId } = createArchive(context, OWNER, { name: "Characters" });
   addMember(context, OWNER, { archiveId, userId: MEMBER.userId });
   const store = context.stores.get(archiveId)!;
   const make = (knownName: string) => createCharacter(context, OWNER, { archiveId, knownName }).id;
@@ -43,37 +47,37 @@ function setup(t: TestContext) {
   return { context, archiveId, db: store.db, sam, lee, alexOne, alexTwo };
 }
 
-test("people are resolved by known name or alias, ignoring case", (t) => {
+test("characters are resolved by known name or alias, ignoring case", (t) => {
   const { db, sam, lee } = setup(t);
-  assert.deepEqual(resolvePeople(db, " sam, LEE "), [sam, lee]);
-  assert.deepEqual(resolvePeople(db, "Sammy, Sam"), [sam]);
-  assert.deepEqual(resolvePeople(db, ""), []);
+  assert.deepEqual(resolveCharacters(db, " sam, LEE "), [sam, lee]);
+  assert.deepEqual(resolveCharacters(db, "Sammy, Sam"), [sam]);
+  assert.deepEqual(resolveCharacters(db, ""), []);
 });
 
 test("unknown and shared names are refused, and short IDs pick one", (t) => {
   const { db, alexTwo } = setup(t);
   assert.throws(
-    () => resolvePeople(db, "Sam, Alicia"),
+    () => resolveCharacters(db, "Sam, Alicia"),
     (error: unknown) =>
       fails("invalid_input")(error) && (error as ArchivistError).details.name === "Alicia",
   );
-  assert.throws(() => resolvePeople(db, "Alex"), fails("invalid_input"));
-  assert.deepEqual(resolvePeople(db, `Alex (${alexTwo.slice(0, 8)})`), [alexTwo]);
+  assert.throws(() => resolveCharacters(db, "Alex"), fails("invalid_input"));
+  assert.deepEqual(resolveCharacters(db, `Alex (${alexTwo.slice(0, 8)})`), [alexTwo]);
 });
 
 test("suggestions complete the last name and keep the ones already typed", (t) => {
   const { db, alexOne, alexTwo } = setup(t);
-  const afterSam = suggestPeople(db, "Sam, le").map((choice) => choice.value);
+  const afterSam = suggestCharacters(db, "Sam, le").map((choice) => choice.value);
   assert.equal(afterSam[0], "Sam, Lee");
   assert.equal(afterSam.length, 3);
-  const alexes = suggestPeople(db, "ale")
+  const alexes = suggestCharacters(db, "ale")
     .map((choice) => choice.value)
     .sort();
   assert.deepEqual(
     alexes,
     [`Alex (${alexOne.slice(0, 8)})`, `Alex (${alexTwo.slice(0, 8)})`].sort(),
   );
-  assert.equal(suggestPeople(db, "Sam, sa").length, 0);
+  assert.equal(suggestCharacters(db, "Sam, sa").length, 0);
 });
 
 test("short IDs need eight characters and must be unique", (t) => {
@@ -101,7 +105,7 @@ test("a duplicate review lists only supplied changes and applies only ticked one
     description: "Meetup",
     media,
     source,
-    links: { people: [sam] },
+    links: { characters: [sam] },
   });
   assert.equal(created.status, "created");
 
@@ -110,7 +114,7 @@ test("a duplicate review lists only supplied changes and applies only ticked one
     description: "Group photo at the meetup",
     source,
     exactDate: "2019-07-15",
-    links: { people: [sam, lee] },
+    links: { characters: [sam, lee] },
   };
   const differences = duplicateDifferences(
     created.artifact,
@@ -118,7 +122,7 @@ test("a duplicate review lists only supplied changes and applies only ticked one
   );
   assert.deepEqual(
     differences.map((difference) => difference.key),
-    ["description", "exactDate", "people"],
+    ["description", "exactDate", "characters"],
   );
   assert.equal(differences[2]!.proposed, lee);
 
@@ -126,11 +130,11 @@ test("a duplicate review lists only supplied changes and applies only ticked one
     intake: resubmission,
     artifactId: created.artifact.id,
     expectedVersion: 1,
-    selected: ["people"],
+    selected: ["characters"],
   });
   assert.equal(applied.description, "Meetup");
   assert.equal(applied.dates.exact, null);
-  assert.deepEqual(applied.links.people, [sam, lee].sort());
+  assert.deepEqual(applied.links.characters, [sam, lee].sort());
 
   assert.throws(
     () =>

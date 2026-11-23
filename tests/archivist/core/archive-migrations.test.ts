@@ -6,7 +6,10 @@ import { test } from "node:test";
 import Database from "better-sqlite3";
 import { openArchiveDatabase } from "../../../src/archivist/archive-database.js";
 import { ArchivistError } from "../../../src/archivist/errors.js";
-import { ARCHIVE_MIGRATIONS } from "../../../src/archivist/migrations/archive-schema.js";
+import {
+  ARCHIVE_MIGRATIONS,
+  ARCHIVE_SCHEMA_VERSION,
+} from "../../../src/archivist/migrations/archive-schema.js";
 import { applyMigrations, type VersionStore } from "../../../src/archivist/migrations/runner.js";
 import { makeTempDir } from "../helpers/temp-dir.js";
 
@@ -19,8 +22,8 @@ const ARCHIVE_TABLES = [
   "archive_meta",
   "artifact_accounts",
   "artifact_channels",
+  "artifact_characters",
   "artifact_events",
-  "artifact_people",
   "artifact_servers",
   "artifacts",
   "bot_owners",
@@ -31,7 +34,7 @@ const ARCHIVE_TABLES = [
   "characters",
   "date_values",
   "event_channels",
-  "event_people",
+  "event_characters",
   "event_servers",
   "events",
   "gap_cards",
@@ -39,8 +42,8 @@ const ARCHIVE_TABLES = [
   "media",
   "memberships",
   "request_artifacts",
+  "request_characters",
   "request_events",
-  "request_people",
   "research_requests",
   "server_icons",
   "server_names",
@@ -75,7 +78,7 @@ test("a new archive gets every contract table at the current schema version", (t
   t.after(() => db.close());
 
   assert.deepEqual(tableNames(db), ARCHIVE_TABLES);
-  assert.equal(db.pragma("user_version", { simple: true }), 2);
+  assert.equal(db.pragma("user_version", { simple: true }), ARCHIVE_SCHEMA_VERSION);
   assert.equal(db.pragma("foreign_keys", { simple: true }), 1);
   assert.equal(db.pragma("journal_mode", { simple: true }), "delete");
 });
@@ -89,8 +92,8 @@ test("reopening an archive keeps its data and version", (t) => {
   const second = openArchiveDatabase(file);
   t.after(() => second.close());
   const meta = second.prepare("SELECT name, schema_version FROM archive_meta").get();
-  assert.deepEqual(meta, { name: "Test Archive", schema_version: 2 });
-  assert.equal(second.pragma("user_version", { simple: true }), 2);
+  assert.deepEqual(meta, { name: "Test Archive", schema_version: ARCHIVE_SCHEMA_VERSION });
+  assert.equal(second.pragma("user_version", { simple: true }), ARCHIVE_SCHEMA_VERSION);
 });
 
 test("an archive from a newer GuhBot is refused without being modified", (t) => {
@@ -122,7 +125,7 @@ test("archive relationships must point at records in the same archive", (t) => {
   assert.throws(
     () =>
       db
-        .prepare("INSERT INTO artifact_people (artifact_id, character_id) VALUES (?, ?)")
+        .prepare("INSERT INTO artifact_characters (artifact_id, character_id) VALUES (?, ?)")
         .run("no-artifact", "no-character"),
     /FOREIGN KEY constraint failed/,
   );
@@ -188,8 +191,11 @@ test("version 2 keeps every artifact, its links, and an old exact basis", (t) =>
   `);
   old.close();
 
-  const db = openArchiveDatabase(file);
+  // Stop at version 2, so the names it used are still there.
+  const db = new Database(file);
   t.after(() => db.close());
+  db.pragma("foreign_keys = ON");
+  applyMigrations(db, ARCHIVE_MIGRATIONS.slice(0, 2), archiveVersions, "archive");
   assert.equal(db.pragma("user_version", { simple: true }), 2);
   assert.equal(db.pragma("foreign_keys", { simple: true }), 1);
   assert.deepEqual(
@@ -226,6 +232,97 @@ test("version 2 keeps every artifact, its links, and an old exact basis", (t) =>
         .run(),
     /FOREIGN KEY constraint failed/,
   );
+});
+
+test("version 3 renames people to characters and keeps every row", (t) => {
+  const file = join(makeTempDir(t), "archive.db");
+  const old = new Database(file);
+  old.pragma("foreign_keys = ON");
+  applyMigrations(old, ARCHIVE_MIGRATIONS.slice(0, 1), archiveVersions, "archive");
+  insertMeta(old);
+  applyMigrations(old, ARCHIVE_MIGRATIONS.slice(0, 2), archiveVersions, "archive");
+  old.exec(`
+    INSERT INTO date_values (id, kind, original_text, calendar_day, archive_day)
+      VALUES ('d1', 'day', '2019-07-15', '2019-07-15', '2019-07-15');
+    INSERT INTO media (id, original_path, original_filename, mime_type, byte_length, sha256, created_at)
+      VALUES ('m1', 'media/originals/m1.png', 'a.png', 'image/png', 10, '${"0".repeat(64)}', '${NOW}');
+    INSERT INTO characters (id, created_at, created_by, updated_at, known_name)
+      VALUES ('c1', '${NOW}', '1', '${NOW}', 'Sam');
+    INSERT INTO artifacts (id, created_at, created_by, updated_at, media_id, description,
+        source_provider, source_key, unidentified_people)
+      VALUES ('a1', '${NOW}', '1', '${NOW}', 'm1', 'Meetup', 'web_upload', 'u1', 1);
+    INSERT INTO artifact_people (artifact_id, character_id) VALUES ('a1', 'c1');
+    INSERT INTO events (id, created_at, created_by, updated_at, title, description, date_kind,
+        certainty, start_date_id, color)
+      VALUES ('e1', '${NOW}', '1', '${NOW}', 'Launch', 'Server opened', 'single', 'exact', 'd1', '#3366cc');
+    INSERT INTO event_people (event_id, character_id) VALUES ('e1', 'c1');
+    INSERT INTO research_requests (id, created_at, created_by, updated_at, description, constraint_kind, anchor_event_id)
+      VALUES ('r1', '${NOW}', '1', '${NOW}', 'Photos', 'before_event', 'e1');
+    INSERT INTO request_people (request_id, character_id) VALUES ('r1', 'c1');
+    INSERT INTO gap_cards (id, version, created_at, created_by, updated_at, kind, artifact_id, status, priority)
+      VALUES ('g1', 2, '${NOW}', 'archivist', '${NOW}', 'missing_people', 'a1', 'needed', 'high'),
+             ('g2', 1, '${NOW}', '1', '${NOW}', 'custom', 'a1', 'resolved', 'low');
+  `);
+  old.close();
+
+  const db = openArchiveDatabase(file);
+  t.after(() => db.close());
+  assert.equal(db.pragma("user_version", { simple: true }), 3);
+  assert.equal(
+    (db.prepare("SELECT schema_version FROM archive_meta").get() as { schema_version: number })
+      .schema_version,
+    3,
+  );
+  assert.equal(db.pragma("foreign_keys", { simple: true }), 1);
+  assert.deepEqual(tableNames(db), ARCHIVE_TABLES);
+  const count = (table: string) =>
+    (db.prepare(`SELECT count(*) AS n FROM ${table}`).get() as { n: number }).n;
+  assert.equal(count("artifact_characters"), 1);
+  assert.equal(count("event_characters"), 1);
+  assert.equal(count("request_characters"), 1);
+  assert.deepEqual(db.prepare("SELECT unidentified_characters AS flag FROM artifacts").get(), {
+    flag: 1,
+  });
+  assert.deepEqual(
+    db.prepare("SELECT id, version, kind, status FROM gap_cards ORDER BY id").all(),
+    [
+      { id: "g1", version: 2, kind: "missing_characters", status: "needed" },
+      { id: "g2", version: 1, kind: "custom", status: "resolved" },
+    ],
+  );
+  assert.deepEqual(
+    (
+      db
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE '%reverse' ORDER BY name",
+        )
+        .all() as { name: string }[]
+    )
+      .map((row) => row.name)
+      .filter((name) => /people|characters/.test(name)),
+    ["artifact_characters_reverse", "event_characters_reverse", "request_characters_reverse"],
+  );
+  assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE name = 'gap_status_priority'").get());
+  assert.deepEqual(db.pragma("foreign_key_check"), []);
+
+  // The old kind is refused, and links still cascade or block as before.
+  assert.throws(
+    () =>
+      db
+        .prepare(
+          `INSERT INTO gap_cards (id, created_at, created_by, updated_at, kind, event_id, priority)
+           VALUES ('g3', '${NOW}', '1', '${NOW}', 'missing_people', 'e1', 'high')`,
+        )
+        .run(),
+    /CHECK constraint failed/,
+  );
+  assert.throws(
+    () => db.prepare("DELETE FROM characters WHERE id = 'c1'").run(),
+    /FOREIGN KEY constraint failed/,
+  );
+  db.prepare("DELETE FROM artifacts WHERE id = 'a1'").run();
+  assert.equal(count("artifact_characters"), 0);
+  assert.equal(count("gap_cards"), 0);
 });
 
 test("a failed migration leaves the database at its last complete version", (t) => {

@@ -3,7 +3,7 @@ import { ArchivistError } from "../archivist/errors.js";
 
 /**
  * Pending Discord confirmations and reviews, such as "unregister this
- * archive?" or a duplicate review. Each is bound to the person who started
+ * archive?" or a duplicate review. Each is bound to the contributor who started
  * it and expires after 15 minutes. They live in memory, so a bot restart
  * cancels them without touching saved archive data.
  */
@@ -49,7 +49,7 @@ export function recall<T>(token: string, userId: string, consume = true): T {
     );
   }
   if (entry.userId !== userId) {
-    throw new ArchivistError("forbidden", "Only the person who started this can use it.");
+    throw new ArchivistError("forbidden", "Only whoever started this can use it.");
   }
   if (consume) pending.delete(token);
   return entry.data as T;

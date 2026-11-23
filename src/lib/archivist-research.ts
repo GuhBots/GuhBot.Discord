@@ -25,7 +25,7 @@ import {
   updateEvent,
 } from "../archivist/events.js";
 import { ArchivistError } from "../archivist/errors.js";
-import { peopleNames, resolvePeople, resolveShortId } from "../archivist/people.js";
+import { characterNames, resolveCharacters, resolveShortId } from "../archivist/lookup.js";
 import { resolveArchiveSelection } from "../archivist/preferences.js";
 import {
   type ConstraintInput,
@@ -107,7 +107,7 @@ function eventReply(
       eventEmbed(event, {
         archiveName: archiveName(context, archiveId),
         archiveTimeZone: archiveDetails(openStore(context, archiveId)).timezone,
-        peopleNames: peopleNames(db, event.links.people),
+        characterNames: characterNames(db, event.links.characters),
         placeNames: [
           ...names(context, archiveId, "servers", event.links.servers),
           ...names(context, archiveId, "channels", event.links.channels).map((name) => `#${name}`),
@@ -138,7 +138,7 @@ export interface EventOptions {
   certainty?: string;
   start: string;
   end?: string;
-  people?: string;
+  characters?: string;
   server?: string;
   channel?: string;
   color?: string;
@@ -162,7 +162,7 @@ export async function createEventFromCommand(
     end: options.end,
     color: options.color,
     links: {
-      people: resolvePeople(db, options.people),
+      characters: resolveCharacters(db, options.characters),
       servers: options.server ? [resolveShortId(db, "servers", options.server, "server")] : [],
       channels: options.channel ? [resolveShortId(db, "channels", options.channel, "channel")] : [],
     },
@@ -211,7 +211,7 @@ function eventInput(
 }
 
 /**
- * Shows the event form bound to the version the person saw. A changed date
+ * Shows the event form bound to the version the contributor saw. A changed date
  * kind or certainty, chosen in the command, travels with the form.
  */
 export async function showEventForm(
@@ -369,7 +369,7 @@ function requestReply(
     embeds: [
       requestEmbed(request, {
         archiveName: archiveName(context, archiveId),
-        peopleNames: peopleNames(db, request.people),
+        characterNames: characterNames(db, request.characters),
         eventNames: names(context, archiveId, "events", request.events),
       }),
     ],
@@ -388,7 +388,7 @@ function requestReply(
 export interface RequestOptions {
   archive?: string;
   description: string;
-  people: string;
+  characters: string;
   when: string;
   day?: string;
   start?: string;
@@ -430,7 +430,7 @@ export async function createRequestFromCommand(
   const request = createRequest(context, actor, {
     archiveId: archive.archiveId,
     description: options.description,
-    people: resolvePeople(db, options.people),
+    characters: resolveCharacters(db, options.characters),
     constraint,
     researchNotes: options.notes,
   });

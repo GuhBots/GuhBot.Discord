@@ -88,7 +88,7 @@ test("a merge is reviewed, then moves every link to the surviving character", as
     description: "Both records tagged",
     media: await stageMedia(context, { file, originalFilename: "a.png" }),
     source: { provider: "discord_attachment", key: "600000000000000001" },
-    links: { people: [sam.id, samantha.id] },
+    links: { characters: [sam.id, samantha.id] },
   }).artifact;
 
   const preview = previewMerge(context, MEMBER, {
@@ -147,7 +147,7 @@ test("a merge is reviewed, then moves every link to the surviving character", as
   // The shared artifact keeps one link, and the introduction between the two is gone.
   assert.deepEqual(
     db
-      .prepare("SELECT character_id AS id FROM artifact_people WHERE artifact_id = ?")
+      .prepare("SELECT character_id AS id FROM artifact_characters WHERE artifact_id = ?")
       .all(shared.id),
     [{ id: sam.id }],
   );

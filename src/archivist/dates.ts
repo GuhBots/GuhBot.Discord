@@ -284,7 +284,7 @@ function zoneAfterTime(tail: string): { zone: string | null; rest: string } {
 /**
  * Reads the year, month, and day from the words of a typed date. A month
  * name settles the order. Otherwise a four-digit year first means
- * year-month-day, and a year last follows the person's date order, or
+ * year-month-day, and a year last follows the contributor's date order, or
  * whichever reading is the only real one.
  */
 function readDay(

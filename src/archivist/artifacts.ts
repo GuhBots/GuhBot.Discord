@@ -8,7 +8,7 @@ import { ArchivistError } from "./errors.js";
 import { discordId, newId, requiredText, TEXT_LIMITS, timestamp } from "./fields.js";
 import { insertMediaRow, mediaPaths, placeStagedMedia, type StagedMedia } from "./media.js";
 import { commitMutation, type Expectation } from "./mutations.js";
-import { resolveShortId } from "./people.js";
+import { resolveShortId } from "./lookup.js";
 import { getDateOrder, inputTimeZone } from "./preferences.js";
 import {
   type ArchiveSession,
@@ -23,7 +23,7 @@ import { expectedVersionValue, staleVersion } from "./versions.js";
 
 /**
  * Artifacts: one original file each, with a description, dates, and links to
- * people, accounts, servers, channels, and events in the same archive.
+ * characters, accounts, servers, channels, and events in the same archive.
  *
  * Dates are kept separately and never overwrite each other. The selected
  * date is the exact occurrence if known, then the estimate, then the date
@@ -40,7 +40,7 @@ export interface SourceInput {
 }
 
 export interface LinkInput {
-  people?: unknown;
+  characters?: unknown;
   accounts?: unknown;
   servers?: unknown;
   channels?: unknown;
@@ -48,7 +48,7 @@ export interface LinkInput {
 }
 
 const LINKS = {
-  people: { table: "artifact_people", column: "character_id", target: "characters" },
+  characters: { table: "artifact_characters", column: "character_id", target: "characters" },
   accounts: { table: "artifact_accounts", column: "account_id", target: "accounts" },
   servers: { table: "artifact_servers", column: "server_id", target: "servers" },
   channels: { table: "artifact_channels", column: "channel_id", target: "channels" },
@@ -89,7 +89,7 @@ export interface ArtifactDetails {
     selected: { basis: DateBasis; date: StoredDate } | null;
   };
   /** Someone in it has not been identified yet, which puts it on the research board. */
-  unidentifiedPeople: boolean;
+  unidentifiedCharacters: boolean;
   links: Links;
 }
 
@@ -114,7 +114,7 @@ interface ArtifactRow {
   estimate_reason: string | null;
   file_date_id: string | null;
   selected_date_id: string | null;
-  unidentified_people: 0 | 1;
+  unidentified_characters: 0 | 1;
   original_filename: string;
   mime_type: string;
   byte_length: number;
@@ -195,7 +195,7 @@ export function readArtifact(db: Database.Database, id: string): ArtifactDetails
       file,
       selected: basis && selectedDate ? { basis, date: selectedDate } : null,
     },
-    unidentifiedPeople: row.unidentified_people === 1,
+    unidentifiedCharacters: row.unidentified_characters === 1,
     links: readLinks(db, row.id),
   };
 }
@@ -490,7 +490,7 @@ export interface UpdateArtifactInput {
   /** The exact date as typed. Null clears it, falling back to the estimate or file date. */
   exactDate?: unknown;
   estimatedDate?: { day: unknown; reason: unknown } | null;
-  unidentifiedPeople?: unknown;
+  unidentifiedCharacters?: unknown;
   addLinks?: LinkInput;
   removeLinks?: LinkInput;
 }
@@ -506,8 +506,8 @@ interface EditableState {
   description: string;
   exactDate: { date: string; as: string } | null;
   estimatedDate: { date: string; reason: string } | null;
-  unidentifiedPeople: boolean;
-  people: string[];
+  unidentifiedCharacters: boolean;
+  characters: string[];
   accounts: string[];
   servers: string[];
   channels: string[];
@@ -530,7 +530,7 @@ function editableState(artifact: ArtifactDetails): EditableState {
           reason: artifact.dates.estimated.reason,
         }
       : null,
-    unidentifiedPeople: artifact.unidentifiedPeople,
+    unidentifiedCharacters: artifact.unidentifiedCharacters,
     ...artifact.links,
   };
 }
@@ -539,7 +539,7 @@ const EDITABLE_FIELDS = [
   "description",
   "exactDate",
   "estimatedDate",
-  "unidentifiedPeople",
+  "unidentifiedCharacters",
   ...LINK_KINDS,
 ] as const;
 
@@ -580,8 +580,11 @@ export function updateArtifact(
       ? { date: estimate.value.originalText, reason: estimate.reason }
       : null;
   }
-  if (input.unidentifiedPeople !== undefined) {
-    after.unidentifiedPeople = flagValue("unidentifiedPeople", input.unidentifiedPeople);
+  if (input.unidentifiedCharacters !== undefined) {
+    after.unidentifiedCharacters = flagValue(
+      "unidentifiedCharacters",
+      input.unidentifiedCharacters,
+    );
   }
   const additions = linksValue(input.addLinks, store.db);
   const removals = {} as Links;
@@ -634,7 +637,7 @@ export function updateArtifact(
       db.prepare(
         `UPDATE artifacts SET description = ?, exact_date_id = ?, exact_basis = ?,
            estimated_date_id = ?, estimate_reason = ?, selected_date_id = ?,
-           unidentified_people = ?, version = version + 1, updated_at = ?
+           unidentified_characters = ?, version = version + 1, updated_at = ?
          WHERE id = ? AND version = ?`,
       ).run(
         after.description,
@@ -643,7 +646,7 @@ export function updateArtifact(
         estimateId,
         estimateReason,
         exactId ?? estimateId ?? row.file_date_id,
-        after.unidentifiedPeople ? 1 : 0,
+        after.unidentifiedCharacters ? 1 : 0,
         now,
         id,
         current.version,

@@ -15,7 +15,7 @@ import {
 } from "./fields.js";
 import { commitMutation, type VersionedTable } from "./mutations.js";
 import { nextColor } from "./palette.js";
-import { resolveShortId } from "./people.js";
+import { resolveShortId } from "./lookup.js";
 import { diffFields, logEntry, notFoundRecord, openForActor } from "./records.js";
 import { expectedVersionValue, staleVersion } from "./versions.js";
 
@@ -43,9 +43,9 @@ const TABLES: Record<
  */
 const BLOCKERS: Record<EntityKind, [label: string, table: string, column: string][]> = {
   character: [
-    ["artifacts", "artifact_people", "character_id"],
-    ["events", "event_people", "character_id"],
-    ["missing-media requests", "request_people", "character_id"],
+    ["artifacts", "artifact_characters", "character_id"],
+    ["events", "event_characters", "character_id"],
+    ["missing-media requests", "request_characters", "character_id"],
     ["accounts", "accounts", "character_id"],
     ["account ownership records", "account_ownerships", "character_id"],
     ["bot owner records", "bot_owners", "character_id"],
@@ -661,7 +661,7 @@ export function ageOn(birthDay: string, now: Date): number {
   return age;
 }
 
-/** Reads an entity by full or short ID, with the details people need to recognize it. */
+/** Reads an entity by full or short ID, with the details contributors need to recognize it. */
 export function getEntity(
   context: ArchivistContext,
   actor: Actor,

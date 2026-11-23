@@ -120,7 +120,7 @@ test("typed dates are read in many common forms", () => {
   assert.equal(parseDayInput("day", "june, 2026, 19"), "2026-06-19");
 });
 
-test("all-number dates follow the person's date order, defaulting to year first", () => {
+test("all-number dates follow the contributor's date order, defaulting to year first", () => {
   assert.equal(parseDayInput("day", "2019-03-04", "dmy"), "2019-03-04");
   assert.equal(parseDayInput("day", "03/04/2019", "mdy"), "2019-03-04");
   assert.equal(parseDayInput("day", "03/04/2019", "dmy"), "2019-04-03");

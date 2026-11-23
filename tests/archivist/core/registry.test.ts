@@ -66,7 +66,7 @@ test("only the owner creates archives, and names are unique ignoring case and fo
   assert.equal(readdirSync(context.paths.archivesRoot).length, 1);
 });
 
-test("people see only the archives they are whitelisted for", (t) => {
+test("contributors see only the archives they are whitelisted for", (t) => {
   const { context } = makeArchivist(t);
   const first = createArchive(context, OWNER, { name: "First" });
   const second = createArchive(context, OWNER, { name: "Second" });
@@ -357,7 +357,7 @@ test("personal timezones are validated and fall back to the archive's", (t) => {
   assert.equal(getTimeZone(context, MEMBER), null);
 });
 
-test("each person's date order is kept, and a reset clears it with the timezone", (t) => {
+test("each contributor's date order is kept, and a reset clears it with the timezone", (t) => {
   const { context } = makeArchivist(t);
   assert.equal(getDateOrder(context, MEMBER), "ymd");
   assert.equal(setDateOrder(context, MEMBER, "dmy"), "dmy");

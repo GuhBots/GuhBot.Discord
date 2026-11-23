@@ -3,7 +3,7 @@ import type { Actor, ArchivistContext } from "./context.js";
 import { ArchivistError } from "./errors.js";
 import { newId, optionalText, requiredText, TEXT_LIMITS, timestamp } from "./fields.js";
 import { commitMutation } from "./mutations.js";
-import { resolveShortId } from "./people.js";
+import { resolveShortId } from "./lookup.js";
 import { logEntry, notFoundRecord, openForActor } from "./records.js";
 import { expectedVersionValue, staleVersion } from "./versions.js";
 
@@ -28,7 +28,7 @@ export const SYSTEM_EDITOR = "archivist";
 
 export type GapKind =
   | "unreadable_media"
-  | "missing_people"
+  | "missing_characters"
   | "account_character"
   | "undated"
   | "missing_evidence"
@@ -73,10 +73,10 @@ const DERIVED: Derived[] = [
           WHERE json_extract(m.metadata_json, '$.readable') = 0`,
   },
   {
-    kind: "missing_people",
+    kind: "missing_characters",
     priority: "high",
     subject: "artifact",
-    sql: "SELECT id FROM artifacts WHERE unidentified_people = 1",
+    sql: "SELECT id FROM artifacts WHERE unidentified_characters = 1",
   },
   {
     kind: "account_character",

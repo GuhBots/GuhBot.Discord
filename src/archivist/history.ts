@@ -14,7 +14,7 @@ import {
   type StagedMedia,
 } from "./media.js";
 import { commitMutation, type VersionedTable } from "./mutations.js";
-import { resolveShortId } from "./people.js";
+import { resolveShortId } from "./lookup.js";
 import { getDateOrder, inputTimeZone } from "./preferences.js";
 import { logEntry, notFoundRecord, openForActor } from "./records.js";
 import { expectedVersionValue, staleVersion } from "./versions.js";
@@ -294,7 +294,7 @@ export function addHistory(
     if (account.kind !== "human" || !owned) {
       throw invalid(
         "targetId",
-        "A main account must be a person's account this character owns or owned. Link the account first.",
+        "A main account must be a human account this character owns or owned. Link the account first.",
       );
     }
   }

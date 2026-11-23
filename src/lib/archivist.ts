@@ -26,7 +26,7 @@ import { isApplicationOwner } from "./owner.js";
 
 /**
  * The Discord side of Archivist: one shared context for every command, the
- * acting person, and error replies. The archive rules live in `src/archivist/`.
+ * acting contributor, and error replies. The archive rules live in `src/archivist/`.
  */
 
 /** Discord shows at most this many autocomplete suggestions. */
@@ -70,7 +70,7 @@ type AnyInteraction =
   | StringSelectMenuInteraction
   | ModalSubmitInteraction;
 
-/** The person behind an interaction. Owner status is re-checked at most every five minutes. */
+/** The contributor behind an interaction. Owner status is re-checked at most every five minutes. */
 export async function actorOf(interaction: AnyInteraction): Promise<Actor> {
   return {
     userId: interaction.user.id,
@@ -132,7 +132,7 @@ export async function runArchivist(
   }
 }
 
-/** Suggests the archives the person can open, matching what they typed. */
+/** Suggests the archives the contributor can open, matching what they typed. */
 export async function suggestArchives(interaction: AutocompleteInteraction): Promise<void> {
   const typed = interaction.options.getFocused().toLowerCase();
   const archives = listArchives(archivist(), await actorOf(interaction))
