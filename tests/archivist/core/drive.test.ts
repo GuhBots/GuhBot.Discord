@@ -7,7 +7,7 @@ import {
   downloadDiscordAttachment,
   type Fetch,
 } from "../../../src/archivist/download.js";
-import { DriveClient, parseDriveLink } from "../../../src/archivist/drive.js";
+import { dispositionFilename, DriveClient, parseDriveLink } from "../../../src/archivist/drive.js";
 import { ArchivistError, type ErrorCode } from "../../../src/archivist/errors.js";
 import { makeTempDir } from "../helpers/temp-dir.js";
 
@@ -132,12 +132,88 @@ test("private, trashed, folder, shortcut, native, oversized, and non-media files
     });
     await assert.rejects(client.metadata(link), fails(code));
   }
-  const unconfigured = new DriveClient({
-    apiKey: undefined,
-    fetch: scripted([]).fetch,
-    limits: LIMITS,
+});
+
+/** A ranged answer from the public download address. */
+function firstByte(headers: Record<string, string>, total = 4): Response {
+  return new Response(Buffer.from([0xff]), {
+    status: 206,
+    headers: { "content-range": `bytes 0-0/${total}`, ...headers },
   });
-  await assert.rejects(unconfigured.metadata(link), fails("dependency_unavailable"));
+}
+
+test("without an API key, a file's details come from a one-byte download request", async () => {
+  const { fetch, calls } = scripted([
+    firstByte({
+      "content-type": "image/jpeg",
+      "content-disposition": `attachment; filename="photo.jpg"; filename*=UTF-8''summer%20%E2%98%80.jpg`,
+    }),
+  ]);
+  const client = new DriveClient({ apiKey: undefined, fetch, limits: LIMITS });
+  const file = await client.metadata(
+    parseDriveLink(`https://drive.google.com/file/d/${FILE_ID}/view?resourcekey=0-key`),
+  );
+  assert.deepEqual(file, { id: FILE_ID, name: "summer ☀.jpg", mimeType: "image/jpeg", size: 4 });
+  const url = calls[0]!.url;
+  assert.equal(url.origin + url.pathname, "https://drive.usercontent.google.com/download");
+  assert.equal(url.searchParams.get("id"), FILE_ID);
+  assert.equal(url.searchParams.get("export"), "download");
+  assert.equal(url.searchParams.get("confirm"), "t");
+  assert.equal(url.searchParams.get("resourcekey"), "0-key");
+  assert.equal(url.searchParams.has("key"), false);
+  assert.equal(calls[0]!.headers.Range, "bytes=0-0");
+});
+
+test("without an API key, private, missing, web-page, oversized, and non-media files are refused", async () => {
+  const link = parseDriveLink(`https://drive.google.com/file/d/${FILE_ID}/view`);
+  const page = { "content-type": "text/html; charset=utf-8" };
+  const cases: [Response, ErrorCode][] = [
+    [new Response("<html>", { status: 404, headers: page }), "invalid_input"],
+    [
+      new Response(null, {
+        status: 302,
+        headers: { location: "https://accounts.google.com/ServiceLogin?continue=x" },
+      }),
+      "invalid_input",
+    ],
+    [new Response("<html>Too many users</html>", { status: 200, headers: page }), "invalid_input"],
+    [firstByte({ "content-type": "video/mp4" }, 5000), "media_too_large"],
+    [firstByte({ "content-type": "application/pdf" }), "unsupported_media_type"],
+  ];
+  for (const [response, code] of cases) {
+    const client = new DriveClient({
+      apiKey: undefined,
+      fetch: scripted([response]).fetch,
+      limits: LIMITS,
+    });
+    await assert.rejects(client.metadata(link), fails(code));
+  }
+});
+
+test("without an API key, downloads write the bytes from Google's download address", async (t) => {
+  const file = join(makeTempDir(t), "original");
+  const bytes = Buffer.from([1, 2, 3, 4]);
+  const { fetch, calls } = scripted([
+    new Response("", { status: 429 }),
+    new Response(bytes, { headers: { "content-type": "image/jpeg" } }),
+  ]);
+  const client = new DriveClient({ apiKey: undefined, fetch, limits: LIMITS });
+  assert.equal(
+    await client.download(parseDriveLink(`https://drive.google.com/uc?id=${FILE_ID}`), file),
+    4,
+  );
+  assert.deepEqual(readFileSync(file), bytes);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1]!.url.hostname, "drive.usercontent.google.com");
+  assert.equal(calls[1]!.headers.Range, undefined);
+});
+
+test("file names are read from either form of Content-Disposition", () => {
+  assert.equal(dispositionFilename('attachment; filename="a \\"b\\".jpg"'), 'a "b".jpg');
+  assert.equal(dispositionFilename("attachment; filename=plain.png"), "plain.png");
+  assert.equal(dispositionFilename("attachment; filename*=UTF-8''%E6%97%A5.mp4"), "日.mp4");
+  assert.equal(dispositionFilename(null), "");
+  assert.equal(dispositionFilename("attachment"), "");
 });
 
 test("downloads write the original bytes", async (t) => {

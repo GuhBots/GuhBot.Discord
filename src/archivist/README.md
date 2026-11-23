@@ -28,7 +28,7 @@ Archivist is being built in milestones. This directory currently holds storage, 
 | `entities.ts` | Creating and deleting characters, accounts, servers, and channels, with reference blockers |
 | `palette.ts` | Colors assigned to new servers, channels, and events |
 | `download.ts` | Bounded downloads with size, stall, and overall limits, allowed-host redirects, and retries |
-| `drive.ts` | Public Google Drive links: parsing, metadata checks, and binary downloads with an API key |
+| `drive.ts` | Public Google Drive links: parsing, metadata checks, and binary downloads, directly or through the Drive API when a key is set |
 | `people.ts` | Picking people by name from a comma-separated list, people suggestions, and short-ID lookup |
 | `announcements.ts` | Per-archive announcement channels and delivery state that prevents repeated posts |
 | `search.ts` | Case-insensitive, Unicode-normalized search for artifacts and entities |

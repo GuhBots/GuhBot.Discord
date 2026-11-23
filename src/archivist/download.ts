@@ -82,9 +82,7 @@ export async function fetchFromAllowedHosts(
       throw new ArchivistError(
         "invalid_input",
         "The file is hosted somewhere Archivist does not download from.",
-        {
-          field: "source",
-        },
+        { field: "source", reason: "disallowed_host", host: target.hostname },
       );
     }
     let response: Response;

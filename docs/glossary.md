@@ -23,6 +23,7 @@ Add or update definitions when terminology changes, and link to them from other 
 | FLAC | Free Lossless Audio Codec, an audio file format |
 | GHCR | GitHub Container Registry, where this repository publishes its images |
 | GIF | Graphics Interchange Format, an image format that can be animated |
+| HTML | Hypertext Markup Language, the format of web pages |
 | HTTP | Hypertext Transfer Protocol, the protocol web browsers and servers use |
 | HTTPS | Hypertext Transfer Protocol Secure, the encrypted protocol for websites |
 | ID | Identifier |

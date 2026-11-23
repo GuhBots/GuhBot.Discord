@@ -120,13 +120,15 @@ Exclude arbitrary website downloads, Google Photos share-page import, Picker, Di
 
 Contributors may use unrelated public Drive folders. No shared folder, source allowlist, folder registration, service-account invitation, or contributor Google sign-in is required. Submit the individual file link, not a folder link. Support file-view links, `open?id=...`, and `uc?id=...`, extracting the file ID and any supplied `resourcekey`.
 
-Use the Drive API metadata endpoint and binary `files.get` download with `alt=media`, not previews or thumbnails. Google's [download guide](https://developers.google.com/workspace/drive/api/guides/manage-downloads) documents the binary content operation. Google documents [public-folder API-key access](https://developers.google.com/workspace/drive/api/guides/search-files) and [resource-key headers](https://developers.google.com/workspace/drive/api/guides/resource-keys). Deployment provides the API project and key. The key stays server-side and outside archive exports.
+Without an API key, download from Google's public download address, `https://drive.usercontent.google.com/download`, with the file ID, `export=download`, `confirm=t` to skip the large-file virus-scan notice, and any `resourcekey`. A first request for one byte reads the file name, type, and total size from the response headers, so unsupported and oversized files are refused before downloading. An HTML response or a redirect to a sign-in page means the file is not publicly downloadable or Google is limiting it. The owner chose this on 2026-11-23 so Drive links need no Google setup. It is not a documented Google API and may change or be throttled.
 
-Attempt public access only. Preserve the resource key and supply it where required. Reject private, non-downloadable, missing, trashed, oversized, unsupported, native Google document, shortcut, and folder targets. Do not fall back to browser scraping or initiate private-file authorization. Reject inaccessible links with attachment and upload alternatives.
+When `GOOGLE_DRIVE_API_KEY` is set, use the Drive API metadata endpoint and binary `files.get` download with `alt=media` instead, not previews or thumbnails. Google's [download guide](https://developers.google.com/workspace/drive/api/guides/manage-downloads) documents the binary content operation. Google documents [public-folder API-key access](https://developers.google.com/workspace/drive/api/guides/search-files) and [resource-key headers](https://developers.google.com/workspace/drive/api/guides/resource-keys). A deployment may provide the API project and key. The key stays server-side and outside archive exports.
+
+Attempt public access only. Preserve the resource key and supply it where required. Reject private, non-downloadable, missing, trashed, oversized, unsupported, native Google document, shortcut, and folder targets. Never parse web pages for links or initiate private-file authorization. Reject inaccessible links with attachment and upload alternatives.
 
 Save original source link, provider, and stable file ID. Do not trust arbitrary redirects or contributor-supplied download hosts. Read accepted embedded capture and creation tags from the downloaded file. Drive `createdTime`, upload time, modified time, and download response dates never supply the default artifact date. The [Drive metadata reference](https://developers.google.com/workspace/drive/api/reference/rest/v3/files) distinguishes file dates and image metadata. It cannot recreate metadata removed before upload.
 
-A live rehearsal with a configured API key and known files remains an external verification prerequisite, not an unanswered product choice. Test image and video originals from two unrelated public folders, including resource-key links, while the web listener is stopped. Verify downloaded bytes and embedded metadata against the supplied originals.
+A live rehearsal with known files, with and without an API key, remains an external verification prerequisite, not an unanswered product choice. Test image and video originals from two unrelated public folders, including resource-key links, while the web listener is stopped. Verify downloaded bytes and embedded metadata against the supplied originals.
 
 ### Source Identity And Review
 
@@ -914,7 +916,7 @@ These settings are planned. Add new variables to `.env.example`, `compose.yaml`,
 | `ARCHIVIST_BASE_URL` | `http://localhost:3000` for local testing. Must match the origin used for browser access and the registered Discord callback |
 | `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` | Discord sign-in application credentials, distinct from bot-token use. Required when starting the web listener |
 | `ARCHIVIST_SESSION_SECRET` | Deployment-provided signing secret of at least 32 random bytes, outside archive folders |
-| `GOOGLE_DRIVE_API_KEY` | Server-side API project key for public Drive access. Missing key disables Drive-link intake with a configuration error, not attachment intake |
+| `GOOGLE_DRIVE_API_KEY` | Optional server-side API project key. When set, public Drive links use the Drive API. When empty, they use Google's public download address |
 
 Use `/auth/discord/callback` under the configured base address as the registered callback. Initial local setup tests this address; remote deployment registers its actual HTTPS callback. Do not silently use the execution host's timezone, guessed public hostname, or editor port-forward address.
 
@@ -1029,6 +1031,7 @@ The owner's accepted batches A through F are reconciled here. Later clarificatio
 | Discord intake | Comma-separated people with autocomplete, separate exact and estimate date fields, a private reply with Edit, Add people, Someone unidentified, and Delete, short IDs, and tick-to-apply duplicate review |
 | Typed dates | Common written forms are accepted. Each person chooses year-month-day, month-day-year, or day-month-year for all-number dates, defaulting to year-month-day. Dates display with month names for everyone |
 | Exports | Owner-only, from `/archivist-admin export`. The zip is written on the host and kept until the owner deletes it. No Discord or web download |
+| Drive without a key | Public Drive links download from Google's public download address without setup. An optional `GOOGLE_DRIVE_API_KEY` switches to the official Drive API |
 | Formats | Images, videos, and audio are accepted: JPEG, PNG, WebP, GIF, MP4, MOV, WebM, MKV, AVI, MP3, M4A, WAV, Ogg, and FLAC |
 | Exact-date basis | Exact dates need no written basis, for artifacts and events. Only estimates need a reason. Archive schema version 2 removes the basis requirement and keeps earlier values |
 
@@ -1036,7 +1039,7 @@ The earlier `Q01` through `Q19` topic discussion is resolved into the contract s
 
 ### Outstanding Verification Prerequisites
 
-* Provision the deployment Drive API project/key and representative publicly readable image and video files. Do not read or commit private `.env` values during planning.
+* Provide representative publicly readable image, video, and audio files for the Drive rehearsal, and optionally a Drive API key. Do not read or commit private `.env` values during planning.
 * Configure the actual Discord sign-in application and exact localhost callback before the local integration rehearsal. Provide public HTTPS hosting only for a later remote deployment.
 * Generate and validate the actual lockfile, container packaging, migration files, and runnable test commands during implementation. Registry metadata and a schema smoke check do not replace an application build.
 * Review and accept the newly explicit technical contract and schema draft before authorizing the agent to implement it.

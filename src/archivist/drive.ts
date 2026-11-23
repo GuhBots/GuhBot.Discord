@@ -13,11 +13,16 @@ import { ACCEPTED_FORMATS_TEXT } from "./media.js";
 
 /**
  * Public Google Drive files. Contributors paste a link to a single file in
- * any folder shared with "Anyone with the link". The bot reads it through the
- * Drive API with a server-side API key and the link's resource key. It never
- * signs anyone in, scrapes web pages, or downloads previews or thumbnails.
+ * any folder shared with "Anyone with the link". The bot never signs anyone
+ * in, reads web pages, or downloads previews or thumbnails.
  *
- * Google documents the binary download at
+ * Without an API key, the bot downloads the file the way a browser's download
+ * button does, from `drive.usercontent.google.com`, which the owner chose on
+ * 2026-11-23 so no Google setup is needed. That address is not a documented
+ * API, so Google may change it or limit a busy server. A first request for
+ * one byte reads the file's name, type, and size before the download. When
+ * `GOOGLE_DRIVE_API_KEY` is set, the documented Drive API is used instead,
+ * with the link's resource key. Google documents its binary download at
  * https://developers.google.com/workspace/drive/api/guides/manage-downloads
  * and resource keys at
  * https://developers.google.com/workspace/drive/api/guides/resource-keys
@@ -93,6 +98,7 @@ export interface DriveClientOptions {
 }
 
 const API = "https://www.googleapis.com/drive/v3/files/";
+const DIRECT = "https://drive.usercontent.google.com/download";
 /**
  * Drive's own type label, checked before downloading so a document is not
  * fetched for nothing. The file's bytes decide the real format afterward.
@@ -101,7 +107,45 @@ const ACCEPTED_TYPES = /^(image|video|audio)\/|^application\/(octet-stream|ogg)$
 
 /** Google's API and download hosts, the only places a Drive request may go. */
 function isGoogleHost(host: string): boolean {
-  return host === "www.googleapis.com" || host.endsWith(".googleusercontent.com");
+  return (
+    host === "www.googleapis.com" ||
+    host === "drive.usercontent.google.com" ||
+    host.endsWith(".googleusercontent.com")
+  );
+}
+
+/**
+ * The file name in a `Content-Disposition` header, preferring the encoded
+ * `filename*` form. An empty string when there is none.
+ */
+export function dispositionFilename(header: string | null): string {
+  if (!header) return "";
+  const encoded = /filename\*\s*=\s*[^']*'[^']*'([^;]+)/i.exec(header);
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded[1]!.trim());
+    } catch {
+      // Fall back to the plain form.
+    }
+  }
+  const quoted = /filename\s*=\s*"((?:\\.|[^"\\])*)"/i.exec(header);
+  if (quoted) return quoted[1]!.replace(/\\(.)/g, "$1");
+  return /filename\s*=\s*([^;]+)/i.exec(header)?.[1]?.trim() ?? "";
+}
+
+/** The whole file's size from a ranged response, or its length when the range was ignored. */
+function totalSize(response: Response): number {
+  const range = /\/(\d+)\s*$/.exec(response.headers.get("content-range") ?? "");
+  return Number(range?.[1] ?? response.headers.get("content-length") ?? NaN);
+}
+
+/** Google answered with a web page, such as a sign-in or download-limit page, not the file. */
+function webPageInstead(): ArchivistError {
+  return new ArchivistError(
+    "invalid_input",
+    'Google sent a web page instead of the file. Make sure it is shared with "Anyone with the link". If it is, Google may be limiting downloads of it, so try again later or attach the file instead.',
+    { field: "drive_link" },
+  );
 }
 
 function notPublic(): ArchivistError {
@@ -123,18 +167,18 @@ export class DriveClient {
     this.limits = options.limits ?? DOWNLOAD_LIMITS;
   }
 
-  private request(link: DriveLink, query: Record<string, string>, signal: AbortSignal) {
-    if (!this.apiKey) {
-      throw new ArchivistError(
-        "dependency_unavailable",
-        "Drive links are not set up on this bot. Attach or upload the file instead.",
-      );
-    }
+  /** A Drive API request. Only used when an API key is configured. */
+  private request(
+    apiKey: string,
+    link: DriveLink,
+    query: Record<string, string>,
+    signal: AbortSignal,
+  ) {
     const url = new URL(`${API}${encodeURIComponent(link.fileId)}`);
     for (const [name, value] of Object.entries({
       ...query,
       supportsAllDrives: "true",
-      key: this.apiKey,
+      key: apiKey,
     })) {
       url.searchParams.set(name, value);
     }
@@ -144,10 +188,74 @@ export class DriveClient {
     return fetchFromAllowedHosts(this.fetchImpl, url, { headers, signal }, isGoogleHost);
   }
 
+  /** A request to the public download address. A redirect to a sign-in page means the file is private. */
+  private async direct(link: DriveLink, signal: AbortSignal, range?: string): Promise<Response> {
+    const url = new URL(DIRECT);
+    url.searchParams.set("id", link.fileId);
+    url.searchParams.set("export", "download");
+    // Skips Google's page warning that a large file cannot be scanned for viruses.
+    url.searchParams.set("confirm", "t");
+    if (link.resourceKey) url.searchParams.set("resourcekey", link.resourceKey);
+    const headers: Record<string, string> = range ? { Range: range } : {};
+    let response: Response;
+    try {
+      response = await fetchFromAllowedHosts(
+        this.fetchImpl,
+        url,
+        { headers, signal },
+        isGoogleHost,
+      );
+    } catch (error) {
+      if (error instanceof ArchivistError && error.details.reason === "disallowed_host") {
+        throw notPublic();
+      }
+      throw error;
+    }
+    if (!response.ok) {
+      const transient = transientFor(response);
+      await response.body?.cancel();
+      throw transient ?? notPublic();
+    }
+    if (/^text\/html/i.test(response.headers.get("content-type") ?? "")) {
+      await response.body?.cancel();
+      throw webPageInstead();
+    }
+    return response;
+  }
+
+  /** Applies the type and size checks shared by both ways of reading a file's details. */
+  private checkFile(mimeType: string, size: number): void {
+    if (!ACCEPTED_TYPES.test(mimeType)) {
+      throw new ArchivistError(
+        "unsupported_media_type",
+        `Only ${ACCEPTED_FORMATS_TEXT} can be archived.`,
+        { field: "drive_link" },
+      );
+    }
+    if (Number.isFinite(size) && size > this.limits.maxBytes) {
+      throw new ArchivistError("media_too_large", "Files can be at most 100 MiB.", {
+        field: "drive_link",
+      });
+    }
+  }
+
   /** Reads a file's metadata and refuses anything that is not a downloadable media file. */
   async metadata(link: DriveLink): Promise<DriveFile> {
+    const apiKey = this.apiKey;
+    if (!apiKey) {
+      return withRetries(this.limits, async (controller) => {
+        const response = await this.direct(link, controller.signal, "bytes=0-0");
+        const mimeType = (response.headers.get("content-type") ?? "").split(";")[0]!.trim();
+        const size = totalSize(response);
+        const name = dispositionFilename(response.headers.get("content-disposition"));
+        await response.body?.cancel();
+        this.checkFile(mimeType, size);
+        return { id: link.fileId, name, mimeType, size };
+      });
+    }
     return withRetries(this.limits, async (controller) => {
       const response = await this.request(
+        apiKey,
         link,
         { fields: "id,name,mimeType,size,trashed,capabilities/canDownload" },
         controller.signal,
@@ -188,27 +296,20 @@ export class DriveClient {
         );
       }
       if (file.trashed || file.capabilities?.canDownload === false) throw notPublic();
-      if (!ACCEPTED_TYPES.test(mimeType)) {
-        throw new ArchivistError(
-          "unsupported_media_type",
-          `Only ${ACCEPTED_FORMATS_TEXT} can be archived.`,
-          { field: "drive_link" },
-        );
-      }
       const size = Number(file.size);
-      if (Number.isFinite(size) && size > this.limits.maxBytes) {
-        throw new ArchivistError("media_too_large", "Files can be at most 100 MiB.", {
-          field: "drive_link",
-        });
-      }
+      this.checkFile(mimeType, size);
       return { id: file.id ?? link.fileId, name: file.name ?? "", mimeType, size };
     });
   }
 
   /** Downloads the file's original bytes into `file`. */
   async download(link: DriveLink, file: string): Promise<number> {
+    const apiKey = this.apiKey;
     return withRetries(this.limits, async (controller) => {
-      const response = await this.request(link, { alt: "media" }, controller.signal);
+      if (!apiKey) {
+        return writeBody(await this.direct(link, controller.signal), file, this.limits, controller);
+      }
+      const response = await this.request(apiKey, link, { alt: "media" }, controller.signal);
       await this.checkStatus(response);
       return writeBody(response, file, this.limits, controller);
     });
