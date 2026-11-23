@@ -88,6 +88,9 @@ Archivist is being built in milestones. These commands exist so far.
 | `/archivist entity create <kind> <name> [archive] [...]` | None | Adds a character, account, server, or channel. Optional fields apply to one kind each, such as `birth_day` for characters or `server` for channels |
 | `/archivist entity show <kind> <id> [archive]` | None | Shows a character, account, server, or channel. Suggests them by name |
 | `/archivist entity delete <kind> <id> [archive]` | None | Deletes permanently once nothing links to it, or says what still does |
+| `/archivist export create [archive]` | None | Zips the whole archive folder: database, edit log, originals, previews, and media no longer used by any record. Sends it here if Discord allows a file that size |
+| `/archivist export status <job> [archive]` | None | Shows whether an export is ready, and until when it is kept |
+| `/archivist export download <job> [archive]` | None | Sends a ready export again. Exports are kept for 24 hours |
 | `/set-artifact-logs-channel [archive] [channel]` | None | Announces every new artifact in the archive in a channel, this one by default. The bot must be able to post embeds and files there |
 | `/remove-artifact-logs-channel [archive]` | None | Stops future announcements. Earlier posts stay |
 

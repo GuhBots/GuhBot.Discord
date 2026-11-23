@@ -32,6 +32,7 @@ Archivist is being built in milestones. This directory currently holds storage, 
 | `people.ts` | Picking people by name from a comma-separated list, people suggestions, and short-ID lookup |
 | `announcements.ts` | Per-archive announcement channels and delivery state that prevents repeated posts |
 | `search.ts` | Case-insensitive, Unicode-normalized search for artifacts and entities |
+| `exports.ts` | Consistent snapshots zipped into `archivist-exports/`, kept for 24 hours, with access rechecked at download |
 | `archive-database.ts` | Opens an archive's `archive.db`, refuses newer schemas, and applies migrations |
 | `operational-database.ts` | Prepares Archivist's tables in the bot's shared `guhbot.db` |
 | `migrations/` | The archive and operational schemas as ordered migrations, and the code that applies them |
@@ -46,6 +47,7 @@ Archivist is being built in milestones. This directory currently holds storage, 
 * **Crash recovery.** Each change writes a journal to `archivist-tmp/journals/` before touching the archive. The journal names the state each changed record has once the database commits, so recovery can tell a committed change from an abandoned one without storing recovery state in the portable folder. A committed change gets its log update finished. An abandoned one is discarded. Recovery runs before every later change and export. A journal that matches neither state stops further changes rather than guessing.
 * **Originals stay untouched.** Intake writes a source into `archivist-tmp/staging/`, detects its format from its bytes, and moves the unchanged file into `media/originals/` inside the mutation that records it. Previews are separate WebP files. A preview failure marks the media unreadable and leaves the original in place. Videos have no preview frame because the image has no video decoder.
 * **File dates.** Original-capture tags win over creation tags, and only tags embedded in the file count. Within the deciding group, damaged or disagreeing tags leave the date unknown for a person to set. An offset is used only from the same field. The MP4 movie header's date stays local with an unknown zone, because devices often write local time there. All-zero placeholder dates count as absent.
+* **Export snapshots.** An export finishes any pending change, copies the database with `VACUUM INTO`, copies the edit log, and lists the archive's files in one synchronous step, so no change can land in between. Compression happens afterward. Originals and previews never change once written, so the listed files match the snapshot.
 * **Exports avoid glob patterns.** `archiver` 8 depends on a `minimatch` version with a moderate advisory about glob pattern expansion. Exports add files from an explicit directory listing rather than glob patterns, so archive contents never reach that code path.
 
 ## Migrations
