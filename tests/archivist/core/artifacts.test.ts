@@ -24,7 +24,7 @@ import { ArchivistError, type ErrorCode } from "../../../src/archivist/errors.js
 import { createStagingFolder, type StagedMedia, stageMedia } from "../../../src/archivist/media.js";
 import { addMember } from "../../../src/archivist/members.js";
 import { closeMetadataReader } from "../../../src/archivist/metadata.js";
-import { setTimeZone } from "../../../src/archivist/preferences.js";
+import { setDateOrder, setTimeZone } from "../../../src/archivist/preferences.js";
 import { makeArchivist, MEMBER, OTHER, OWNER, type TestArchivist } from "../helpers/context.js";
 import { closeFixtureWriter, writeImage } from "../helpers/media.js";
 
@@ -176,6 +176,13 @@ test("estimates need a reason, and typed times use the contributor's zone", asyn
   assert.equal(exact.kind === "instant" && exact.instantMs, Date.UTC(2019, 6, 14, 23));
   assert.equal(exact.kind === "instant" && exact.timezone, "Asia/Tokyo");
   assert.equal(exact.archiveDay, "2019-07-14");
+
+  setDateOrder(fixture.context, MEMBER, "dmy");
+  const ordered = await addArtifact(fixture, {
+    estimatedDate: { day: "03/04/2019", reason: "Spring" },
+  });
+  assert.equal(ordered.dates.estimated?.date.archiveDay, "2019-04-03");
+  assert.equal(ordered.dates.estimated?.date.originalText, "03/04/2019");
 
   const explicit = await addArtifact(fixture, {
     exactDate: "2019-07-15 08:00 -04:00",

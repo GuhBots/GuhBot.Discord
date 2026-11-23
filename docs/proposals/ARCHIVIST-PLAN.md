@@ -40,7 +40,7 @@ Keep this file at `docs/proposals/ARCHIVIST-PLAN.md` and do not create a competi
 | `R14` | Permanent record deletion, reference blockers, retained media, no trash, and no deletion log |
 | `R15` | Lightweight per-archive edit logs with before and after values, removing a deleted record's own entries |
 | `R16` | Contributor operation parity between Discord and web, with most contributions expected through Discord |
-| `R17` | Personal timezone preferences in `guhbot.db`, without shifting date-only values or rewriting history |
+| `R17` | Personal timezone and date-order preferences in `guhbot.db`, without shifting date-only values or rewriting history |
 | `R18` | Missing-media requests require temporal information, a person, and a description, with no assignees |
 | `R19` | Contributor-configured per-archive upload announcements that remain unchanged after edits or deletion |
 
@@ -163,6 +163,8 @@ Linking an artifact never silently supplies or changes an event date. An event w
 ### Personal And Archive Timezones
 
 The owner sets the archive timezone, initially `America/Toronto`. Contributors set their own named timezone in `guhbot.db`. A manual date and time without an explicit zone uses the contributor preference, falling back to the archive zone, and shows its interpretation before save. An explicit zone or offset wins. Normalize instants for storage while preserving original input and interpretation zone.
+
+Contributors may type dates in common forms: year-month-day numbers, a month name in any position (`Jul 15 2019`, `15 July 2019`, `july, 2019, 15`), or eight digits, with an optional 24-hour or 12-hour time and an optional zone after the time. A date needs its day and a four-digit year. A four-digit year first always means year-month-day. All-number dates with the year last follow the contributor's date order in `guhbot.db`, year-month-day by default. With that default, such a date is accepted only when one reading is a real date or both readings agree, and is otherwise refused with a request to write the month as a word. Every interface shows dates with the month's abbreviated name, such as `Jul 15, 2019`, so no reader misreads the order. Stored values keep the original text.
 
 Date-only exact values, approximate days, and date-only ranges never shift between zones. Imported unknown timezones remain unknown. A preference change never rewrites historical values. Details may show local timestamp equivalents, while timeline days, day filters, server activity, and heatmap buckets use the archive timezone. Reject invalid timezone names and ask for an explicit offset or corrected time for ambiguous or nonexistent daylight-saving times.
 
@@ -806,6 +808,16 @@ CREATE INDEX archivist_session_expiry ON archivist_sessions(expires_ms);
 CREATE INDEX archivist_export_expiry ON archivist_export_jobs(expires_ms);
 ```
 
+Operational migration version 2 adds each contributor's date order.
+
+```sql
+CREATE TABLE archivist_date_orders (
+  discord_user_id TEXT PRIMARY KEY,
+  date_order TEXT NOT NULL CHECK (date_order IN ('ymd', 'mdy', 'dmy')),
+  updated_at TEXT NOT NULL
+);
+```
+
 ## Command And Interface Contract
 
 ### Discord Commands
@@ -837,7 +849,7 @@ Owner commands use `/archivist-admin` in `OWNER_GUILD_ID` to preserve the existi
 | `/archivist request reopen` | Request and current version. Move to Needed without inventing a date |
 | `/archivist backlog list`, `flag`, `update` | Archive and relevant record, kind, reason, and current version. Apply the accepted derived-card rules |
 | `/archivist export create`, `status`, `download` | Archive and job ID where needed. Create consistent zip, report progress or failure, and recheck download access |
-| `/archivist timezone set`, `show`, `reset` | Self-service named timezone. Reset falls back to the selected archive timezone for input |
+| `/archivist preferences show`, `timezone`, `date-order`, `reset` | Self-service named timezone and all-number date order. Reset clears both, falling back to the selected archive timezone and year-month-day |
 | `/set-artifact-logs-channel` | Required archive and optional channel, defaulting to current channel. Configure one destination for all new artifacts in that archive |
 | `/remove-artifact-logs-channel` | Required archive. Remove future delivery setting, preserving old messages |
 
@@ -1012,6 +1024,7 @@ The owner's accepted batches A through F are reconciled here. Later clarificatio
 | Timeline marks | One green dot per day, shaded by count, opening a gallery. Ranged events form labeled parallel strips in a band. Red arrows mark single-day events. Server name and icon changes get their own arrow color |
 | Main accounts | Characters have a dated main-account history, and their pictures follow it along the timeline |
 | Discord intake | Comma-separated people with autocomplete, separate exact and estimate date fields, a private reply with Edit, Add people, Someone unidentified, and Delete, short IDs, and tick-to-apply duplicate review |
+| Typed dates | Common written forms are accepted. Each person chooses year-month-day, month-day-year, or day-month-year for all-number dates, defaulting to year-month-day. Dates display with month names for everyone |
 | Exact-date basis | Exact dates need no written basis, for artifacts and events. Only estimates need a reason. Archive schema version 2 removes the basis requirement and keeps earlier values |
 
 The earlier `Q01` through `Q19` topic discussion is resolved into the contract sections rather than retained as a competing open-question table. Accepted request and announcement clarifications are incorporated. The rows from archive selection through the end of the table record owner clarifications from 2026-11-23, including the test-server rehearsal feedback. If a final review changes a rule, update its contract, schema, interfaces, and acceptance fixture together.

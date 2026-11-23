@@ -1,7 +1,7 @@
 import type { Migration } from "./runner.js";
 
 /** The newest operational schema version this build can read and write. */
-export const OPERATIONAL_SCHEMA_VERSION = 1;
+export const OPERATIONAL_SCHEMA_VERSION = 2;
 
 /**
  * Ordered migrations for Archivist's tables in the bot's `guhbot.db`. They only
@@ -94,6 +94,17 @@ export const OPERATIONAL_MIGRATIONS: readonly Migration[] = [
     CREATE INDEX archivist_membership_user ON archivist_whitelist(discord_user_id, archive_id);
     CREATE INDEX archivist_session_expiry ON archivist_sessions(expires_ms);
     CREATE INDEX archivist_export_expiry ON archivist_export_jobs(expires_ms);
+    `,
+  },
+  {
+    // Each person's order for all-number dates, chosen by the owner on 2026-11-23.
+    version: 2,
+    sql: `
+    CREATE TABLE archivist_date_orders (
+      discord_user_id TEXT PRIMARY KEY,
+      date_order TEXT NOT NULL CHECK (date_order IN ('ymd', 'mdy', 'dmy')),
+      updated_at TEXT NOT NULL
+    );
     `,
   },
 ];

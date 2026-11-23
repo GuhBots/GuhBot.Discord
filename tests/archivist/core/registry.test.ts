@@ -18,9 +18,12 @@ import { ArchivistError, type ErrorCode } from "../../../src/archivist/errors.js
 import { addMember, listMembers, removeMember } from "../../../src/archivist/members.js";
 import { commitMutation } from "../../../src/archivist/mutations.js";
 import {
+  getDateOrder,
   getTimeZone,
   inputTimeZone,
+  resetPreferences,
   resetTimeZone,
+  setDateOrder,
   resolveArchiveSelection,
   setTimeZone,
 } from "../../../src/archivist/preferences.js";
@@ -351,6 +354,19 @@ test("personal timezones are validated and fall back to the archive's", (t) => {
   assert.equal(inputTimeZone(context, MEMBER, "America/Toronto"), "Europe/London");
   assert.throws(() => setTimeZone(context, MEMBER, "+05:00"), fails("invalid_input"));
   resetTimeZone(context, MEMBER);
+  assert.equal(getTimeZone(context, MEMBER), null);
+});
+
+test("each person's date order is kept, and a reset clears it with the timezone", (t) => {
+  const { context } = makeArchivist(t);
+  assert.equal(getDateOrder(context, MEMBER), "ymd");
+  assert.equal(setDateOrder(context, MEMBER, "dmy"), "dmy");
+  assert.equal(getDateOrder(context, MEMBER), "dmy");
+  assert.equal(getDateOrder(context, OWNER), "ymd");
+  assert.throws(() => setDateOrder(context, MEMBER, "ydm"), fails("invalid_input"));
+  setTimeZone(context, MEMBER, "Europe/London");
+  resetPreferences(context, MEMBER);
+  assert.equal(getDateOrder(context, MEMBER), "ymd");
   assert.equal(getTimeZone(context, MEMBER), null);
 });
 

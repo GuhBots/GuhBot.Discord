@@ -1,6 +1,7 @@
 import type { Actor, ArchivistContext } from "./context.js";
-import { calendarDay } from "./dates.js";
+import { dayText, parseDayInput } from "./dates.js";
 import { pruneDates } from "./date-store.js";
+import { getDateOrder } from "./preferences.js";
 import { ArchivistError } from "./errors.js";
 import {
   colorValue,
@@ -129,7 +130,7 @@ export function createCharacter(
   const birthDay =
     input.birthDay === undefined || input.birthDay === null || input.birthDay === ""
       ? null
-      : calendarDay("birthDay", input.birthDay);
+      : parseDayInput("birthDay", input.birthDay, getDateOrder(context, actor));
   const metInPerson = input.metInPerson ?? "unknown";
   if (metInPerson !== "unknown" && metInPerson !== "yes" && metInPerson !== "no") {
     throw new ArchivistError("invalid_input", "Met in person must be unknown, yes, or no.", {
@@ -466,7 +467,9 @@ export function getEntity(
       ["Aliases", aliases.join(", ") || null],
       [
         "Birth day",
-        row.birth_day ? `${row.birth_day} (age ${ageOn(row.birth_day, context.now())})` : null,
+        row.birth_day
+          ? `${dayText(row.birth_day)} (age ${ageOn(row.birth_day, context.now())})`
+          : null,
       ],
       ["Met in person", row.met_in_person],
       ["Accounts", accounts.join(", ") || null],

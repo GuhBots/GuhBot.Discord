@@ -78,9 +78,10 @@ Archivist is being built in milestones. These commands exist so far.
 | Command | Original | Notes |
 | --- | --- | --- |
 | `/archivist archive list` | None | Lists the archives you can use |
-| `/archivist timezone set <timezone>` | None | Sets the timezone your typed dates and times are read in. Suggests timezone names as you type |
-| `/archivist timezone show` | None | Shows your timezone, if you set one |
-| `/archivist timezone reset` | None | Clears your timezone, so typed dates use each archive's timezone |
+| `/archivist preferences show` | None | Shows how your typed dates and times are read |
+| `/archivist preferences timezone <timezone>` | None | Sets the timezone your typed times are read in when you don't add a zone. Suggests timezone names as you type |
+| `/archivist preferences date-order <order>` | None | Sets how all-number dates such as 03/04/2019 are read: year-month-day (the default), month-day-year, or day-month-year |
+| `/archivist preferences reset` | None | Clears both, so typed times use each archive's timezone and all-number dates are read year first |
 | `/archivist artifact add <description> [archive] [file] [drive_link] [people] [exact_date] [estimated_day] [estimate_reason]` | None | Archives one file or one public Google Drive file link. People are names separated by commas, with suggestions. An exact date needs no explanation, and an estimated day needs a reason. A time typed without a zone is confirmed before saving. A file already in the archive opens a review of what to change instead. The reply has Edit, Add people, Someone unidentified, and Delete buttons. Someone unidentified marks that someone in it is not identified yet, and pressing it again clears the mark |
 | `/archivist artifact show <id> [archive]` | None | Shows an artifact with its Edit, Add people, and Delete buttons. Suggests artifacts by description |
 | `/archivist artifact edit <id> [archive]` | None | Opens a form for the description and dates |
@@ -95,6 +96,8 @@ Archivist is being built in milestones. These commands exist so far.
 | `/remove-artifact-logs-channel [archive]` | None | Stops future announcements. Earlier posts stay |
 
 Commands that take an archive use the one you chose last when you leave it empty.
+
+Dates can be typed in most common forms, such as `2019-07-15`, `Jul 15 2019`, `15 July 2019`, or `july, 2019, 15`, with an optional time such as `18:30` or `6:30pm` and an optional zone after the time, such as `-04:00` or `Europe/London`. Archivist shows dates with the month's name, such as `Jul 15, 2019`, so nobody misreads them.
 
 ## Meta
 

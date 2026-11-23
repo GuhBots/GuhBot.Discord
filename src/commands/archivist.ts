@@ -34,11 +34,14 @@ import { openStore } from "../archivist/context.js";
 import { ArchivistError } from "../archivist/errors.js";
 import { suggestPeople } from "../archivist/people.js";
 import {
+  getDateOrder,
   getTimeZone,
-  resetTimeZone,
+  resetPreferences,
   resolveArchiveSelection,
+  setDateOrder,
   setTimeZone,
 } from "../archivist/preferences.js";
+import type { DateOrder } from "../archivist/dates.js";
 import { config } from "../config.js";
 import {
   actorOf,
@@ -92,6 +95,12 @@ async function suggestTimeZones(interaction: AutocompleteInteraction): Promise<v
     .slice(0, MAX_SUGGESTIONS);
   await interaction.respond(zones.map((zone) => ({ name: zone, value: zone })));
 }
+
+const DATE_ORDER_NAMES: Record<DateOrder, string> = {
+  ymd: "year, month, day",
+  mdy: "month, day, year",
+  dmy: "day, month, year",
+};
 
 const archiveOption = {
   name: "archive",
@@ -243,7 +252,11 @@ function checkLogsChannel(interaction: CommandInteraction, channel: GuildBasedCh
 @Guild(...config.archivistGuildIds)
 @SlashGroup({ name: "archivist", description: "Archive this community's history" })
 @SlashGroup({ name: "archive", description: "Archives you can use", root: "archivist" })
-@SlashGroup({ name: "timezone", description: "Your timezone for typed dates", root: "archivist" })
+@SlashGroup({
+  name: "preferences",
+  description: "How your typed dates and times are read",
+  root: "archivist",
+})
 @SlashGroup({ name: "artifact", description: "Add and manage artifacts", root: "archivist" })
 @SlashGroup({
   name: "entity",
@@ -273,13 +286,37 @@ export class Archivist {
   }
 
   @Slash({
-    name: "set",
-    description: "Set the timezone your typed dates are read in",
+    name: "show",
+    description: "Show how your typed dates are read",
     ...GUILD_ONLY,
   })
-  @SlashGroup("timezone", "archivist")
+  @SlashGroup("preferences", "archivist")
   @Guard(Cooldown(3))
-  async timezoneSet(
+  async preferencesShow(interaction: CommandInteraction): Promise<void> {
+    await runArchivist(interaction, async () => {
+      const actor = await actorOf(interaction);
+      const timezone = getTimeZone(archivist(), actor);
+      const order = getDateOrder(archivist(), actor);
+      await interaction.reply({
+        ...ephemeral,
+        content: [
+          timezone
+            ? `Times you type without a zone are read in **${timezone}**.`
+            : "You have no timezone set, so times you type without a zone are read in each archive's timezone.",
+          `All-number dates are read as **${DATE_ORDER_NAMES[order]}**. Dates with a month name, such as Jul 15 2019, always work.`,
+        ].join("\n"),
+      });
+    });
+  }
+
+  @Slash({
+    name: "timezone",
+    description: "Set the timezone your typed times are read in",
+    ...GUILD_ONLY,
+  })
+  @SlashGroup("preferences", "archivist")
+  @Guard(Cooldown(3))
+  async preferencesTimezone(
     @SlashOption({
       name: "timezone",
       description: "Such as America/Toronto or Europe/London",
@@ -294,43 +331,56 @@ export class Archivist {
       const saved = setTimeZone(archivist(), await actorOf(interaction), timezone);
       await interaction.reply({
         ...ephemeral,
-        content: `Dates and times you type without a zone are now read in **${saved}**. Dates you already saved keep their meaning.`,
+        content: `Times you type without a zone are now read in **${saved}**. Dates you already saved keep their meaning.`,
       });
     });
   }
 
   @Slash({
-    name: "show",
-    description: "Show the timezone your typed dates are read in",
+    name: "date-order",
+    description: "Set how your all-number dates, such as 03/04/2019, are read",
     ...GUILD_ONLY,
   })
-  @SlashGroup("timezone", "archivist")
+  @SlashGroup("preferences", "archivist")
   @Guard(Cooldown(3))
-  async timezoneShow(interaction: CommandInteraction): Promise<void> {
+  async preferencesDateOrder(
+    @SlashChoice(
+      { name: "Year, month, day (2019-07-15)", value: "ymd" },
+      { name: "Month, day, year (07/15/2019)", value: "mdy" },
+      { name: "Day, month, year (15/07/2019)", value: "dmy" },
+    )
+    @SlashOption({
+      name: "order",
+      description: "The order you write numbers in a date",
+      type: ApplicationCommandOptionType.String,
+      required: true,
+    })
+    order: string,
+    interaction: CommandInteraction,
+  ): Promise<void> {
     await runArchivist(interaction, async () => {
-      const timezone = getTimeZone(archivist(), await actorOf(interaction));
+      const saved = setDateOrder(archivist(), await actorOf(interaction), order);
       await interaction.reply({
         ...ephemeral,
-        content: timezone
-          ? `Your typed dates are read in **${timezone}**.`
-          : "You have no timezone set, so typed dates are read in each archive's timezone.",
+        content: `All-number dates you type are now read as **${DATE_ORDER_NAMES[saved]}**. Dates you already saved keep their meaning.`,
       });
     });
   }
 
   @Slash({
     name: "reset",
-    description: "Use each archive's timezone for your typed dates",
+    description: "Go back to each archive's timezone and year-month-day dates",
     ...GUILD_ONLY,
   })
-  @SlashGroup("timezone", "archivist")
+  @SlashGroup("preferences", "archivist")
   @Guard(Cooldown(3))
-  async timezoneReset(interaction: CommandInteraction): Promise<void> {
+  async preferencesReset(interaction: CommandInteraction): Promise<void> {
     await runArchivist(interaction, async () => {
-      resetTimeZone(archivist(), await actorOf(interaction));
+      resetPreferences(archivist(), await actorOf(interaction));
       await interaction.reply({
         ...ephemeral,
-        content: "Your timezone is cleared. Typed dates are now read in each archive's timezone.",
+        content:
+          "Your preferences are cleared. Times are read in each archive's timezone, and all-number dates as year, month, day.",
       });
     });
   }
@@ -373,7 +423,7 @@ export class Archivist {
     people: string | undefined,
     @SlashOption({
       name: "exact_date",
-      description: "When it happened, such as 2019-07-15 or 2019-07-15 18:30",
+      description: "When it happened, such as 2019-07-15 or Jul 15 2019 6:30pm",
       type: ApplicationCommandOptionType.String,
       required: false,
       maxLength: 100,
@@ -381,10 +431,10 @@ export class Archivist {
     exactDate: string | undefined,
     @SlashOption({
       name: "estimated_day",
-      description: "Your best guess at the day, such as 2019-07-01",
+      description: "Your best guess at the day, such as Jul 1 2019",
       type: ApplicationCommandOptionType.String,
       required: false,
-      maxLength: 10,
+      maxLength: 100,
     })
     estimatedDay: string | undefined,
     @SlashOption({
@@ -619,10 +669,10 @@ export class Archivist {
     realName: string | undefined,
     @SlashOption({
       name: "birth_day",
-      description: "Character only: birth date as YYYY-MM-DD",
+      description: "Character only: birth date, such as Nov 24 2000",
       type: ApplicationCommandOptionType.String,
       required: false,
-      maxLength: 10,
+      maxLength: 100,
     })
     birthDay: string | undefined,
     @SlashChoice(

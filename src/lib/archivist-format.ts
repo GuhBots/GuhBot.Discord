@@ -1,6 +1,6 @@
 import { EmbedBuilder } from "discord.js";
 import type { ArtifactDetails, DuplicateDifference } from "../archivist/artifacts.js";
-import { localDateTime } from "../archivist/dates.js";
+import { dayText, localDateTime, localText } from "../archivist/dates.js";
 import type { StoredDate } from "../archivist/date-store.js";
 import type { EntityDetails } from "../archivist/entities.js";
 
@@ -24,14 +24,14 @@ export function shorten(text: string, limit: number, note = "…"): string {
   return `${text.slice(0, Math.max(0, limit - note.length))}${note}`;
 }
 
-/** A stored date as people read it, in the archive's timezone where it has a time. */
+/**
+ * A stored date as people read it, with the month's name so no one misreads
+ * the order, and in the archive's timezone where it has a time.
+ */
 export function dateText(date: StoredDate, archiveTimeZone: string): string {
-  if (date.kind === "day") return date.calendarDay;
-  if (date.kind === "unknown_local") {
-    return `${date.localDateTime.replace("T", " ").slice(0, 16)} (timezone unknown)`;
-  }
-  const local = localDateTime(date.instantMs, archiveTimeZone).replace("T", " ").slice(0, 16);
-  return `${local} ${archiveTimeZone}`;
+  if (date.kind === "day") return dayText(date.calendarDay);
+  if (date.kind === "unknown_local") return `${localText(date.localDateTime)} (timezone unknown)`;
+  return `${localText(localDateTime(date.instantMs, archiveTimeZone))} ${archiveTimeZone}`;
 }
 
 /** The selected date with its basis, labeled so file dates are never mistaken for verified ones. */
@@ -61,7 +61,7 @@ export function interpretationNote(artifact: ArtifactDetails): string | null {
   if (/^([+-]\d{2}:\d{2}|UTC)$/.test(exact.timezone)) {
     return `"${exact.originalText}" was read with its own offset, ${exact.timezone}.`;
   }
-  const local = localDateTime(exact.instantMs, exact.timezone).replace("T", " ").slice(0, 16);
+  const local = localText(localDateTime(exact.instantMs, exact.timezone));
   return `"${exact.originalText}" was read as ${local} ${exact.timezone}.`;
 }
 

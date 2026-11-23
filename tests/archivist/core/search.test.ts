@@ -81,7 +81,7 @@ test("entity details derive age and name linked records", (t) => {
     id: sam.id.slice(0, 8),
   });
   const fields = Object.fromEntries(character.fields);
-  assert.equal(fields["Birth day"], "2000-11-24 (age 25)");
+  assert.equal(fields["Birth day"], "Nov 24, 2000 (age 25)");
   assert.equal(fields.Accounts, "sam#1234");
   assert.equal(fields["Met in person"], "yes");
   assert.equal(ageOn("2000-11-23", new Date("2026-11-23T12:00:00Z")), 26);

@@ -34,7 +34,9 @@ import {
 } from "../archivist/artifacts.js";
 import { type Actor, type ArchivistContext, openStore } from "../archivist/context.js";
 import {
+  dayText,
   localDateTime,
+  localText,
   needsZoneConfirmation,
   offsetLabel,
   parseDateInput,
@@ -49,7 +51,7 @@ import {
   stageMedia,
 } from "../archivist/media.js";
 import { peopleNames, resolvePeople } from "../archivist/people.js";
-import { inputTimeZone, resolveArchiveSelection } from "../archivist/preferences.js";
+import { getDateOrder, inputTimeZone, resolveArchiveSelection } from "../archivist/preferences.js";
 import { config } from "../config.js";
 import { actorOf, archivist } from "./archivist.js";
 import {
@@ -247,7 +249,7 @@ export async function startIntake(
   checkIntake(context, actor, intake);
   const respond: Respond = (payload) => interaction.editReply(payload);
   const pending: PendingIntake = { kind: "intake", intake, file };
-  if (needsZoneConfirmation(options.exactDate)) {
+  if (needsZoneConfirmation(options.exactDate, getDateOrder(context, actor))) {
     await askZoneConfirmation(
       context,
       actor,
@@ -275,15 +277,15 @@ async function askZoneConfirmation(
     actor,
     archiveDetails(openStore(context, archiveId)).timezone,
   );
-  const value = parseDateInput("exact_date", typed, zone);
+  const value = parseDateInput("exact_date", typed, zone, getDateOrder(context, actor));
   if (value.kind !== "instant") return;
-  const local = localDateTime(value.instantMs, zone).replace("T", " ").slice(0, 16);
+  const local = localText(localDateTime(value.instantMs, zone));
   const token = remember(actor.userId, pending);
   await respond({
     content:
       `"${typed}" will be read as **${local} ${zone}** (UTC${offsetLabel(value.instantMs, zone)}). ` +
       "Save it like that? To use another zone, cancel and add the zone or offset after the time, " +
-      "such as `2019-07-15 18:30 Europe/London` or `2019-07-15 18:30 -04:00`. This expires in 15 minutes.",
+      "such as `Jul 15 2019 6:30pm Europe/London` or `2019-07-15 18:30 -04:00`. This expires in 15 minutes.",
     components: [
       new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
@@ -371,7 +373,7 @@ async function showDuplicateReview(
   const differences = duplicateDifferences(existing, checkIntake(context, actor, intake));
   const header =
     `This file is already in **${archiveName(context, archiveId)}** as artifact \`${existing.id.slice(0, 8)}\` ` +
-    `(added by <@${existing.createdBy}> on ${existing.createdAt.slice(0, 10)}).`;
+    `(added by <@${existing.createdBy}> on ${dayText(existing.createdAt.slice(0, 10))}).`;
   if (differences.length === 0) {
     await respond({
       ...artifactReply(context, archiveId, existing, header, [
@@ -561,10 +563,10 @@ export async function showEditForm(
     ),
     textInput(
       "estimated_day",
-      "Estimated day, YYYY-MM-DD",
+      "Estimated day, such as Jul 15 2019",
       artifact.dates.estimated?.date.originalText,
       TextInputStyle.Short,
-      10,
+      100,
     ),
     textInput(
       "estimate_reason",
@@ -609,7 +611,7 @@ export async function submitEdit(interaction: ModalSubmitInteraction): Promise<v
   const respond: Respond = (payload) => interaction.editReply(payload);
   if (
     exact &&
-    needsZoneConfirmation(exactDate) &&
+    needsZoneConfirmation(exactDate, getDateOrder(context, actor)) &&
     current.dates.exact?.date.originalText !== exactDate?.trim()
   ) {
     await askZoneConfirmation(

@@ -5,13 +5,14 @@ import {
   type RegisteredArchive,
 } from "./access.js";
 import type { Actor, ArchivistContext } from "./context.js";
-import { timeZoneName } from "./dates.js";
+import { type DateOrder, dateOrderValue, DEFAULT_DATE_ORDER, timeZoneName } from "./dates.js";
 import { ArchivistError } from "./errors.js";
 import { timestamp } from "./fields.js";
 
 /**
  * Per-person settings kept in `guhbot.db`, outside every archive: a personal
- * timezone for reading typed dates, and the archive last chosen in Discord.
+ * timezone and date order for reading typed dates, and the archive last
+ * chosen in Discord.
  */
 
 export function getTimeZone(context: ArchivistContext, actor: Actor): string | null {
@@ -37,6 +38,34 @@ export function setTimeZone(context: ArchivistContext, actor: Actor, value: unkn
 export function resetTimeZone(context: ArchivistContext, actor: Actor): void {
   context.botDb
     .prepare("DELETE FROM archivist_timezones WHERE discord_user_id = ?")
+    .run(actor.userId);
+}
+
+/** How the actor writes all-number dates. Year-month-day unless they chose otherwise. */
+export function getDateOrder(context: ArchivistContext, actor: Actor): DateOrder {
+  const row = context.botDb
+    .prepare("SELECT date_order FROM archivist_date_orders WHERE discord_user_id = ?")
+    .get(actor.userId) as { date_order: DateOrder } | undefined;
+  return row?.date_order ?? DEFAULT_DATE_ORDER;
+}
+
+/** Sets how the actor's all-number dates are read. Saved dates keep their meaning. */
+export function setDateOrder(context: ArchivistContext, actor: Actor, value: unknown): DateOrder {
+  const order = dateOrderValue(value);
+  context.botDb
+    .prepare(
+      `INSERT INTO archivist_date_orders (discord_user_id, date_order, updated_at) VALUES (?, ?, ?)
+       ON CONFLICT (discord_user_id) DO UPDATE SET date_order = excluded.date_order, updated_at = excluded.updated_at`,
+    )
+    .run(actor.userId, order, timestamp(context.now()));
+  return order;
+}
+
+/** Clears the actor's timezone and date order. */
+export function resetPreferences(context: ArchivistContext, actor: Actor): void {
+  resetTimeZone(context, actor);
+  context.botDb
+    .prepare("DELETE FROM archivist_date_orders WHERE discord_user_id = ?")
     .run(actor.userId);
 }
 

@@ -43,14 +43,14 @@ test("Archivist tables are added without changing AFK data", (t) => {
   const db = existingBotDatabase(t);
   const before = afkState(db);
 
-  assert.deepEqual(prepareOperationalDatabase(db), { from: 0, to: 1 });
+  assert.deepEqual(prepareOperationalDatabase(db), { from: 0, to: 2 });
 
   assert.deepEqual(afkState(db), before);
   const tables = db
     .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'archivist_%'")
     .all();
-  assert.equal(tables.length, 10);
-  assert.deepEqual(db.prepare("SELECT version FROM archivist_schema").get(), { version: 1 });
+  assert.equal(tables.length, 11);
+  assert.deepEqual(db.prepare("SELECT version FROM archivist_schema").get(), { version: 2 });
   assert.equal(db.pragma("user_version", { simple: true }), 0);
 });
 
@@ -59,14 +59,14 @@ test("preparing an up-to-date bot database changes nothing", (t) => {
   prepareOperationalDatabase(db);
   const before = afkState(db);
 
-  assert.deepEqual(prepareOperationalDatabase(db), { from: 1, to: 1 });
+  assert.deepEqual(prepareOperationalDatabase(db), { from: 2, to: 2 });
   assert.deepEqual(afkState(db), before);
 });
 
 test("a newer Archivist schema is refused and AFK data is left alone", (t) => {
   const db = existingBotDatabase(t);
   prepareOperationalDatabase(db);
-  db.prepare("UPDATE archivist_schema SET version = 2").run();
+  db.prepare("UPDATE archivist_schema SET version = 99").run();
   const before = afkState(db);
 
   assert.throws(

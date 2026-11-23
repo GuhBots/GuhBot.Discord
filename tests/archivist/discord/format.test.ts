@@ -62,7 +62,7 @@ test("file dates are labeled as unverified and unknown zones are said plainly", 
   });
   assert.equal(
     selectedDateText(dated, TORONTO),
-    "2019-07-15 13:45 (timezone unknown) (from file metadata, not verified)",
+    "Jul 15, 2019, 13:45 (timezone unknown) (from file metadata, not verified)",
   );
   assert.equal(selectedDateText(artifact(), TORONTO), "Unknown");
   const conflicted = artifact({ media: { ...artifact().media, fileDateStatus: "conflict" } });
@@ -85,9 +85,9 @@ test("exact and estimated dates show their basis or reason", () => {
       selected: { basis: "exact", date: exactDate },
     },
   });
-  assert.equal(selectedDateText(exact, TORONTO), "2019-07-14 (exact: Chat log)");
+  assert.equal(selectedDateText(exact, TORONTO), "Jul 14, 2019 (exact: Chat log)");
   const noBasis = artifact({ dates: { ...exact.dates, exact: { date: exactDate, basis: null } } });
-  assert.equal(selectedDateText(noBasis, TORONTO), "2019-07-14 (exact)");
+  assert.equal(selectedDateText(noBasis, TORONTO), "Jul 14, 2019 (exact)");
   const estimated = artifact({
     dates: {
       exact: null,
@@ -96,7 +96,10 @@ test("exact and estimated dates show their basis or reason", () => {
       selected: { basis: "estimated", date: exactDate },
     },
   });
-  assert.equal(selectedDateText(estimated, TORONTO), "around 2019-07-14 (estimated: Decorations)");
+  assert.equal(
+    selectedDateText(estimated, TORONTO),
+    "around Jul 14, 2019 (estimated: Decorations)",
+  );
 });
 
 test("instants show in the archive's timezone, and typed times explain how they were read", () => {
@@ -108,7 +111,7 @@ test("instants show in the archive's timezone, and typed times explain how they 
     timezone: "Asia/Tokyo",
     archiveDay: "2019-07-14",
   };
-  assert.equal(dateText(instant, TORONTO), "2019-07-14 19:00 America/Toronto");
+  assert.equal(dateText(instant, TORONTO), "Jul 14, 2019, 19:00 America/Toronto");
   const typed = artifact({
     dates: {
       exact: { date: instant, basis: "Chat" },
@@ -119,7 +122,7 @@ test("instants show in the archive's timezone, and typed times explain how they 
   });
   assert.equal(
     interpretationNote(typed),
-    '"2019-07-15 08:00" was read as 2019-07-15 08:00 Asia/Tokyo.',
+    '"2019-07-15 08:00" was read as Jul 15, 2019, 08:00 Asia/Tokyo.',
   );
   const offset = artifact({
     dates: {

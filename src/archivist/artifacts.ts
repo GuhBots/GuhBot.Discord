@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 import type { Actor, ArchivistContext } from "./context.js";
-import { calendarDay, type DateValue, parseDateInput } from "./dates.js";
+import { type DateValue, parseDateInput, parseDayInput } from "./dates.js";
 import { insertDate, pruneDates, readDate, type StoredDate } from "./date-store.js";
 import type { FieldChange } from "./edit-log.js";
 import { ArchivistError } from "./errors.js";
@@ -8,7 +8,7 @@ import { discordId, newId, requiredText, TEXT_LIMITS, timestamp } from "./fields
 import { mediaPaths, placeStagedMedia, type StagedMedia } from "./media.js";
 import { commitMutation, type Expectation } from "./mutations.js";
 import { resolveShortId } from "./people.js";
-import { inputTimeZone } from "./preferences.js";
+import { getDateOrder, inputTimeZone } from "./preferences.js";
 import {
   type ArchiveSession,
   diffFields,
@@ -267,13 +267,17 @@ function exactValue(
   value: unknown,
 ): ExactInput {
   const zone = inputTimeZone(context, actor, session.details.timezone);
-  return { value: parseDateInput("exactDate", value, zone) };
+  return { value: parseDateInput("exactDate", value, zone, getDateOrder(context, actor)) };
 }
 
-function estimateValue(input: { day: unknown; reason: unknown }): EstimateInput {
-  const day = calendarDay("estimatedDate", input.day);
+function estimateValue(
+  context: ArchivistContext,
+  actor: Actor,
+  input: { day: unknown; reason: unknown },
+): EstimateInput {
+  const day = parseDayInput("estimatedDate", input.day, getDateOrder(context, actor));
   return {
-    value: { kind: "day", originalText: day, calendarDay: day },
+    value: { kind: "day", originalText: String(input.day).trim(), calendarDay: day },
     reason: requiredText("estimateReason", input.reason, TEXT_LIMITS.reason),
   };
 }
@@ -352,7 +356,7 @@ export function checkIntake(
     input.exactDate !== undefined && input.exactDate !== null
       ? exactValue(session, context, actor, input.exactDate)
       : null;
-  const estimate = input.estimatedDate ? estimateValue(input.estimatedDate) : null;
+  const estimate = input.estimatedDate ? estimateValue(context, actor, input.estimatedDate) : null;
   const links = linksValue(input.links, session.store.db);
   const submission = {
     guildId: input.submission?.guildId ? discordId("guildId", input.submission.guildId) : null,
@@ -581,7 +585,8 @@ export function updateArtifact(
       : null;
   }
   if (input.estimatedDate !== undefined) {
-    estimate = input.estimatedDate === null ? null : estimateValue(input.estimatedDate);
+    estimate =
+      input.estimatedDate === null ? null : estimateValue(context, actor, input.estimatedDate);
     after.estimatedDate = estimate
       ? { date: estimate.value.originalText, reason: estimate.reason }
       : null;
@@ -771,7 +776,9 @@ export function duplicateDifferences(
     const current = existing.dates.estimated;
     const same =
       current !== null &&
-      current.date.originalText === intake.estimate.value.originalText &&
+      current.date.kind === "day" &&
+      intake.estimate.value.kind === "day" &&
+      current.date.calendarDay === intake.estimate.value.calendarDay &&
       current.reason === intake.estimate.reason;
     if (!same) {
       differences.push({
