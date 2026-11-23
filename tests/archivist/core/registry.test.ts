@@ -13,6 +13,7 @@ import {
   updateArchiveSettings,
 } from "../../../src/archivist/archives.js";
 import { parseLog } from "../../../src/archivist/edit-log.js";
+import { closeArchivistContext, createArchivistContext } from "../../../src/archivist/context.js";
 import { ArchivistError, type ErrorCode } from "../../../src/archivist/errors.js";
 import { addMember, listMembers, removeMember } from "../../../src/archivist/members.js";
 import { commitMutation } from "../../../src/archivist/mutations.js";
@@ -24,6 +25,7 @@ import {
   setTimeZone,
 } from "../../../src/archivist/preferences.js";
 import { makeArchivist, MEMBER, OTHER, OWNER } from "../helpers/context.js";
+import { makeTempDir } from "../helpers/temp-dir.js";
 
 function fails(code: ErrorCode) {
   return (error: unknown) => error instanceof ArchivistError && error.code === code;
@@ -388,4 +390,32 @@ test("archives, members, and preferences survive a restart", (t) => {
   assert.equal(getArchive(context, MEMBER, archive.archiveId).name, "Durable");
   assert.equal(getTimeZone(context, MEMBER), "Europe/Paris");
   assert.equal(resolveArchiveSelection(context, MEMBER, undefined).archiveId, archive.archiveId);
+});
+
+test("Archivist work and restarts leave the bot's AFK data untouched", (t) => {
+  const dataDir = makeTempDir(t);
+  const seed = new Database(join(dataDir, "guhbot.db"));
+  seed.pragma("journal_mode = WAL");
+  seed.exec(
+    "CREATE TABLE afk (user_id TEXT PRIMARY KEY, reason TEXT NOT NULL, mentions INTEGER NOT NULL DEFAULT 0)",
+  );
+  seed.prepare("INSERT INTO afk VALUES ('111111111111111111', 'Lunch', 2)").run();
+  const afkBefore = seed.prepare("SELECT * FROM afk").all();
+  seed.close();
+
+  for (let run = 0; run < 2; run++) {
+    const botDb = new Database(join(dataDir, "guhbot.db"));
+    const context = createArchivistContext({ dataDir, botDb });
+    const archive = createArchive(context, OWNER, { name: `Run ${run}` });
+    addMember(context, OWNER, { archiveId: archive.archiveId, userId: MEMBER.userId });
+    renameArchive(context, OWNER, {
+      archiveId: archive.archiveId,
+      name: `Renamed ${run}`,
+      expectedVersion: 1,
+    });
+    unregisterArchive(context, OWNER, { archiveId: archive.archiveId });
+    closeArchivistContext(context);
+    assert.deepEqual(botDb.prepare("SELECT * FROM afk").all(), afkBefore);
+    botDb.close();
+  }
 });
