@@ -71,11 +71,16 @@ Each command is shown only to members with the matching permission. The bot also
 
 ## Archivist
 
-Archiving tools for specific servers. The module is new and has no counterpart in the original bot. It works only in the servers listed in `ARCHIVIST_GUILD_IDS`, and /help shows it only there.
+Archiving tools for specific servers, described in the [Archivist plan](proposals/ARCHIVIST-PLAN.md). The module is new and has no counterpart in the original bot. It works only in the servers listed in `ARCHIVIST_GUILD_IDS`, and /help shows it only there. Only people on an archive's whitelist, and the bot owner, can use that archive. Replies are private.
+
+Archivist is being built in milestones. These commands exist so far.
 
 | Command | Original | Notes |
 | --- | --- | --- |
-| `/archivist` | None | A placeholder that replies "WIP" |
+| `/archivist archive list` | None | Lists the archives you can use |
+| `/archivist timezone set <timezone>` | None | Sets the timezone your typed dates and times are read in. Suggests timezone names as you type |
+| `/archivist timezone show` | None | Shows your timezone, if you set one |
+| `/archivist timezone reset` | None | Clears your timezone, so typed dates use each archive's timezone |
 
 ## Meta
 
@@ -98,6 +103,20 @@ These commands are registered only in the server named by `OWNER_GUILD_ID`, and 
 | --- | --- | --- |
 | `/setstatus [status]` | `setstatus`, `status` | Starts with `playing`, `watching`, `listening-to`, or `competing`. Supports `{guilds}`, `{users}`, and `{version}`. With no status, restores the default |
 | `/logout [reason]` | `logout`, `close`, `disconnect` | Posts in the status channel and exits. Docker Compose restarts the bot, so use `docker compose stop` to keep it offline |
+
+When the Archivist module is on, the owner server also gets Archivist administration.
+
+| Command | Original | Notes |
+| --- | --- | --- |
+| `/archivist-admin archive create <name>` | None | Creates an archive folder, database, and edit log |
+| `/archivist-admin archive list` | None | Lists every registered archive with its ID |
+| `/archivist-admin archive rename <archive> <name> [version]` | None | Renames without moving files. With a version, refuses if the archive changed since |
+| `/archivist-admin archive settings <archive> [timezone] [lane_gap_days] [version]` | None | Changes the archive's timezone or timeline lane gap |
+| `/archivist-admin archive register <archive_id> [name]` | None | Hosts an archive folder already in the archive directory. Imports no old whitelist |
+| `/archivist-admin archive unregister <archive>` | None | Asks for confirmation, then stops hosting the archive. Its files are kept |
+| `/archivist-admin whitelist add <archive> <user>` | None | Lets someone use an archive |
+| `/archivist-admin whitelist remove <archive> <user>` | None | Takes effect on their next request |
+| `/archivist-admin whitelist list <archive> [page]` | None | Lists an archive's members |
 
 ## Removed Commands
 

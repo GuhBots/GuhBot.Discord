@@ -53,7 +53,7 @@ Preserve these boundaries. Contributor commands register only in the existing en
 | Planned Location | Responsibility |
 | --- | --- |
 | `src/commands/archivist.ts` | Contributor Discord interactions, including the two standalone channel commands |
-| `src/commands/owner.ts` | Owner-only archive, whitelist, and web lifecycle administration |
+| `src/commands/archivist-admin.ts` | Owner-only archive, whitelist, and web lifecycle administration, guarded like the commands in `src/commands/owner.ts` and loaded only with the Archivist module |
 | `src/archivist/` | Shared operations, stores, validation, dates, media intake, exports, and optional web server |
 | `src/archivist/migrations/` | Ordered archive migrations and operational additions to the bot database |
 | `web/` | React, Vite, and Tailwind frontend, built into `build/web/` |
@@ -805,7 +805,7 @@ Owner commands use `/archivist-admin` in `OWNER_GUILD_ID` to preserve the existi
 | Command Or Group | Inputs And Result |
 | --- | --- |
 | `/archivist-admin archive create` | Required name. Create its database and folder and return stable ID and name. Main server may be selected afterward |
-| `/archivist-admin archive rename` | Archive, new name, current version. Rename without moving files |
+| `/archivist-admin archive rename` | Archive, new name, and optionally the version last seen. Rename without moving files. Owner commands default to the current version because only the owner runs them |
 | `/archivist-admin archive register` | An existing archive ID under the managed archive root. Validate and register it. Do not accept arbitrary filesystem paths |
 | `/archivist-admin archive unregister` | Archive. Explicit confirmation removes operational registration and access settings, preserving files |
 | `/archivist-admin archive settings` | Archive and current version. Edit main server, timezone, positive lane-gap days, and display colors |

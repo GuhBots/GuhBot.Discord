@@ -6,6 +6,7 @@ import {
   fsyncSync,
   mkdirSync,
   openSync,
+  readdirSync,
   readSync,
   renameSync,
   rmSync,
@@ -253,4 +254,32 @@ export function placeStagedMedia(
   if (staged.previewFile && paths.preview) {
     moveFile(staged.previewFile, insideArchive(folder, paths.preview));
   }
+}
+
+/** How long an intake may stay staged, such as while a duplicate review waits. */
+export const STAGING_LIFETIME_MS = 15 * 60_000;
+
+/**
+ * Removes staging folders older than `maxAgeMs`. Intakes that were cancelled,
+ * expired, or interrupted by a restart leave these behind. Returns how many
+ * were removed.
+ */
+export function cleanStaging(context: ArchivistContext, maxAgeMs = STAGING_LIFETIME_MS): number {
+  const stagingRoot = join(context.paths.tmpDir, "staging");
+  let removed = 0;
+  let entries: string[];
+  try {
+    entries = readdirSync(stagingRoot);
+  } catch {
+    return 0;
+  }
+  const cutoff = context.now().getTime() - maxAgeMs;
+  for (const entry of entries) {
+    const folder = join(stagingRoot, entry);
+    if (statSync(folder).mtimeMs < cutoff) {
+      rmSync(folder, { recursive: true, force: true });
+      removed += 1;
+    }
+  }
+  return removed;
 }

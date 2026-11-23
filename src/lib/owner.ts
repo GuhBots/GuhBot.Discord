@@ -1,4 +1,4 @@
-import { EmbedBuilder, MessageFlags, Team, type CommandInteraction } from "discord.js";
+import { type Client, EmbedBuilder, MessageFlags, Team, type CommandInteraction } from "discord.js";
 import type { GuardFunction } from "discordx";
 import { memberColour, userAuthor } from "./embeds.js";
 
@@ -8,13 +8,29 @@ const RICKROLL = "https://media.giphy.com/media/lgcUUCXgC8mEo/giphy.gif";
  * Returns the IDs of the people who own the Discord application. A team-owned
  * application counts every team member as an owner.
  */
-async function fetchOwnerIds(interaction: CommandInteraction): Promise<string[]> {
+async function fetchOwnerIds(interaction: { client: Client<true> }): Promise<string[]> {
   const application = await interaction.client.application.fetch();
   const owner = application.owner;
   if (owner instanceof Team) {
     return [...owner.members.keys()];
   }
   return owner ? [owner.id] : [];
+}
+
+/** How long a looked-up owner list is reused before Discord is asked again. */
+const OWNER_CACHE_MS = 5 * 60_000;
+
+let cachedOwners: { ids: string[]; fetchedAt: number } | undefined;
+
+/**
+ * Whether a user owns the application. The owner list is refreshed at most
+ * every five minutes, so a change in ownership applies within that time.
+ */
+export async function isApplicationOwner(client: Client<true>, userId: string): Promise<boolean> {
+  if (!cachedOwners || Date.now() - cachedOwners.fetchedAt > OWNER_CACHE_MS) {
+    cachedOwners = { ids: await fetchOwnerIds({ client }), fetchedAt: Date.now() };
+  }
+  return cachedOwners.ids.includes(userId);
 }
 
 /** Lets only the application's owners run a command, and rickrolls everyone else. */

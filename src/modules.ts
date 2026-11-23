@@ -66,7 +66,12 @@ export const ALL_MODULES: readonly BotModule[] = [
     name: "Archivist",
     description: "Archiving tools for this server",
     servers: { ids: config.archivistGuildIds, setting: "ARCHIVIST_GUILD_IDS" },
-    load: async () => void (await import("./commands/archivist.js")),
+    load: async () => {
+      await import("./commands/archivist.js");
+      // Archivist administration is an owner command, so it registers only in
+      // the owner's server, and only when Archivist itself is on.
+      if (config.ownerGuildId) await import("./commands/archivist-admin.js");
+    },
   },
   {
     name: "Meta",
