@@ -63,6 +63,11 @@ export const config = {
   archivistGuildIds: idList("ARCHIVIST_GUILD_IDS"),
   /** Receives startup and shutdown announcements when set. */
   statusChannelId: optional("STATUS_CHANNEL_ID"),
+  /**
+   * Google API key for reading public Drive files that contributors link to
+   * in Archivist. Drive links are refused when unset. Attachments still work.
+   */
+  googleDriveApiKey: optional("GOOGLE_DRIVE_API_KEY"),
   /** Holds the SQLite database. The container image sets it to the /data volume. */
   dataDir: optional("DATA_DIR") ?? "data",
   /** Links shown by /support, /stats, and /upvote. Each one is hidden when unset. */

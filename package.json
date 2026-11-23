@@ -17,7 +17,8 @@
     "format:check": "prettier --check .",
     "check": "npm run typecheck && npm run format:check",
     "build:tests": "node -e \"require('node:fs').rmSync('.test-build', { recursive: true, force: true })\" && tsc -p tsconfig.test.json",
-    "test:archivist:core": "npm run build:tests && node --test \".test-build/tests/archivist/core/**/*.test.js\""
+    "test:archivist:core": "npm run build:tests && node --test \".test-build/tests/archivist/core/**/*.test.js\"",
+    "test:archivist:discord": "npm run build:tests && node --test \".test-build/tests/archivist/discord/**/*.test.js\""
   },
   "dependencies": {
     "@discordx/utilities": "^8.0.0",

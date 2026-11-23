@@ -254,3 +254,14 @@ export function archiveDay(value: DateValue, archiveTimeZone: string): string {
   const local = localPartsAt(value.instantMs, archiveTimeZone);
   return formatDay(local.year, local.month, local.day);
 }
+
+/**
+ * Whether typed text is a date and time without its own zone or offset. Its
+ * meaning then depends on the zone it is read in, so the reader is shown that
+ * interpretation before it is saved.
+ */
+export function needsZoneConfirmation(value: unknown): boolean {
+  const text = typeof value === "string" ? value.trim() : "";
+  const match = DATE_TIME.exec(text);
+  return match !== null && match[7] === undefined && match[8] === undefined;
+}

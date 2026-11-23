@@ -81,6 +81,11 @@ Archivist is being built in milestones. These commands exist so far.
 | `/archivist timezone set <timezone>` | None | Sets the timezone your typed dates and times are read in. Suggests timezone names as you type |
 | `/archivist timezone show` | None | Shows your timezone, if you set one |
 | `/archivist timezone reset` | None | Clears your timezone, so typed dates use each archive's timezone |
+| `/archivist artifact add <description> [archive] [file] [drive_link] [people] [exact_date] [exact_basis] [estimated_day] [estimate_reason] [identification]` | None | Archives one file or one public Google Drive file link. People are names separated by commas, with suggestions. A time typed without a zone is confirmed before saving. A file already in the archive opens a review of what to change instead. The reply has Edit, Add people, and Delete buttons |
+| `/set-artifact-logs-channel [archive] [channel]` | None | Announces every new artifact in the archive in a channel, this one by default. The bot must be able to post embeds and files there |
+| `/remove-artifact-logs-channel [archive]` | None | Stops future announcements. Earlier posts stay |
+
+Commands that take an archive use the one you chose last when you leave it empty.
 
 ## Meta
 

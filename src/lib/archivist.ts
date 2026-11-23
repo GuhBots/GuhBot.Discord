@@ -6,6 +6,7 @@ import {
   type ModalSubmitInteraction,
   type StringSelectMenuInteraction,
 } from "discord.js";
+import { settleInterruptedAnnouncements } from "../archivist/announcements.js";
 import { listArchives } from "../archivist/archives.js";
 import {
   type Actor,
@@ -39,6 +40,12 @@ export function archivist(): ArchivistContext {
   if (!context) {
     context = createArchivistContext({ dataDir: config.dataDir, botDb: getDatabase() });
     cleanStaging(context);
+    const unknown = settleInterruptedAnnouncements(context);
+    if (unknown > 0) {
+      console.warn(
+        `Archivist: ${unknown} announcement(s) were interrupted and will not be resent.`,
+      );
+    }
     const sweeper = setInterval(() => {
       if (context) cleanStaging(context);
     }, SWEEP_INTERVAL_MS);

@@ -39,6 +39,7 @@ The `applications.commands` scope lets the bot register slash commands. A server
 | `OWNER_GUILD_ID` | Your test server's ID, to try owner commands | The server where you run owner commands |
 | `MODULES` | Empty, or only the modules you are testing | Empty for every module, or the modules to turn on |
 | `ARCHIVIST_GUILD_IDS` | Your test server's ID, to try the Archivist module | The servers that use the Archivist module |
+| `GOOGLE_DRIVE_API_KEY` | Empty, or a key restricted to the Drive API | The same, to let Archivist archive public Google Drive file links. Attachments work without it |
 | `STATUS_CHANNEL_ID` | Empty, or a test channel | The channel for startup and shutdown messages |
 | `SUPPORT_URL`, `WEBSITE_URL`, `TOPGG_URL`, `DISCORDBOTLIST_URL` | Optional | The links to show. Leave one empty to hide it |
 

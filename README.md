@@ -64,6 +64,7 @@ Run these commands from the repository root inside the [dev container](.devconta
 | `npm start` | Start the compiled bot |
 | `npm run check` | Type check the bot and tests, and check formatting, as continuous integration does |
 | `npm run test:archivist:core` | Run the Archivist core tests described in [Tests](tests/README.md) |
+| `npm run test:archivist:discord` | Run the Archivist Discord adapter tests |
 | `npm run format` | Format the code with Prettier |
 
 The bot keeps AFK statuses in a SQLite database at `data/guhbot.db`. The container image stores it in the `/data` volume instead.
@@ -72,4 +73,4 @@ To run the bot exactly as a server would, run `docker compose up -d --build` fro
 
 ## Included Checks
 
-Pull requests run the repository checks described in [Tools](tools/README.md), the `check/typescript` job, which runs `npm run check` and `npm run build`, and the `archivist/core` job, which runs `npm run test:archivist:core`. Run `npm run check`, `npm run test:archivist:core`, and `python3 tools/scripts/run_checks.py` before requesting review.
+Pull requests run the repository checks described in [Tools](tools/README.md), the `check/typescript` job, which runs `npm run check` and `npm run build`, and the `archivist/core` and `archivist/discord` jobs, which run the Archivist test suites. Run `npm run check`, the Archivist test suites, and `python3 tools/scripts/run_checks.py` before requesting review.
