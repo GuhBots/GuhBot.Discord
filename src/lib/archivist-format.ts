@@ -2,7 +2,10 @@ import { EmbedBuilder } from "discord.js";
 import type { ArtifactDetails, DuplicateDifference } from "../archivist/artifacts.js";
 import { dayText, localDateTime, localText } from "../archivist/dates.js";
 import type { StoredDate } from "../archivist/date-store.js";
+import type { GapCard } from "../archivist/board.js";
 import type { EntityDetails } from "../archivist/entities.js";
+import type { EventDetails } from "../archivist/events.js";
+import type { RequestDetails } from "../archivist/requests.js";
 
 /**
  * How Archivist records read in Discord. Stored text is never shortened.
@@ -73,6 +76,8 @@ export interface ArtifactView {
   hasPreviewAttachment: boolean;
   /** Set for public announcements, which credit the contributor. */
   addedBy?: string;
+  /** Titles of the events the artifact is evidence for. */
+  eventNames?: string[];
 }
 
 /** Who is in an artifact, noting when someone in it is not identified yet. */
@@ -105,6 +110,9 @@ export function artifactEmbed(artifact: ArtifactDetails, view: ArtifactView): Em
         value: shorten(selectedDateText(artifact, view.archiveTimeZone), FIELD_LIMIT),
       },
     );
+  if (view.eventNames?.length) {
+    embed.addFields({ name: "Events", value: shorten(view.eventNames.join(", "), FIELD_LIMIT) });
+  }
   if (view.addedBy) embed.addFields({ name: "Added by", value: `<@${view.addedBy}>` });
   if (view.hasPreviewAttachment) {
     embed.setImage(`attachment://${PREVIEW_ATTACHMENT}`);
@@ -169,4 +177,102 @@ export function entityEmbed(entity: EntityDetails, archiveName: string): EmbedBu
         inline: value.length < 40,
       })),
     );
+}
+
+/** When an event happened, with the meaning of its range in words. */
+export function eventWhen(event: EventDetails, archiveTimeZone: string): string {
+  const start = dateText(event.start, archiveTimeZone);
+  const certainty = event.certainty === "estimated" ? " (estimated)" : "";
+  if (event.dateKind === "single") return `${start}${certainty}`;
+  const end = dateText(event.end!, archiveTimeZone);
+  return event.dateKind === "duration"
+    ? `Lasted from ${start} to ${end}${certainty}`
+    : `Happened sometime between ${start} and ${end}${certainty}`;
+}
+
+export interface EventView {
+  archiveName: string;
+  archiveTimeZone: string;
+  peopleNames: string[];
+  placeNames: string[];
+}
+
+/** The embed for an event. */
+export function eventEmbed(event: EventDetails, view: EventView): EmbedBuilder {
+  const embed = new EmbedBuilder()
+    .setColor(Number.parseInt(event.color.slice(1), 16))
+    .setTitle(shorten(event.title, 256))
+    .setDescription(shorten(event.description, EMBED_DESCRIPTION_LIMIT, "…"))
+    .addFields(
+      { name: "When", value: shorten(eventWhen(event, view.archiveTimeZone), FIELD_LIMIT) },
+      {
+        name: "People",
+        value: shorten(view.peopleNames.join(", ") || "Nobody linked yet", FIELD_LIMIT),
+      },
+      { name: "Places", value: shorten(view.placeNames.join(", ") || "None linked", FIELD_LIMIT) },
+      {
+        name: "Evidence",
+        value: event.supportingArtifacts.length
+          ? `${event.supportingArtifacts.length} artifact${event.supportingArtifacts.length === 1 ? "" : "s"}`
+          : "No supporting artifacts",
+      },
+    )
+    .setFooter({
+      text: `${view.archiveName} - event ${event.id.slice(0, 8)} - lane color ${event.color}`,
+    });
+  if (event.disputedReason)
+    embed.addFields({ name: "Disputed", value: shorten(event.disputedReason, FIELD_LIMIT) });
+  return embed;
+}
+
+/** The embed for a missing-media request. */
+export function requestEmbed(
+  request: RequestDetails,
+  view: { archiveName: string; peopleNames: string[]; eventNames: string[] },
+): EmbedBuilder {
+  const status =
+    request.status === "resolved"
+      ? `Resolved. Found in ${request.foundArtifacts.map((id) => `\`${id.slice(0, 8)}\``).join(", ")}`
+      : request.status === "unrecoverable"
+        ? `Unrecoverable: ${request.unrecoverableReason}`
+        : "Needed";
+  const embed = new EmbedBuilder()
+    .setColor(ARCHIVIST_COLOR)
+    .setTitle(shorten(request.label, 256))
+    .setDescription(shorten(request.description, EMBED_DESCRIPTION_LIMIT, "…"))
+    .addFields(
+      { name: "When", value: shorten(request.wording, FIELD_LIMIT) },
+      { name: "People", value: shorten(view.peopleNames.join(", "), FIELD_LIMIT) },
+      { name: "Status", value: shorten(status, FIELD_LIMIT) },
+    )
+    .setFooter({
+      text: `${view.archiveName} - request ${request.id.slice(0, 8)} - priority ${request.priority}`,
+    });
+  if (view.eventNames.length)
+    embed.addFields({ name: "Events", value: shorten(view.eventNames.join(", "), FIELD_LIMIT) });
+  if (request.researchNotes)
+    embed.addFields({ name: "Notes", value: shorten(request.researchNotes, FIELD_LIMIT) });
+  return embed;
+}
+
+/** What each kind of board card is about, as people read it. */
+export const CARD_KINDS: Record<GapCard["kind"], string> = {
+  unreadable_media: "Unreadable file",
+  missing_people: "Someone unidentified",
+  account_character: "Account without a character",
+  undated: "No date",
+  missing_evidence: "Event without evidence",
+  date_research: "Check the date",
+  custom: "Research",
+};
+
+/** One line of the board: priority in words, what is missing, the record, and the IDs to act on. */
+export function boardLine(card: GapCard): string {
+  const reason = card.reason ? `: ${shorten(card.reason.replace(/\s+/g, " "), 80)}` : "";
+  return `**${card.priority.toUpperCase()}** ${CARD_KINDS[card.kind]}${reason} - ${shorten(card.subject.label.replace(/\s+/g, " "), 60)} (card \`${card.id.slice(0, 8)}\`)`;
+}
+
+/** One line for a request in the board list. */
+export function requestLine(request: RequestDetails): string {
+  return `**${request.priority.toUpperCase()}** Missing media: ${shorten(request.label, 60)} - ${shorten(request.wording, 60)} (request \`${request.id.slice(0, 8)}\`)`;
 }

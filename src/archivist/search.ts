@@ -87,3 +87,46 @@ export function searchEntities(
   if (kind !== "character") parameters.typed = typed.trim();
   return db.prepare(ENTITY_QUERIES[kind]).all(parameters) as SearchHit[];
 }
+
+/** Events whose title or description contains the text, or whose ID starts with it, oldest first. */
+export function searchEvents(
+  db: Database.Database,
+  typed: string,
+  limit = DEFAULT_LIMIT,
+): SearchHit[] {
+  const prefix = idPrefix(typed);
+  return db
+    .prepare(
+      `SELECT e.id, e.title AS label FROM events e JOIN date_values d ON d.id = e.start_date_id
+       WHERE instr(${FOLD_FUNCTION}(e.title), @query) > 0 OR instr(${FOLD_FUNCTION}(e.description), @query) > 0
+          OR substr(e.id, 1, @prefixLength) = @prefix
+       ORDER BY d.archive_day, e.id LIMIT @limit`,
+    )
+    .all({
+      query: foldText(typed.trim()),
+      prefixLength: prefix?.length ?? 1,
+      prefix: prefix ?? "\u0000",
+      limit,
+    }) as SearchHit[];
+}
+
+/** Missing-media requests whose description contains the text, or whose ID starts with it, newest first. */
+export function searchRequests(
+  db: Database.Database,
+  typed: string,
+  limit = DEFAULT_LIMIT,
+): SearchHit[] {
+  const prefix = idPrefix(typed);
+  return db
+    .prepare(
+      `SELECT id, description AS label FROM research_requests
+       WHERE instr(${FOLD_FUNCTION}(description), @query) > 0 OR substr(id, 1, @prefixLength) = @prefix
+       ORDER BY created_at DESC, id LIMIT @limit`,
+    )
+    .all({
+      query: foldText(typed.trim()),
+      prefixLength: prefix?.length ?? 1,
+      prefix: prefix ?? "\u0000",
+      limit,
+    }) as SearchHit[];
+}

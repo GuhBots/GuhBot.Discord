@@ -146,6 +146,42 @@ export function resolvePeople(db: Database.Database, text: unknown): string[] {
   return [...ids];
 }
 
+/**
+ * Resolves a comma-separated list of event titles or short IDs to event IDs.
+ * A title that contains a comma, or that several events share, is given by
+ * its short ID instead.
+ */
+export function resolveEvents(db: Database.Database, text: unknown): string[] {
+  if (text === undefined || text === null || text === "") return [];
+  if (typeof text !== "string") {
+    throw new ArchivistError("invalid_input", "Events must be titles separated by commas.", {
+      field: "events",
+    });
+  }
+  const rows = db.prepare("SELECT id, title FROM events").all() as { id: string; title: string }[];
+  const ids = new Set<string>();
+  for (const name of splitNames(text)) {
+    const tagged = WITH_ID.exec(name);
+    const key = fold(name);
+    const matches = tagged ? [] : rows.filter((row) => fold(row.title) === key);
+    if (tagged || (matches.length === 0 && /^[0-9a-f-]{8,36}$/i.test(name))) {
+      ids.add(resolveShortId(db, "events", tagged ? tagged[2] : name, "event"));
+      continue;
+    }
+    if (matches.length !== 1) {
+      throw new ArchivistError(
+        "invalid_input",
+        matches.length === 0
+          ? `There is no event called ${name}. Create it first, or give its ID.`
+          : `${name} matches several events. Give the event's ID instead.`,
+        { field: "events", name },
+      );
+    }
+    ids.add(matches[0]!.id);
+  }
+  return [...ids];
+}
+
 /** How a character appears in a list: their known name, with a short ID when the name is shared. */
 function label(entry: NameEntry, entries: NameEntry[]): string {
   const shared = entries.some(

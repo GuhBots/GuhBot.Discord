@@ -860,7 +860,7 @@ Owner commands use `/archivist-admin` in `OWNER_GUILD_ID` to preserve the existi
 
 The owner approved this intake flow on 2026-11-23.
 
-* **People.** One `people` field takes names separated by commas, with autocomplete suggesting the next name. Names match a character's known name or alias. A name that matches several characters, or none, is refused with a message naming it. Autocomplete then offers the characters with their short IDs, such as `Alex (3f9a1c2e)`. Contributors add more people from the reply.
+* **People.** One `people` field takes names separated by commas, with autocomplete suggesting the next name. Names match a character's known name or alias. A name that matches several characters, or none, is refused with a message naming it. Autocomplete then offers the characters with their short IDs, such as `Alex (3f9a1c2e)`. Contributors add more people, and the events the artifact shows, from the reply.
 * **Dates.** Separate `exact_date`, and `estimated_day` with `estimate_reason`, fields. An exact date needs no basis. An estimate needs its reason. With neither, the file's own date is used.
 * **Reply.** A private reply names the archive and the artifact's short ID, then shows the description, people, the selected date with its basis, and a preview. It has Edit, Add people, Someone unidentified, and Delete buttons. Someone unidentified sets the unidentified-people flag and then reads Everyone identified, which clears it. Delete asks for confirmation.
 * **Short IDs.** Replies show the first eight characters of a record ID. Every command accepts any unique prefix of at least eight characters, and asks for more when a prefix matches several records.

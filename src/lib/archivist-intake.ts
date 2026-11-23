@@ -50,7 +50,7 @@ import {
   MAX_MEDIA_BYTES,
   stageMedia,
 } from "../archivist/media.js";
-import { peopleNames, resolvePeople } from "../archivist/people.js";
+import { peopleNames, resolveEvents, resolvePeople, resolveShortId } from "../archivist/people.js";
 import { getDateOrder, inputTimeZone, resolveArchiveSelection } from "../archivist/preferences.js";
 import { config } from "../config.js";
 import { actorOf, archivist } from "./archivist.js";
@@ -110,6 +110,8 @@ export interface IntakeOptions {
   exactDate?: string;
   estimatedDay?: string;
   estimateReason?: string;
+  /** One event the artifact is evidence for, by ID. More are added from the reply. */
+  event?: string;
 }
 
 function invalid(message: string, field: string): ArchivistError {
@@ -188,6 +190,13 @@ export function artifactReply(
         archiveName: archiveName(context, archiveId),
         archiveTimeZone: details.timezone,
         peopleNames: peopleNames(store.db, artifact.links.people),
+        eventNames: artifact.links.events.map(
+          (id) =>
+            (
+              store.db.prepare("SELECT title FROM events WHERE id = ?").get(id) as
+                { title: string } | undefined
+            )?.title ?? id.slice(0, 8),
+        ),
         hasPreviewAttachment: preview !== null,
       }),
     ],
@@ -243,7 +252,10 @@ export async function startIntake(
           },
     exactDate: exactText(options.exactDate),
     estimatedDate: estimatePair(options.estimatedDay, options.estimateReason),
-    links: { people: resolvePeople(store.db, options.people) },
+    links: {
+      people: resolvePeople(store.db, options.people),
+      events: options.event ? [resolveShortId(store.db, "events", options.event, "event")] : [],
+    },
     submission: { guildId: interaction.guildId ?? undefined, channelId: interaction.channelId },
   };
   checkIntake(context, actor, intake);
@@ -640,20 +652,23 @@ export async function submitEdit(interaction: ModalSubmitInteraction): Promise<v
 export async function openAddPeople(interaction: ButtonInteraction): Promise<void> {
   const { archiveId, artifactId, version } = parseRecordId(interaction.customId);
   getArtifact(archivist(), await actorOf(interaction), { archiveId, id: artifactId });
+  const input = (id: string, label: string, placeholder: string) =>
+    new ActionRowBuilder<TextInputBuilder>().addComponents(
+      new TextInputBuilder()
+        .setCustomId(id)
+        .setLabel(label)
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(false)
+        .setMaxLength(1000)
+        .setPlaceholder(placeholder),
+    );
   await interaction.showModal(
     new ModalBuilder()
       .setCustomId(recordId("peoplem", archiveId, artifactId, version))
-      .setTitle("Add people")
+      .setTitle("Add people or events")
       .addComponents(
-        new ActionRowBuilder<TextInputBuilder>().addComponents(
-          new TextInputBuilder()
-            .setCustomId("people")
-            .setLabel("Names, separated by commas")
-            .setStyle(TextInputStyle.Paragraph)
-            .setRequired(true)
-            .setMaxLength(1000)
-            .setPlaceholder("Sam, Lee, Alex (3f9a1c2e)"),
-        ),
+        input("people", "People, separated by commas", "Sam, Lee, Alex (3f9a1c2e)"),
+        input("events", "Events it shows, by title or ID", "Summer season, First meetup"),
       ),
   );
 }
@@ -663,16 +678,18 @@ export async function submitAddPeople(interaction: ModalSubmitInteraction): Prom
   const context = archivist();
   const actor = await actorOf(interaction);
   getArtifact(context, actor, { archiveId, id: artifactId });
-  const people = resolvePeople(
-    openStore(context, archiveId).db,
-    interaction.fields.getTextInputValue("people"),
-  );
+  const db = openStore(context, archiveId).db;
+  const people = resolvePeople(db, interaction.fields.getTextInputValue("people"));
+  const events = resolveEvents(db, field(interaction, "events"));
+  if (people.length === 0 && events.length === 0) {
+    throw invalid("Add at least one person or event.", "people");
+  }
   await interaction.deferReply(ephemeral);
   const updated = updateArtifact(context, actor, {
     archiveId,
     id: artifactId,
     expectedVersion: version,
-    addLinks: { people },
+    addLinks: { people, events },
   });
   await interaction.editReply(
     artifactReply(context, archiveId, updated, `Updated artifact \`${updated.id.slice(0, 8)}\`.`),

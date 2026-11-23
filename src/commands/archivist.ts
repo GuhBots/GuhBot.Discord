@@ -28,6 +28,9 @@ import { requireArchiveAccess } from "../archivist/access.js";
 import { removeAnnouncementChannel, setAnnouncementChannel } from "../archivist/announcements.js";
 import { listArchives } from "../archivist/archives.js";
 import { getArtifact } from "../archivist/artifacts.js";
+import { getEntity } from "../archivist/entities.js";
+import { getEvent } from "../archivist/events.js";
+import { getRequest } from "../archivist/requests.js";
 import { openStore } from "../archivist/context.js";
 import { ArchivistError } from "../archivist/errors.js";
 import { suggestPeople } from "../archivist/people.js";
@@ -55,7 +58,33 @@ import {
   showEntity,
   suggestArtifactIds,
   suggestEntityIds,
+  openEntityEdit,
+  showEntityForm,
+  submitEntityForm,
 } from "../lib/archivist-entities.js";
+import {
+  askDeleteEvent,
+  askDeleteEventButton,
+  backlogFlagCommand,
+  backlogListCommand,
+  backlogUpdateCommand,
+  confirmDeleteEvent,
+  createEventFromCommand,
+  createRequestFromCommand,
+  moveRequestCommand,
+  openEventEdit,
+  openRequestEdit,
+  showEventCommand,
+  showEventForm,
+  showRequestCommand,
+  showRequestForm,
+  submitEventForm,
+  submitRequestForm,
+  suggestCardIds,
+  suggestEventIds,
+  suggestRecordIds,
+  suggestRequestIds,
+} from "../lib/archivist-research.js";
 import {
   applyReview,
   artifactReply,
@@ -165,6 +194,41 @@ const artifactIdOption = {
   autocomplete: suggestArtifactIds,
 } as const;
 
+const eventIdOption = {
+  name: "id",
+  description: "Start typing its title, or give its ID",
+  type: ApplicationCommandOptionType.String,
+  required: true,
+  autocomplete: suggestEventIds,
+} as const;
+
+const requestIdOption = {
+  name: "id",
+  description: "Start typing what is missing, or give its ID",
+  type: ApplicationCommandOptionType.String,
+  required: true,
+  autocomplete: suggestRequestIds,
+} as const;
+
+const EVENT_KIND_CHOICES = [
+  { name: "One day", value: "single" },
+  { name: "Lasted across a range", value: "duration" },
+  { name: "Happened sometime within a range", value: "occurrence_window" },
+];
+
+const CERTAINTY_CHOICES = [
+  { name: "Exact", value: "exact" },
+  { name: "Estimated", value: "estimated" },
+];
+
+const WHEN_CHOICES = [
+  { name: "Around a day", value: "approximate_day" },
+  { name: "Between two days", value: "date_range" },
+  { name: "Before a day", value: "before_date" },
+  { name: "Before an event", value: "before_event" },
+  { name: "After an event", value: "after_event" },
+];
+
 /** Finds an artifact for a command, by full or short ID, in the chosen or remembered archive. */
 async function commandArtifact(
   interaction: CommandInteraction,
@@ -232,6 +296,9 @@ function contributorCommands(
   })
   @SlashGroup({ name: "artifact", description: "Add and manage artifacts", root })
   @SlashGroup({ name: "entity", description: "People, accounts, servers, and channels", root })
+  @SlashGroup({ name: "event", description: "Things that happened", root })
+  @SlashGroup({ name: "request", description: "Media the archive is missing", root })
+  @SlashGroup({ name: "backlog", description: "The research board", root })
   class ArchivistCommands {
     @Slash({ name: "list", description: "List the archives you can use", ...GUILD_ONLY })
     @SlashGroup("archive", root)
@@ -412,11 +479,20 @@ function contributorCommands(
         maxLength: 1000,
       })
       estimateReason: string | undefined,
+      @SlashOption({
+        name: "event",
+        description: "An event this shows. Add more from the reply",
+        type: ApplicationCommandOptionType.String,
+        required: false,
+        autocomplete: suggestEventIds,
+      })
+      event: string | undefined,
       @SlashOption(archiveOption) archive: string | undefined,
       interaction: CommandInteraction,
     ): Promise<void> {
       await runArchivist(interaction, () =>
         startIntake(interaction, {
+          event,
           archive,
           description,
           file,
@@ -635,6 +711,517 @@ function contributorCommands(
     ): Promise<void> {
       await runArchivist(interaction, () => askDeleteEntity(interaction, { archive, kind, id }));
     }
+
+    @Slash({
+      name: "edit",
+      description: "Edit a character, account, server, or channel",
+      ...GUILD_ONLY,
+    })
+    @SlashGroup("entity", root)
+    @Guard(Cooldown(3))
+    async entityEdit(
+      @SlashChoice(...KIND_CHOICES)
+      @SlashOption(kindOption)
+      kind: string,
+      @SlashOption(entityIdOption) id: string,
+      @SlashOption(archiveOption) archive: string | undefined,
+      interaction: CommandInteraction,
+    ): Promise<void> {
+      await runArchivist(interaction, async () => {
+        const actor = await actorOf(interaction);
+        const selected = resolveArchiveSelection(archivist(), actor, archive);
+        const entity = getEntity(archivist(), actor, { archiveId: selected.archiveId, kind, id });
+        await showEntityForm(
+          interaction,
+          selected.archiveId,
+          entity.kind,
+          entity.id,
+          entity.version,
+        );
+      });
+    }
+
+    @Slash({ name: "create", description: "Record something that happened", ...GUILD_ONLY })
+    @SlashGroup("event", root)
+    @Guard(Cooldown(3))
+    async eventCreate(
+      @SlashOption({
+        name: "title",
+        description: "A short name, such as Summer season",
+        type: ApplicationCommandOptionType.String,
+        required: true,
+        maxLength: 200,
+      })
+      title: string,
+      @SlashOption({
+        name: "description",
+        description: "What happened",
+        type: ApplicationCommandOptionType.String,
+        required: true,
+        maxLength: 6000,
+      })
+      description: string,
+      @SlashChoice(...EVENT_KIND_CHOICES)
+      @SlashOption({
+        name: "kind",
+        description: "One day, a range it lasted, or a range it happened sometime in",
+        type: ApplicationCommandOptionType.String,
+        required: true,
+      })
+      kind: string,
+      @SlashOption({
+        name: "start",
+        description: "The day, or the start of the range, such as Jun 1 2020",
+        type: ApplicationCommandOptionType.String,
+        required: true,
+        maxLength: 100,
+      })
+      start: string,
+      @SlashOption({
+        name: "end",
+        description: "The end of the range, for ranges only",
+        type: ApplicationCommandOptionType.String,
+        required: false,
+        maxLength: 100,
+      })
+      end: string | undefined,
+      @SlashChoice(...CERTAINTY_CHOICES)
+      @SlashOption({
+        name: "certainty",
+        description: "Exact unless you are estimating. No explanation is needed",
+        type: ApplicationCommandOptionType.String,
+        required: false,
+      })
+      certainty: string | undefined,
+      @SlashOption({
+        name: "people",
+        description: "Names separated by commas",
+        type: ApplicationCommandOptionType.String,
+        required: false,
+        autocomplete: suggestPeopleNames,
+      })
+      people: string | undefined,
+      @SlashOption({
+        name: "server",
+        description: "The server it happened in",
+        type: ApplicationCommandOptionType.String,
+        required: false,
+        autocomplete: suggestEntityIds,
+      })
+      server: string | undefined,
+      @SlashOption({
+        name: "channel",
+        description: "The channel or group chat it happened in",
+        type: ApplicationCommandOptionType.String,
+        required: false,
+        autocomplete: suggestEntityIds,
+      })
+      channel: string | undefined,
+      @SlashOption({
+        name: "color",
+        description: "Strip color such as #eb459e. Picked for you if empty",
+        type: ApplicationCommandOptionType.String,
+        required: false,
+        maxLength: 7,
+      })
+      color: string | undefined,
+      @SlashOption(archiveOption) archive: string | undefined,
+      interaction: CommandInteraction,
+    ): Promise<void> {
+      await runArchivist(interaction, () =>
+        createEventFromCommand(interaction, {
+          archive,
+          title,
+          description,
+          kind,
+          certainty,
+          start,
+          end,
+          people,
+          server,
+          channel,
+          color,
+        }),
+      );
+    }
+
+    @Slash({ name: "show", description: "Show an event", ...GUILD_ONLY })
+    @SlashGroup("event", root)
+    @Guard(Cooldown(3))
+    async eventShow(
+      @SlashOption(eventIdOption) id: string,
+      @SlashOption(archiveOption) archive: string | undefined,
+      interaction: CommandInteraction,
+    ): Promise<void> {
+      await runArchivist(interaction, () => showEventCommand(interaction, { archive, id }));
+    }
+
+    @Slash({
+      name: "edit",
+      description: "Edit an event's title, description, and dates",
+      ...GUILD_ONLY,
+    })
+    @SlashGroup("event", root)
+    @Guard(Cooldown(3))
+    async eventEdit(
+      @SlashOption(eventIdOption) id: string,
+      @SlashChoice(...EVENT_KIND_CHOICES)
+      @SlashOption({
+        name: "kind",
+        description: "Change the kind of date. Leave empty to keep it",
+        type: ApplicationCommandOptionType.String,
+        required: false,
+      })
+      kind: string | undefined,
+      @SlashChoice(...CERTAINTY_CHOICES)
+      @SlashOption({
+        name: "certainty",
+        description: "Change between exact and estimated. Leave empty to keep it",
+        type: ApplicationCommandOptionType.String,
+        required: false,
+      })
+      certainty: string | undefined,
+      @SlashOption(archiveOption) archive: string | undefined,
+      interaction: CommandInteraction,
+    ): Promise<void> {
+      await runArchivist(interaction, async () => {
+        const actor = await actorOf(interaction);
+        const selected = resolveArchiveSelection(archivist(), actor, archive);
+        const event = getEvent(archivist(), actor, { archiveId: selected.archiveId, id });
+        await showEventForm(
+          interaction,
+          selected.archiveId,
+          event.id,
+          event.version,
+          kind,
+          certainty,
+        );
+      });
+    }
+
+    @Slash({ name: "delete", description: "Permanently delete an event", ...GUILD_ONLY })
+    @SlashGroup("event", root)
+    @Guard(Cooldown(3))
+    async eventDelete(
+      @SlashOption(eventIdOption) id: string,
+      @SlashOption(archiveOption) archive: string | undefined,
+      interaction: CommandInteraction,
+    ): Promise<void> {
+      await runArchivist(interaction, async () => {
+        const actor = await actorOf(interaction);
+        const selected = resolveArchiveSelection(archivist(), actor, archive);
+        const event = getEvent(archivist(), actor, { archiveId: selected.archiveId, id });
+        await askDeleteEvent(interaction, selected.archiveId, event.id, event.version);
+      });
+    }
+
+    @Slash({
+      name: "create",
+      description: "Add media the archive is missing to the board",
+      ...GUILD_ONLY,
+    })
+    @SlashGroup("request", root)
+    @Guard(Cooldown(3))
+    async requestCreate(
+      @SlashOption({
+        name: "description",
+        description: "What is missing, such as Photos from the first meetup",
+        type: ApplicationCommandOptionType.String,
+        required: true,
+        maxLength: 6000,
+      })
+      description: string,
+      @SlashOption({
+        name: "people",
+        description: "Who it involves, separated by commas",
+        type: ApplicationCommandOptionType.String,
+        required: true,
+        autocomplete: suggestPeopleNames,
+      })
+      people: string,
+      @SlashChoice(...WHEN_CHOICES)
+      @SlashOption({
+        name: "when",
+        description: "When it is from",
+        type: ApplicationCommandOptionType.String,
+        required: true,
+      })
+      when: string,
+      @SlashOption({
+        name: "day",
+        description: "For around a day or before a day",
+        type: ApplicationCommandOptionType.String,
+        required: false,
+        maxLength: 100,
+      })
+      day: string | undefined,
+      @SlashOption({
+        name: "start",
+        description: "For between two days: the first day",
+        type: ApplicationCommandOptionType.String,
+        required: false,
+        maxLength: 100,
+      })
+      start: string | undefined,
+      @SlashOption({
+        name: "end",
+        description: "For between two days: the last day",
+        type: ApplicationCommandOptionType.String,
+        required: false,
+        maxLength: 100,
+      })
+      end: string | undefined,
+      @SlashOption({
+        name: "event",
+        description: "For before or after an event",
+        type: ApplicationCommandOptionType.String,
+        required: false,
+        autocomplete: suggestEventIds,
+      })
+      event: string | undefined,
+      @SlashOption({
+        name: "notes",
+        description: "Research notes, such as who might have it",
+        type: ApplicationCommandOptionType.String,
+        required: false,
+        maxLength: 4000,
+      })
+      notes: string | undefined,
+      @SlashOption(archiveOption) archive: string | undefined,
+      interaction: CommandInteraction,
+    ): Promise<void> {
+      await runArchivist(interaction, () =>
+        createRequestFromCommand(interaction, {
+          archive,
+          description,
+          people,
+          when,
+          day,
+          start,
+          end,
+          event,
+          notes,
+        }),
+      );
+    }
+
+    @Slash({ name: "show", description: "Show a missing-media request", ...GUILD_ONLY })
+    @SlashGroup("request", root)
+    @Guard(Cooldown(3))
+    async requestShow(
+      @SlashOption(requestIdOption) id: string,
+      @SlashOption(archiveOption) archive: string | undefined,
+      interaction: CommandInteraction,
+    ): Promise<void> {
+      await runArchivist(interaction, () => showRequestCommand(interaction, { archive, id }));
+    }
+
+    @Slash({ name: "edit", description: "Edit a request's description and notes", ...GUILD_ONLY })
+    @SlashGroup("request", root)
+    @Guard(Cooldown(3))
+    async requestEdit(
+      @SlashOption(requestIdOption) id: string,
+      @SlashOption(archiveOption) archive: string | undefined,
+      interaction: CommandInteraction,
+    ): Promise<void> {
+      await runArchivist(interaction, async () => {
+        const actor = await actorOf(interaction);
+        const selected = resolveArchiveSelection(archivist(), actor, archive);
+        const request = getRequest(archivist(), actor, { archiveId: selected.archiveId, id });
+        await showRequestForm(interaction, selected.archiveId, request.id, request.version);
+      });
+    }
+
+    @Slash({ name: "resolve", description: "Mark a request found, linking where", ...GUILD_ONLY })
+    @SlashGroup("request", root)
+    @Guard(Cooldown(3))
+    async requestResolve(
+      @SlashOption(requestIdOption) id: string,
+      @SlashOption({
+        name: "artifact",
+        description: "The artifact that has it",
+        type: ApplicationCommandOptionType.String,
+        required: true,
+        autocomplete: suggestArtifactIds,
+      })
+      artifact: string,
+      @SlashOption(archiveOption) archive: string | undefined,
+      interaction: CommandInteraction,
+    ): Promise<void> {
+      await runArchivist(interaction, () =>
+        moveRequestCommand(interaction, { archive, id, status: "resolved", artifact }),
+      );
+    }
+
+    @Slash({
+      name: "unrecoverable",
+      description: "Mark a request as unlikely to be found",
+      ...GUILD_ONLY,
+    })
+    @SlashGroup("request", root)
+    @Guard(Cooldown(3))
+    async requestUnrecoverable(
+      @SlashOption(requestIdOption) id: string,
+      @SlashOption({
+        name: "reason",
+        description: "Why it cannot be found",
+        type: ApplicationCommandOptionType.String,
+        required: true,
+        maxLength: 4000,
+      })
+      reason: string,
+      @SlashOption(archiveOption) archive: string | undefined,
+      interaction: CommandInteraction,
+    ): Promise<void> {
+      await runArchivist(interaction, () =>
+        moveRequestCommand(interaction, { archive, id, status: "unrecoverable", reason }),
+      );
+    }
+
+    @Slash({ name: "reopen", description: "Move a request back to Needed", ...GUILD_ONLY })
+    @SlashGroup("request", root)
+    @Guard(Cooldown(3))
+    async requestReopen(
+      @SlashOption(requestIdOption) id: string,
+      @SlashOption(archiveOption) archive: string | undefined,
+      interaction: CommandInteraction,
+    ): Promise<void> {
+      await runArchivist(interaction, () =>
+        moveRequestCommand(interaction, { archive, id, status: "needed" }),
+      );
+    }
+
+    @Slash({ name: "list", description: "Show the research board", ...GUILD_ONLY })
+    @SlashGroup("backlog", root)
+    @Guard(Cooldown(3))
+    async backlogList(
+      @SlashChoice(
+        { name: "Needed", value: "needed" },
+        { name: "Resolved", value: "resolved" },
+        { name: "Unrecoverable", value: "unrecoverable" },
+      )
+      @SlashOption({
+        name: "show",
+        description: "Which bucket. Needed if empty",
+        type: ApplicationCommandOptionType.String,
+        required: false,
+      })
+      show: string | undefined,
+      @SlashChoice(
+        { name: "Missing media only", value: "requests" },
+        { name: "Gaps only", value: "gaps" },
+      )
+      @SlashOption({
+        name: "only",
+        description: "Show only missing-media requests or only gaps",
+        type: ApplicationCommandOptionType.String,
+        required: false,
+      })
+      only: string | undefined,
+      @SlashOption(archiveOption) archive: string | undefined,
+      interaction: CommandInteraction,
+    ): Promise<void> {
+      await runArchivist(interaction, () =>
+        backlogListCommand(interaction, { archive, show, only }),
+      );
+    }
+
+    @Slash({
+      name: "flag",
+      description: "Put a date or a question on the research board",
+      ...GUILD_ONLY,
+    })
+    @SlashGroup("backlog", root)
+    @Guard(Cooldown(3))
+    async backlogFlag(
+      @SlashChoice(
+        { name: "Check an artifact's date", value: "date_research" },
+        { name: "Other research", value: "custom" },
+      )
+      @SlashOption({
+        name: "kind",
+        description: "What needs research",
+        type: ApplicationCommandOptionType.String,
+        required: true,
+      })
+      kind: string,
+      @SlashOption({
+        name: "record",
+        description: "The record it is about",
+        type: ApplicationCommandOptionType.String,
+        required: true,
+        autocomplete: suggestRecordIds,
+      })
+      record: string,
+      @SlashOption({
+        name: "reason",
+        description: "What is wrong or what to find out",
+        type: ApplicationCommandOptionType.String,
+        required: true,
+        maxLength: 4000,
+      })
+      reason: string,
+      @SlashChoice(
+        { name: "Artifact", value: "artifact" },
+        { name: "Character", value: "character" },
+        { name: "Account", value: "account" },
+        { name: "Server", value: "server" },
+        { name: "Event", value: "event" },
+      )
+      @SlashOption({
+        name: "record_kind",
+        description: "For other research: what kind of record. Artifact if empty",
+        type: ApplicationCommandOptionType.String,
+        required: false,
+      })
+      recordKind: string | undefined,
+      @SlashOption(archiveOption) archive: string | undefined,
+      interaction: CommandInteraction,
+    ): Promise<void> {
+      await runArchivist(interaction, () =>
+        backlogFlagCommand(interaction, { archive, kind, recordKind, record, reason }),
+      );
+    }
+
+    @Slash({ name: "update", description: "Move a board card between buckets", ...GUILD_ONLY })
+    @SlashGroup("backlog", root)
+    @Guard(Cooldown(3))
+    async backlogUpdate(
+      @SlashOption({
+        name: "card",
+        description: "The card, by what it is about",
+        type: ApplicationCommandOptionType.String,
+        required: true,
+        autocomplete: suggestCardIds,
+      })
+      card: string,
+      @SlashChoice(
+        { name: "Needed", value: "needed" },
+        { name: "Resolved", value: "resolved" },
+        { name: "Unrecoverable", value: "unrecoverable" },
+      )
+      @SlashOption({
+        name: "status",
+        description: "Where it goes",
+        type: ApplicationCommandOptionType.String,
+        required: true,
+      })
+      status: string,
+      @SlashOption({
+        name: "reason",
+        description: "Needed for Unrecoverable",
+        type: ApplicationCommandOptionType.String,
+        required: false,
+        maxLength: 4000,
+      })
+      reason: string | undefined,
+      @SlashOption(archiveOption) archive: string | undefined,
+      interaction: CommandInteraction,
+    ): Promise<void> {
+      await runArchivist(interaction, () =>
+        backlogUpdateCommand(interaction, { archive, card, status, reason }),
+      );
+    }
   }
   return ArchivistCommands;
 }
@@ -654,6 +1241,46 @@ export const ArchivistShort = contributorCommands("a", "Short for /archivist", n
 @Category("Archivist")
 @Guild(...config.archivistGuildIds)
 export class ArchivistComponents {
+  @ButtonComponent({ id: /^ax:eedit:/ })
+  async entityEditOpen(interaction: ButtonInteraction): Promise<void> {
+    await runArchivist(interaction, () => openEntityEdit(interaction));
+  }
+
+  @ModalComponent({ id: /^ax:eform:/ })
+  async entityEditSubmit(interaction: ModalSubmitInteraction): Promise<void> {
+    await runArchivist(interaction, () => submitEntityForm(interaction));
+  }
+
+  @ButtonComponent({ id: /^ax:evedit:/ })
+  async eventEditOpen(interaction: ButtonInteraction): Promise<void> {
+    await runArchivist(interaction, () => openEventEdit(interaction));
+  }
+
+  @ModalComponent({ id: /^ax:evform:/ })
+  async eventEditSubmit(interaction: ModalSubmitInteraction): Promise<void> {
+    await runArchivist(interaction, () => submitEventForm(interaction));
+  }
+
+  @ButtonComponent({ id: /^ax:evdel:/ })
+  async eventDeleteAsk(interaction: ButtonInteraction): Promise<void> {
+    await runArchivist(interaction, () => askDeleteEventButton(interaction));
+  }
+
+  @ButtonComponent({ id: /^ax:evdelc:/ })
+  async eventDeleteConfirm(interaction: ButtonInteraction): Promise<void> {
+    await runArchivist(interaction, () => confirmDeleteEvent(interaction));
+  }
+
+  @ButtonComponent({ id: /^ax:rqedit:/ })
+  async requestEditOpen(interaction: ButtonInteraction): Promise<void> {
+    await runArchivist(interaction, () => openRequestEdit(interaction));
+  }
+
+  @ModalComponent({ id: /^ax:rqform:/ })
+  async requestEditSubmit(interaction: ModalSubmitInteraction): Promise<void> {
+    await runArchivist(interaction, () => submitRequestForm(interaction));
+  }
+
   @ButtonComponent({ id: /^ax:zsave:/ })
   async zoneSave(interaction: ButtonInteraction): Promise<void> {
     await runArchivist(interaction, () => confirmZone(interaction));

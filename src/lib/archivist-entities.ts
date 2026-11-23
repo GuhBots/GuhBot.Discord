@@ -6,8 +6,12 @@ import {
   ButtonStyle,
   type CommandInteraction,
   MessageFlags,
+  ModalBuilder,
+  type ModalSubmitInteraction,
+  TextInputBuilder,
+  TextInputStyle,
 } from "discord.js";
-import { requireArchiveAccess } from "../archivist/access.js";
+import { registeredArchive, requireArchiveAccess } from "../archivist/access.js";
 import { openStore } from "../archivist/context.js";
 import {
   createAccount,
@@ -17,17 +21,24 @@ import {
   deleteEntity,
   entityBlockers,
   type EntityKind,
+  type EntityDetails,
   entityKindValue,
   getEntity,
+  updateEntity,
 } from "../archivist/entities.js";
 import { ArchivistError } from "../archivist/errors.js";
-import { resolveShortId } from "../archivist/people.js";
+import { resolvePeople, resolveShortId } from "../archivist/people.js";
 import { resolveArchiveSelection } from "../archivist/preferences.js";
 import { searchArtifacts, searchEntities } from "../archivist/search.js";
 import { actorOf, archivist } from "./archivist.js";
 import { entityEmbed, shorten } from "./archivist-format.js";
 
-/** Discord handlers for creating, showing, and deleting characters, accounts, servers, and channels. */
+/**
+ * Discord handlers for creating, showing, editing, and deleting characters,
+ * accounts, servers, and channels. Editing covers a record's own fields.
+ * Dated history is edited on the website, by the owner's decision of
+ * 2026-11-23.
+ */
 
 const ephemeral = { flags: MessageFlags.Ephemeral } as const;
 
@@ -103,11 +114,182 @@ export async function createEntityFromCommand(
               characterId: related(archiveId, "character", options.character),
             });
   const entity = getEntity(context, actor, { archiveId, kind, id: created.id });
-  await interaction.reply({
+  await interaction.reply(
+    entityReply(entity, archiveId, archive.name, `Created in **${archive.name}**.`),
+  );
+}
+
+const LETTERS: Record<EntityKind, string> = {
+  character: "c",
+  account: "a",
+  server: "s",
+  channel: "h",
+};
+const FROM_LETTER: Record<string, EntityKind> = {
+  c: "character",
+  a: "account",
+  s: "server",
+  h: "channel",
+};
+
+/** An entity's embed with an Edit button bound to the version shown. */
+function entityReply(
+  entity: EntityDetails,
+  archiveId: string,
+  archiveName: string,
+  content?: string,
+) {
+  return {
     ...ephemeral,
-    content: `Created in **${archive.name}**.`,
-    embeds: [entityEmbed(entity, archive.name)],
+    content,
+    embeds: [entityEmbed(entity, archiveName)],
+    components: [
+      new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(
+            `ax:eedit:${archiveId}:${LETTERS[entity.kind]}:${entity.id}:${entity.version}`,
+          )
+          .setLabel("Edit")
+          .setStyle(ButtonStyle.Primary),
+      ),
+    ],
+  };
+}
+
+function formRow(
+  id: string,
+  label: string,
+  value: string | null | undefined,
+  required = false,
+  max = 100,
+) {
+  const input = new TextInputBuilder()
+    .setCustomId(id)
+    .setLabel(label)
+    .setStyle(TextInputStyle.Short)
+    .setRequired(required)
+    .setMaxLength(max);
+  if (value) input.setValue(value);
+  return new ActionRowBuilder<TextInputBuilder>().addComponents(input);
+}
+
+/** Shows the edit form for an entity's own fields, bound to the version the person saw. */
+export async function showEntityForm(
+  interaction: CommandInteraction | ButtonInteraction,
+  archiveId: string,
+  kind: EntityKind,
+  id: string,
+  version: number,
+): Promise<void> {
+  const context = archivist();
+  const entity = getEntity(context, await actorOf(interaction), { archiveId, kind, id });
+  const db = openStore(context, archiveId).db;
+  const table = {
+    character: "characters",
+    account: "accounts",
+    server: "servers",
+    channel: "channels",
+  }[kind];
+  const row = db.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(entity.id) as Record<
+    string,
+    string | null
+  >;
+  const rows =
+    kind === "character"
+      ? [
+          formRow("knownName", "Known name", row.known_name, true),
+          formRow("realName", "Real name (empty to clear)", row.real_name),
+          formRow("birthDay", "Birth day (empty to clear)", row.birth_day),
+          formRow("metInPerson", "Met in person: yes, no, or unknown", row.met_in_person, true, 7),
+        ]
+      : [
+          formRow("label", "Name", row.label, true),
+          formRow("discordId", "Discord ID (empty to clear)", row.discord_id, false, 20),
+          ...(kind === "account"
+            ? [
+                formRow(
+                  "character",
+                  "Character (empty to unlink)",
+                  row.character_id
+                    ? `${(db.prepare("SELECT known_name AS n FROM characters WHERE id = ?").get(row.character_id) as { n: string }).n} (${row.character_id.slice(0, 8)})`
+                    : null,
+                ),
+                formRow("subkind", "Kind: human or bot", row.kind, true, 5),
+              ]
+            : [formRow("color", "Lane color, such as #5865f2", row.color, true, 7)]),
+        ];
+  await interaction.showModal(
+    new ModalBuilder()
+      .setCustomId(`ax:eform:${archiveId}:${LETTERS[kind]}:${entity.id}:${version}`)
+      .setTitle(shorten(`Edit ${kind} ${entity.name}`, 45))
+      .addComponents(...rows),
+  );
+}
+
+export async function openEntityEdit(interaction: ButtonInteraction): Promise<void> {
+  const [, , archiveId = "", letter = "", id = "", version = ""] = interaction.customId.split(":");
+  await showEntityForm(
+    interaction,
+    archiveId,
+    FROM_LETTER[letter] ?? "character",
+    id,
+    Number(version),
+  );
+}
+
+export async function submitEntityForm(interaction: ModalSubmitInteraction): Promise<void> {
+  const [, , archiveId = "", letter = "", id = "", version = ""] = interaction.customId.split(":");
+  const kind = FROM_LETTER[letter] ?? "character";
+  const context = archivist();
+  const actor = await actorOf(interaction);
+  const field = (name: string) => {
+    try {
+      return interaction.fields.getTextInputValue(name).trim();
+    } catch {
+      return undefined;
+    }
+  };
+  let characterId: string | null | undefined;
+  const character = field("character");
+  if (kind === "account" && character !== undefined) {
+    if (!character) characterId = null;
+    else {
+      const found = resolvePeople(openStore(context, archiveId).db, character);
+      if (found.length !== 1) {
+        throw new ArchivistError("invalid_input", "Give one character for the account.", {
+          field: "character",
+        });
+      }
+      characterId = found[0];
+    }
+  }
+  const before = getEntity(context, actor, { archiveId, kind, id });
+  const updated = updateEntity(context, actor, {
+    archiveId,
+    kind,
+    id,
+    expectedVersion: Number(version),
+    knownName: field("knownName"),
+    realName: field("realName"),
+    birthDay: field("birthDay"),
+    metInPerson: field("metInPerson")?.toLowerCase(),
+    label: field("label"),
+    discordId: field("discordId"),
+    subkind: field("subkind")?.toLowerCase(),
+    characterId,
+    color: field("color"),
   });
+  const name = registeredArchive(context, archiveId)?.name ?? "the archive";
+  await interaction.reply(
+    entityReply(
+      updated,
+      archiveId,
+      name,
+      updated.version === before.version
+        ? "Nothing changed."
+        : `Updated ${kind} \`${updated.id.slice(0, 8)}\`.`,
+    ),
+  );
 }
 
 export async function showEntity(
@@ -122,7 +304,7 @@ export async function showEntity(
     kind: options.kind,
     id: options.id,
   });
-  await interaction.reply({ ...ephemeral, embeds: [entityEmbed(entity, archive.name)] });
+  await interaction.reply(entityReply(entity, archive.archiveId, archive.name));
 }
 
 /** Asks for confirmation, or explains what still links to the entity. */
@@ -176,7 +358,7 @@ export async function confirmDeleteEntity(interaction: ButtonInteraction): Promi
 }
 
 /** The archive named in the command being typed, or the remembered one, without changing it. */
-async function typedArchive(interaction: AutocompleteInteraction): Promise<string | null> {
+export async function typedArchive(interaction: AutocompleteInteraction): Promise<string | null> {
   const actor = await actorOf(interaction);
   const typed = interaction.options.getString("archive");
   try {
@@ -193,6 +375,7 @@ const OPTION_KINDS: Record<string, EntityKind> = {
   server: "server",
   character: "character",
   parent_channel: "channel",
+  channel: "channel",
 };
 
 /** Suggests characters, accounts, servers, or channels for an ID option. */

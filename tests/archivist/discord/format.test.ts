@@ -1,14 +1,22 @@
 import assert from "node:assert/strict";
 import { mock, test } from "node:test";
 import type { ArtifactDetails } from "../../../src/archivist/artifacts.js";
+import type { GapCard } from "../../../src/archivist/board.js";
+import type { EventDetails } from "../../../src/archivist/events.js";
+import type { RequestDetails } from "../../../src/archivist/requests.js";
 import { ArchivistError } from "../../../src/archivist/errors.js";
 import {
   artifactEmbed,
+  boardLine,
   dateText,
   differenceOption,
   EMBED_DESCRIPTION_LIMIT,
+  eventEmbed,
+  eventWhen,
   interpretationNote,
   peopleText,
+  requestEmbed,
+  requestLine,
   selectedDateText,
 } from "../../../src/lib/archivist-format.js";
 import { PENDING_LIFETIME_MS, recall, remember } from "../../../src/lib/archivist-pending.js";
@@ -210,4 +218,105 @@ test("pending forms belong to one person, are used once, and expire", () => {
   } finally {
     mock.timers.reset();
   }
+});
+
+test("events say what their range means, and say when nothing supports them", () => {
+  const day = (text: string) => ({
+    id: text,
+    kind: "day" as const,
+    originalText: text,
+    calendarDay: text,
+    archiveDay: text,
+  });
+  const event: EventDetails = {
+    id: "9b1c2d3e-0000-4000-8000-000000000000",
+    version: 1,
+    createdAt: "2026-11-20T00:00:00.000Z",
+    createdBy: "200000000000000002",
+    updatedAt: "2026-11-20T00:00:00.000Z",
+    title: "First meetup",
+    description: "Sometime in spring.",
+    dateKind: "occurrence_window",
+    certainty: "estimated",
+    start: day("2020-03-01"),
+    end: day("2020-05-31"),
+    exactBasis: null,
+    disputedReason: "Lee says it was June.",
+    color: "#eb459e",
+    links: { people: [], servers: [], channels: [] },
+    supportingArtifacts: [],
+  };
+  assert.equal(
+    eventWhen(event, TORONTO),
+    "Happened sometime between Mar 1, 2020 and May 31, 2020 (estimated)",
+  );
+  assert.equal(
+    eventWhen({ ...event, dateKind: "duration", certainty: "exact" }, TORONTO),
+    "Lasted from Mar 1, 2020 to May 31, 2020",
+  );
+  assert.equal(
+    eventWhen({ ...event, dateKind: "single", end: null }, TORONTO),
+    "Mar 1, 2020 (estimated)",
+  );
+  const embed = eventEmbed(event, {
+    archiveName: "History",
+    archiveTimeZone: TORONTO,
+    peopleNames: ["Sam"],
+    placeNames: [],
+  }).toJSON();
+  const fields = Object.fromEntries(embed.fields!.map((field) => [field.name, field.value]));
+  assert.equal(fields.Evidence, "No supporting artifacts");
+  assert.equal(fields.Places, "None linked");
+  assert.equal(fields.Disputed, "Lee says it was June.");
+  assert.equal(embed.color, 0xeb459e);
+});
+
+test("requests and board cards read as plain lines with the IDs to act on", () => {
+  const request: RequestDetails = {
+    id: "5d6e7f80-0000-4000-8000-000000000000",
+    version: 2,
+    createdAt: "2026-11-20T00:00:00.000Z",
+    createdBy: "200000000000000002",
+    updatedAt: "2026-11-21T00:00:00.000Z",
+    description: "Photos from the first meetup",
+    label: "Photos from the first meetup",
+    constraint: { kind: "before_event", startDay: null, endDay: null, anchorEventId: "e1" },
+    window: { before: "2020-06-01" },
+    wording: 'Before "Summer season" (it starts Jun 1, 2020)',
+    status: "unrecoverable",
+    priority: "medium",
+    researchNotes: null,
+    unrecoverableReason: "Nobody kept them.",
+    people: ["c1"],
+    events: [],
+    foundArtifacts: [],
+  };
+  assert.equal(
+    requestLine(request),
+    '**MEDIUM** Missing media: Photos from the first meetup - Before "Summer season" (it starts Jun 1, 2020) (request `5d6e7f80`)',
+  );
+  const fields = Object.fromEntries(
+    requestEmbed(request, { archiveName: "History", peopleNames: ["Sam"], eventNames: [] })
+      .toJSON()
+      .fields!.map((field) => [field.name, field.value]),
+  );
+  assert.equal(fields.Status, "Unrecoverable: Nobody kept them.");
+  const card: GapCard = {
+    id: "1a2b3c4d-0000-4000-8000-000000000000",
+    version: 1,
+    kind: "date_research",
+    status: "needed",
+    priority: "medium",
+    subject: { kind: "artifact", id: "a1", label: "Road trip\nphoto" },
+    field: "date",
+    reason: "The phone's clock was wrong.",
+    createdAt: "2026-11-20T00:00:00.000Z",
+    createdBy: "200000000000000002",
+    updatedAt: "2026-11-20T00:00:00.000Z",
+    derived: false,
+  };
+  assert.equal(
+    boardLine(card),
+    "**MEDIUM** Check the date: The phone's clock was wrong. - Road trip photo (card `1a2b3c4d`)",
+  );
 });
