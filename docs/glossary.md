@@ -25,6 +25,7 @@ Add or update definitions when terminology changes, and link to them from other 
 | ID | Identifier |
 | LF | Line feed, the line ending used by Linux and macOS |
 | LTS | Long-term support, a release maintained for several years |
+| MP4 | A common video file format, the only one Archivist accepts |
 | OS | Operating system |
 | PR | Pull request |
 | SD | Secure Digital, a type of memory card |
