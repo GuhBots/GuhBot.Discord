@@ -20,6 +20,8 @@ Archivist is being built in milestones. This directory currently holds storage, 
 | `paths.ts` | Archive folder layout, archive ID validation, and containment of stored paths |
 | `edit-log.ts` | The `edits.log` line format, removal of a deleted record's lines, and durable file writes |
 | `mutations.ts` | Journaled archive changes that keep the database, edit log, and bot-database follow-ups consistent across crashes |
+| `metadata.ts` | Reads embedded metadata with ExifTool and picks the file date from the plan's field map |
+| `media.ts` | Stages intake files, checks their real format and size, hashes them, makes previews, and moves originals into an archive |
 | `archive-database.ts` | Opens an archive's `archive.db`, refuses newer schemas, and applies migrations |
 | `operational-database.ts` | Prepares Archivist's tables in the bot's shared `guhbot.db` |
 | `migrations/` | The archive and operational schemas as ordered migrations, and the code that applies them |
@@ -32,6 +34,8 @@ Archivist is being built in milestones. This directory currently holds storage, 
 * **Rollback journal for archives.** Archives use SQLite's rollback journal rather than WAL. A closed archive is then a single database file that can be copied or exported without companion files.
 * **Unicode-aware name keys.** SQLite's `NOCASE` folds only ASCII letters. `archivist_archives.name_key` stores a key from `nameKey()`, which also folds accented letters, "ß", and full-width forms, and carries the uniqueness rule.
 * **Crash recovery.** Each change writes a journal to `archivist-tmp/journals/` before touching the archive. The journal names the state each changed record has once the database commits, so recovery can tell a committed change from an abandoned one without storing recovery state in the portable folder. A committed change gets its log update finished. An abandoned one is discarded. Recovery runs before every later change and export. A journal that matches neither state stops further changes rather than guessing.
+* **Originals stay untouched.** Intake writes a source into `archivist-tmp/staging/`, detects its format from its bytes, and moves the unchanged file into `media/originals/` inside the mutation that records it. Previews are separate WebP files. A preview failure marks the media unreadable and leaves the original in place. Videos have no preview frame because the image has no video decoder.
+* **File dates.** Original-capture tags win over creation tags, and only tags embedded in the file count. Within the deciding group, damaged or disagreeing tags leave the date unknown for a person to set. An offset is used only from the same field. The MP4 movie header's date stays local with an unknown zone, because devices often write local time there. All-zero placeholder dates count as absent.
 * **Exports avoid glob patterns.** `archiver` 8 depends on a `minimatch` version with a moderate advisory about glob pattern expansion. Exports add files from an explicit directory listing rather than glob patterns, so archive contents never reach that code path.
 
 ## Migrations

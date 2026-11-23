@@ -13,6 +13,7 @@ import {
   writeFileAtomic,
 } from "./edit-log.js";
 import { ArchivistError } from "./errors.js";
+import { insideArchive } from "./paths.js";
 
 /**
  * Archive mutations that keep the database, the edit log, and any bot-database
@@ -80,6 +81,8 @@ export interface Journal {
   /** For removals, the hash of the complete rewritten log. */
   finalLogHash: string | null;
   followUps: FollowUp[];
+  /** Files the mutation adds inside the archive folder, removed if it is discarded. */
+  newFiles: string[];
 }
 
 export interface MutationInput<T> {
@@ -90,6 +93,14 @@ export interface MutationInput<T> {
   /** Records whose own log lines are removed, because they were permanently deleted. */
   removeRecords?: RecordRef[];
   followUps?: FollowUp[];
+  /** Paths relative to the archive folder that `placeFiles` creates. */
+  newFiles?: string[];
+  /**
+   * Puts new files, such as an original upload, into the archive folder. Runs
+   * after the journal is written and before the database change, so a crash
+   * in between leaves files that recovery removes rather than orphans.
+   */
+  placeFiles?(): void;
 }
 
 export function logFile(store: ArchiveStore): string {
@@ -130,6 +141,10 @@ export function planJournal(store: ArchiveStore, input: MutationInput<unknown>):
     removeRecords,
     finalLogHash,
     followUps: input.followUps ?? [],
+    newFiles: (input.newFiles ?? []).map((path) => {
+      insideArchive(store.folder, path);
+      return path;
+    }),
   };
 }
 
@@ -155,6 +170,12 @@ function expectationHolds(db: Database.Database, expectation: Expectation): bool
     .get(expectation.id) as { version: number } | undefined;
   if ("version" in expectation) return row?.version === expectation.version;
   return expectation.state === "present" ? row !== undefined : row === undefined;
+}
+
+function removeNewFiles(store: ArchiveStore, journal: Journal): void {
+  for (const path of journal.newFiles ?? []) {
+    rmSync(insideArchive(store.folder, path), { force: true });
+  }
 }
 
 function needsRepair(store: ArchiveStore, reason: string): ArchivistError {
@@ -221,6 +242,7 @@ export function recoverPendingMutation(
   if (journal.finalLogHash === null && fileSize(logFile(store)) > journal.logSizeBefore) {
     truncateSync(logFile(store), journal.logSizeBefore);
   }
+  removeNewFiles(store, journal);
   deleteJournal(store);
   return "discarded";
 }
@@ -242,8 +264,10 @@ export function commitMutation<T>(
 
   let result: T;
   try {
+    input.placeFiles?.();
     result = store.db.transaction(() => input.apply(store.db))();
   } catch (error) {
+    removeNewFiles(store, journal);
     deleteJournal(store);
     throw error;
   }
