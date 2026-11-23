@@ -1,7 +1,7 @@
 import type { Migration } from "./runner.js";
 
 /** The newest archive schema version this build can read and write. */
-export const ARCHIVE_SCHEMA_VERSION = 1;
+export const ARCHIVE_SCHEMA_VERSION = 2;
 
 /**
  * Ordered migrations for each archive's `archive.db`. Never edit a released
@@ -385,6 +385,92 @@ export const ARCHIVE_MIGRATIONS: readonly Migration[] = [
     CREATE INDEX request_people_reverse ON request_people(character_id, request_id);
 
     CREATE INDEX request_artifact_reverse ON request_artifacts(artifact_id, request_id);
+    `,
+  },
+  {
+    // The owner decided on 2026-11-23 that an exact date needs no written
+    // basis, and that identification is a yes/no flag for unidentified
+    // people. SQLite cannot drop a CHECK constraint, so both tables are
+    // rebuilt with their data. The old basis column keeps earlier values.
+    version: 2,
+    rebuildsTables: true,
+    sql: `
+    CREATE TABLE artifacts_v2 (
+      id TEXT PRIMARY KEY,
+      version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0),
+      created_at TEXT NOT NULL,
+      created_by TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      media_id TEXT NOT NULL UNIQUE REFERENCES media(id),
+      description TEXT NOT NULL CHECK (length(trim(description)) BETWEEN 1 AND 20000),
+      source_provider TEXT NOT NULL CHECK (source_provider IN ('drive', 'discord_attachment', 'web_upload')),
+      source_key TEXT NOT NULL,
+      source_url TEXT,
+      source_resource_key TEXT,
+      submission_guild_id TEXT,
+      submission_channel_id TEXT,
+      submission_message_id TEXT,
+      exact_date_id TEXT REFERENCES date_values(id),
+      exact_basis TEXT,
+      estimated_date_id TEXT REFERENCES date_values(id),
+      estimate_reason TEXT,
+      file_date_id TEXT REFERENCES date_values(id),
+      selected_date_id TEXT REFERENCES date_values(id),
+      unidentified_people INTEGER NOT NULL DEFAULT 0 CHECK (unidentified_people IN (0, 1)),
+      UNIQUE (source_provider, source_key),
+      CHECK (selected_date_id IS coalesce(exact_date_id, estimated_date_id, file_date_id)),
+      CHECK (estimated_date_id IS NULL OR length(trim(coalesce(estimate_reason, ''))) > 0)
+    );
+
+    INSERT INTO artifacts_v2 (id, version, created_at, created_by, updated_at, media_id, description,
+      source_provider, source_key, source_url, source_resource_key,
+      submission_guild_id, submission_channel_id, submission_message_id,
+      exact_date_id, exact_basis, estimated_date_id, estimate_reason, file_date_id, selected_date_id,
+      unidentified_people)
+    SELECT id, version, created_at, created_by, updated_at, media_id, description,
+      source_provider, source_key, source_url, source_resource_key,
+      submission_guild_id, submission_channel_id, submission_message_id,
+      exact_date_id, exact_basis, estimated_date_id, estimate_reason, file_date_id, selected_date_id,
+      CASE identification_state WHEN 'incomplete' THEN 1 ELSE 0 END
+    FROM artifacts;
+
+    DROP TABLE artifacts;
+
+    ALTER TABLE artifacts_v2 RENAME TO artifacts;
+
+    CREATE INDEX artifact_selected_date ON artifacts(selected_date_id, id);
+
+    CREATE TABLE events_v2 (
+      id TEXT PRIMARY KEY,
+      version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0),
+      created_at TEXT NOT NULL,
+      created_by TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      title TEXT NOT NULL CHECK (length(trim(title)) BETWEEN 1 AND 200),
+      description TEXT NOT NULL CHECK (length(trim(description)) BETWEEN 1 AND 20000),
+      date_kind TEXT NOT NULL CHECK (date_kind IN ('single', 'duration', 'occurrence_window')),
+      certainty TEXT NOT NULL CHECK (certainty IN ('exact', 'estimated')),
+      start_date_id TEXT NOT NULL REFERENCES date_values(id),
+      end_date_id TEXT REFERENCES date_values(id),
+      exact_basis TEXT,
+      disputed_reason TEXT,
+      color TEXT NOT NULL CHECK (color GLOB '#[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]'),
+      CHECK ((date_kind = 'single' AND end_date_id IS NULL) OR (date_kind <> 'single' AND end_date_id IS NOT NULL))
+    );
+
+    INSERT INTO events_v2 (id, version, created_at, created_by, updated_at, title, description,
+      date_kind, certainty, start_date_id, end_date_id, exact_basis, disputed_reason, color)
+    SELECT id, version, created_at, created_by, updated_at, title, description,
+      date_kind, certainty, start_date_id, end_date_id, exact_basis, disputed_reason, color
+    FROM events;
+
+    DROP TABLE events;
+
+    ALTER TABLE events_v2 RENAME TO events;
+
+    CREATE INDEX event_start_date ON events(start_date_id, id);
+
+    CREATE INDEX event_end_date ON events(end_date_id);
     `,
   },
 ];

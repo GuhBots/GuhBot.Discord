@@ -44,7 +44,10 @@ export function selectedDateText(artifact: ArtifactDetails, archiveTimeZone: str
       : "Unknown";
   }
   const text = dateText(selected.date, archiveTimeZone);
-  if (selected.basis === "exact") return `${text} (exact: ${artifact.dates.exact!.basis})`;
+  if (selected.basis === "exact") {
+    const basis = artifact.dates.exact?.basis;
+    return basis ? `${text} (exact: ${basis})` : `${text} (exact)`;
+  }
   if (selected.basis === "estimated") {
     return `around ${text} (estimated: ${artifact.dates.estimated!.reason})`;
   }
@@ -72,6 +75,14 @@ export interface ArtifactView {
   addedBy?: string;
 }
 
+/** Who is in an artifact, noting when someone in it is not identified yet. */
+export function peopleText(names: string[], unidentifiedPeople: boolean): string {
+  if (!unidentifiedPeople) return names.length ? names.join(", ") : "Nobody linked yet";
+  return names.length
+    ? `${names.join(", ")}, and someone not identified yet`
+    : "Someone not identified yet";
+}
+
 /** The embed for an artifact, used in private replies and public announcements. */
 export function artifactEmbed(artifact: ArtifactDetails, view: ArtifactView): EmbedBuilder {
   const embed = new EmbedBuilder()
@@ -87,14 +98,7 @@ export function artifactEmbed(artifact: ArtifactDetails, view: ArtifactView): Em
     .addFields(
       {
         name: "People",
-        value: shorten(
-          view.peopleNames.length
-            ? view.peopleNames.join(", ")
-            : artifact.identificationState === "complete"
-              ? "Nobody identifiable"
-              : "Not identified yet",
-          FIELD_LIMIT,
-        ),
+        value: shorten(peopleText(view.peopleNames, artifact.unidentifiedPeople), FIELD_LIMIT),
       },
       {
         name: "Date",
@@ -119,7 +123,6 @@ const DIFFERENCE_LABELS: Record<DuplicateDifference["key"], string> = {
   description: "Description",
   exactDate: "Exact date",
   estimatedDate: "Estimated date",
-  identificationState: "Identification",
   people: "Add people",
   accounts: "Add accounts",
   servers: "Add servers",
@@ -133,9 +136,7 @@ export function differenceOption(
   names: (kind: DuplicateDifference["key"], ids: string[]) => string[],
 ): { label: string; value: string; description: string } {
   const label = DIFFERENCE_LABELS[difference.key];
-  const isLink = !["description", "exactDate", "estimatedDate", "identificationState"].includes(
-    difference.key,
-  );
+  const isLink = !["description", "exactDate", "estimatedDate"].includes(difference.key);
   const description = isLink
     ? names(difference.key, difference.proposed.split(",")).join(", ")
     : `${difference.current || "none"} -> ${difference.proposed}`;

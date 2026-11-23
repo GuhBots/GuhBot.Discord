@@ -143,18 +143,18 @@ Store these values separately and retain provenance. Selection order is fixed.
 
 | Order | Value | Rule |
 | --- | --- | --- |
-| 1 | Verified exact occurrence | Exact calendar day or known-offset timestamp, with evidence reference or source-validation note |
+| 1 | Exact occurrence | Exact calendar day or known-offset timestamp. No written basis is needed |
 | 2 | Estimated occurrence | One approximate calendar day with a required explanation, visibly labeled estimated |
 | 3 | Original file capture or creation | Accepted embedded metadata from the original bytes, never filesystem-copy, upload, Drive, or import time |
 | 4 | None | Undated section, search results, and missing-information board |
 
-An exact date does not require moderator approval. An editor supplies its basis. Clearing an override restores the next available value. Do not destroy lower-precedence values. A file-date-only artifact is complete enough unless someone explicitly flags its date for research. It must still be labeled file metadata rather than verified occurrence.
+An exact date needs no moderator approval and no written basis. Clearing an override restores the next available value. Do not destroy lower-precedence values. A file-date-only artifact is complete enough unless someone explicitly flags its date for research. It must still be labeled file metadata rather than verified occurrence.
 
 Use original-capture tags first and embedded creation tags second. Within a priority, conflicting or malformed dates require manual review rather than guessing. Metadata extraction must not fall back to filesystem tags. Record raw tag names and values. The reader reports known offset, calendar-only, or unknown source timezone distinctly.
 
 ### Event Dates
 
-Require title, description, and at least an estimated start or estimated range. A verified exact day or timestamp is also valid with a source basis. The description is sufficient context for an event estimate. Do not require a separate explanation. Evidence is optional at creation.
+Require title, description, and at least an estimated start or estimated range. An exact day or timestamp is also valid and needs no written basis. The description is sufficient context for an event estimate. Do not require a separate explanation. Evidence is optional at creation.
 
 One event has a single date, a duration, or an occurrence window. Ranges include both calendar bounds and must end on or after their start. Duration means the event lasted across the range. Occurrence window means it happened somewhere inside the bounds. Store and display these meanings separately. No nested uncertainty intervals on duration endpoints in this release. For a single-date event, its effective end equals its start.
 
@@ -180,11 +180,11 @@ Support guild channels, threads, direct messages, and group chats. Guild channel
 
 Artifacts may reference multiple people, accounts, servers, channels, and events. Events may reference multiple people, servers, and channels. All relationships are local to their archive. Character merge is explicit, chooses a survivor, preserves aliases, reassigns links after conflict review, and never auto-merges matching names. Known Discord account IDs are unique inside an archive.
 
-Store identification review state as unreviewed, incomplete, or complete. Zero linked people does not imply an unidentified person after a complete review. Linking someone does not prove everyone was identified.
+Store a yes/no flag that someone in an artifact is not identified yet. It starts unset. Contributors set it when they know someone in the artifact is unidentified, and clear it once that person is found. Zero linked people does not by itself mean anyone is unidentified, and linking someone does not prove everyone was identified.
 
 ## Research Board And Missing Media
 
-This is a research backlog, not workload management. Do not add assignees or work-allocation features. Priorities are critical for unreadable preserved media, high for incomplete people and missing account links, medium for undated artifacts and events without evidence, and low for explicitly requested profile or location research. Do not generate a task for every blank optional field. An artifact receives a missing-people card only when its identification state is incomplete. Unreviewed artifacts are found through the identification-state filter instead.
+This is a research backlog, not workload management. Do not add assignees or work-allocation features. Priorities are critical for unreadable preserved media, high for incomplete people and missing account links, medium for undated artifacts and events without evidence, and low for explicitly requested profile or location research. Do not generate a task for every blank optional field. An artifact receives a missing-people card only while its unidentified-people flag is set.
 
 ### Missing-Media Requests
 
@@ -250,7 +250,7 @@ A top bar holds the archive switcher, view switcher, search, calendar, and accou
 
 ### Shared Search And Filters
 
-Search character and account names and aliases, artifact descriptions, and event titles and descriptions using case-insensitive Unicode-normalized substring matching. No media-text extraction. Filters cover character, account, server, channel, event, media type, date basis, identification state, and date range. Require every selected category to match and allow any selected value within a category. Keep filters shared across views within an archive. Clearing or switching archives clears incompatible IDs.
+Search character and account names and aliases, artifact descriptions, and event titles and descriptions using case-insensitive Unicode-normalized substring matching. No media-text extraction. Filters cover character, account, server, channel, event, media type, date basis, the unidentified-people flag, and date range. Require every selected category to match and allow any selected value within a category. Keep filters shared across views within an archive. Clearing or switching archives clears incompatible IDs.
 
 Default ordering is oldest first with stable ID tie-breaking. Put undated artifacts in an explicit searchable section rather than inventing dates. Date filters include duration and occurrence-window records whose bounds overlap the selected interval. Restrict graph counts and heatmap counts to the filtered records. Page lists and fetch only the visible timeline window.
 
@@ -300,7 +300,7 @@ The schema below fixes column names, storage types, nullability, defaults, uniqu
 
 `date_values` is an immutable assertion with one value kind. `day` is a calendar date. `instant` is milliseconds since the Unix epoch plus its original text and interpretation timezone. `unknown_local` preserves a source local date and time without inventing an instant. `archive_day` is a derived day cache for queries, not a replacement assertion. Recompute it and dependent date indexes when archive display timezone changes. Such cache maintenance does not invent an edit to historical source data. Remove unreferenced date rows after a successful mutation. Media rows and files remain as already specified.
 
-Artifact `selected_date_id` equals the first non-null exact, estimated, or file date. Exact assertions may use `day` or `instant`. Artifact estimates use `day`. File metadata may use any date kind. Event estimates and all uncertainty windows use calendar days. Event exact assertions require their basis. Check start and end ordering in shared validation, including instant order when both bounds are instants.
+Artifact `selected_date_id` equals the first non-null exact, estimated, or file date. Exact assertions may use `day` or `instant`. Artifact estimates use `day`. File metadata may use any date kind. Event estimates and all uncertainty windows use calendar days. Check start and end ordering in shared validation, including instant order when both bounds are instants.
 
 History rows and relationship rows are owned or linked data edited through their parent operation. Log them using the affected surviving parent record identity. Character merges reassign both current and historical references, including request people, bot owners, and main accounts, before deleting the losing character and removing its own earlier log entries. Conflicting current account ownership requires a reviewed choice.
 
@@ -702,6 +702,18 @@ CREATE INDEX request_people_reverse ON request_people(character_id, request_id);
 CREATE INDEX request_artifact_reverse ON request_artifacts(artifact_id, request_id);
 ```
 
+Migration version 2 applies the owner's 2026-11-23 rehearsal decisions. Exact dates no longer need a basis, and identification becomes a yes/no flag. SQLite cannot drop a `CHECK` constraint, so it rebuilds `artifacts` and `events` with their data, following SQLite's documented table rebuild with foreign keys off and a full `foreign_key_check` before commit. `exact_basis` stays as a nullable column and keeps earlier values. `identification_state` becomes `unidentified_people`, set to 1 where it was `incomplete`. The other columns, constraints, and indexes are unchanged.
+
+```sql
+PRAGMA user_version = 2;
+
+-- artifacts: drop CHECK (exact_date_id IS NULL OR length(trim(coalesce(exact_basis, ''))) > 0)
+-- artifacts: replace identification_state with
+unidentified_people INTEGER NOT NULL DEFAULT 0 CHECK (unidentified_people IN (0, 1))
+
+-- events: drop CHECK (certainty <> 'exact' OR length(trim(coalesce(exact_basis, ''))) > 0)
+```
+
 ### Operational Schema Draft
 
 Apply this additive migration in `guhbot.db`. Preserve the existing AFK table and its values. Use `archivist_schema` for this feature's operational migration version instead of claiming ownership of the whole database's version. Pending form data and staged upload tokens expire after 15 minutes and may live in memory. A bot restart invalidates those pending actions, not saved archive data or unexpired server-side login sessions.
@@ -832,8 +844,8 @@ Owner commands use `/archivist-admin` in `OWNER_GUILD_ID` to preserve the existi
 The owner approved this intake flow on 2026-11-23.
 
 * **People.** One `people` field takes names separated by commas, with autocomplete suggesting the next name. Names match a character's known name or alias. A name that matches several characters, or none, is refused with a message naming it. Autocomplete then offers the characters with their short IDs, such as `Alex (3f9a1c2e)`. Contributors add more people from the reply.
-* **Dates.** Separate `exact_date` with `exact_basis`, and `estimated_day` with `estimate_reason`, fields. Each date needs its basis or reason. With neither, the file's own date is used.
-* **Reply.** A private reply names the archive and the artifact's short ID, then shows the description, people, the selected date with its basis, and a preview. It has Edit, Add people, and Delete buttons. Delete asks for confirmation.
+* **Dates.** Separate `exact_date`, and `estimated_day` with `estimate_reason`, fields. An exact date needs no basis. An estimate needs its reason. With neither, the file's own date is used.
+* **Reply.** A private reply names the archive and the artifact's short ID, then shows the description, people, the selected date with its basis, and a preview. It has Edit, Add people, Someone unidentified, and Delete buttons. Someone unidentified sets the unidentified-people flag and then reads Everyone identified, which clears it. Delete asks for confirmation.
 * **Short IDs.** Replies show the first eight characters of a record ID. Every command accepts any unique prefix of at least eight characters, and asks for more when a prefix matches several records.
 * **Duplicate review.** Nothing is saved until the contributor ticks the differences to apply, then confirms. It lists replaced fields with their current and new values, and links to add. Unticked items are left alone, links are only added, and the original file is never replaced.
 
@@ -868,7 +880,7 @@ Serve frontend and backend from the same origin. Prefix archive routes with `/ap
 
 The bracket notation in the table abbreviates separate collection and item routes, not a literal route string. Historical record and archive-setting mutations return the current record and version. Requests take `expectedVersion` on their changes and deletion. Operational membership, preference, and announcement-setting commands apply atomically without historical record versions. Source-specific fields and ordinary editable columns come from the schema and date contract. Relationship updates explicitly list additions and removals. A duplicate-review operation accepts additions only.
 
-Lists accept `limit` from 1 to 100, default 50, and an opaque cursor with stable ordering. Shared filters use repeated IDs by category, optional text query, media types, date bases, identification states, and inclusive `fromDay` and `toDay`. Board lists default to priority then creation time and stable ID. Relative request constraints filter as open-ended intervals, not artificial occurrence days. A timeline request requires a viewport and zoom. Return clusters and counts rather than every offscreen record.
+Lists accept `limit` from 1 to 100, default 50, and an opaque cursor with stable ordering. Shared filters use repeated IDs by category, optional text query, media types, date bases, the unidentified-people flag, and inclusive `fromDay` and `toDay`. Board lists default to priority then creation time and stable ID. Relative request constraints filter as open-ended intervals, not artificial occurrence days. A timeline request requires a viewport and zoom. Return clusters and counts rather than every offscreen record.
 
 Errors use `{code, message, details}`. Use `400` for invalid input, `401` for no session, `404` for missing or inaccessible archives, `403` for denied operations within a visible archive, `409` for stale versions or reference blockers, `413` for oversized media, `415` for unsupported formats, `429` for retryable upstream rate limits, and `503` for an unavailable dependency. Include current version and field differences on version conflicts. Do not expose credentials or internal paths in errors.
 
@@ -953,7 +965,7 @@ Before building the `M2` Discord intake flow, show the owner the exact command, 
 * Preserve original image and video bytes, metadata, one-original cardinality, derived previews, and explicit unknown dates. Preview failure does not discard a good original.
 * Reject invalid dates, missing descriptions, links to records that do not exist in the selected archive, oversized or unsupported files, private sources, and partial original downloads without creating completed artifacts.
 * Verify remembered archive selection. An omitted archive uses the contributor's last explicit selection, missing or revoked access requires a selection, unregistration clears it, and every reply names the archive.
-* Verify that an incomplete identification state creates a missing-people card and an unreviewed state does not.
+* Verify that the unidentified-people flag creates a missing-people card and an artifact without the flag does not.
 * Verify source identity rather than content matching, reuse on duplicate links, chosen metadata changes only, cancellation, expiry, concurrency, and reintake after deletion.
 * Verify exact, estimated, file-date, and undated precedence, preservation of lower-priority assertions, unknown source timezones, personal defaults, explicit offsets, date-only stability, daylight-saving ambiguity, and fixed shared day buckets.
 * Verify both event range meanings and evidence-free creation, gap creation and clearing, disputed reasons, and one artifact supporting multiple events.
@@ -992,16 +1004,17 @@ The owner's accepted batches A through F are reconciled here. Later clarificatio
 | Scope | Full hosted app and all five views, with separate standalone viewer later |
 | Archive selection | Discord commands may omit the archive and reuse the contributor's last explicit selection, stored in `guhbot.db`. Replies always name the archive |
 | Intake links | Intake links only existing records. Contributors create a missing character before linking it |
-| Identification cards | Missing-people cards come from an incomplete identification state, not from unreviewed artifacts |
+| Identification cards | A yes/no unidentified-people flag, set from a button on the artifact reply rather than an intake field. Missing-people cards come only from the flag |
 | Intake volume | One artifact per submission, with thousands expected over time. Keep each Discord intake to as few steps as possible |
 | Confirmed as specified | Any archive member may permanently delete permitted records. Artifact estimates remain single calendar days |
 | Web layout | Three columns from the owner's sketch, with servers and group chats on the left, the current view in the center, all characters on the right, and a per-view tray of actions |
 | Timeline lanes | Servers and group chats get solid, editable lane colors. Dashes mean uncertainty. Events do not recolor lanes |
 | Timeline marks | One green dot per day, shaded by count, opening a gallery. Ranged events form labeled parallel strips in a band. Red arrows mark single-day events. Server name and icon changes get their own arrow color |
 | Main accounts | Characters have a dated main-account history, and their pictures follow it along the timeline |
-| Discord intake | Comma-separated people with autocomplete, separate exact and estimate date fields, a private reply with Edit, Add people, and Delete, short IDs, and tick-to-apply duplicate review |
+| Discord intake | Comma-separated people with autocomplete, separate exact and estimate date fields, a private reply with Edit, Add people, Someone unidentified, and Delete, short IDs, and tick-to-apply duplicate review |
+| Exact-date basis | Exact dates need no written basis, for artifacts and events. Only estimates need a reason. Archive schema version 2 removes the basis requirement and keeps earlier values |
 
-The earlier `Q01` through `Q19` topic discussion is resolved into the contract sections rather than retained as a competing open-question table. Accepted request and announcement clarifications are incorporated. The rows from archive selection through Discord intake record owner clarifications from 2026-11-23. If a final review changes a rule, update its contract, schema, interfaces, and acceptance fixture together.
+The earlier `Q01` through `Q19` topic discussion is resolved into the contract sections rather than retained as a competing open-question table. Accepted request and announcement clarifications are incorporated. The rows from archive selection through the end of the table record owner clarifications from 2026-11-23, including the test-server rehearsal feedback. If a final review changes a rule, update its contract, schema, interfaces, and acceptance fixture together.
 
 ### Outstanding Verification Prerequisites
 

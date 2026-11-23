@@ -7,6 +7,12 @@ export interface Migration {
   /** The schema version after this migration. Versions start at 1 and increase by 1. */
   version: number;
   sql: string;
+  /**
+   * The migration drops and recreates tables that other tables reference.
+   * Foreign keys are switched off while it runs, as SQLite's documented
+   * table rebuild requires, and every reference is checked before it commits.
+   */
+  rebuildsTables?: boolean;
 }
 
 /** Where a database records which migrations it has applied. */
@@ -43,10 +49,22 @@ export function applyMigrations(
   }
   for (const migration of migrations) {
     if (migration.version <= from) continue;
-    db.transaction(() => {
-      db.exec(migration.sql);
-      store.write(db, migration.version);
-    })();
+    // Dropping a referenced table with foreign keys on would delete or block
+    // the rows that point at it. The setting cannot change inside a transaction.
+    const restoreForeignKeys =
+      migration.rebuildsTables === true && db.pragma("foreign_keys", { simple: true }) === 1;
+    if (restoreForeignKeys) db.pragma("foreign_keys = OFF");
+    try {
+      db.transaction(() => {
+        db.exec(migration.sql);
+        if (migration.rebuildsTables && (db.pragma("foreign_key_check") as unknown[]).length > 0) {
+          throw new Error(`Migration ${migration.version} would leave broken references.`);
+        }
+        store.write(db, migration.version);
+      })();
+    } finally {
+      if (restoreForeignKeys) db.pragma("foreign_keys = ON");
+    }
   }
   return { from, to: Math.max(from, supported) };
 }

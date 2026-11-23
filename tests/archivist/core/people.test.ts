@@ -109,7 +109,7 @@ test("a duplicate review lists only supplied changes and applies only ticked one
     archiveId,
     description: "Group photo at the meetup",
     source,
-    exactDate: { value: "2019-07-15", basis: "Chat log" },
+    exactDate: "2019-07-15",
     links: { people: [sam, lee] },
   };
   const differences = duplicateDifferences(

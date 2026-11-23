@@ -104,7 +104,7 @@ test("a new artifact keeps its original and falls back to the file date", async 
 
   assert.equal(artifact.version, 1);
   assert.equal(artifact.createdBy, MEMBER.userId);
-  assert.equal(artifact.identificationState, "unreviewed");
+  assert.equal(artifact.unidentifiedPeople, false);
   assert.equal(artifact.dates.selected?.basis, "file");
   assert.equal(artifact.dates.selected?.date.archiveDay, "2019-07-15");
   assert.equal(artifact.media.readable, true);
@@ -120,7 +120,7 @@ test("a new artifact keeps its original and falls back to the file date", async 
 test("exact beats estimated beats file date, and clearing one restores the next", async (t) => {
   const fixture = setup(t);
   const created = await addArtifact(fixture, {
-    exactDate: { value: "2019-07-14", basis: "Message timestamp in the channel" },
+    exactDate: "2019-07-14",
     estimatedDate: { day: "2019-07-01", reason: "Early July by the decorations" },
   });
   assert.equal(created.dates.selected?.basis, "exact");
@@ -147,18 +147,17 @@ test("exact beats estimated beats file date, and clearing one restores the next"
   const restored = updateArtifact(fixture.context, MEMBER, {
     ...base,
     expectedVersion: 3,
-    exactDate: { value: "2019-07-13", basis: "Event invitation" },
+    exactDate: "2019-07-13",
   });
   assert.equal(restored.dates.selected?.basis, "exact");
   assert.equal(restored.version, 4);
 });
 
-test("dates need their basis or reason, and typed times use the contributor's zone", async (t) => {
+test("estimates need a reason, and typed times use the contributor's zone", async (t) => {
   const fixture = setup(t);
-  await assert.rejects(
-    addArtifact(fixture, { exactDate: { value: "2019-07-14", basis: " " } }),
-    fails("invalid_input"),
-  );
+  const noBasis = await addArtifact(fixture, { exactDate: "2019-07-14" });
+  assert.equal(noBasis.dates.selected?.basis, "exact");
+  assert.equal(noBasis.dates.exact?.basis, null);
   await assert.rejects(
     addArtifact(fixture, { estimatedDate: { day: "2019-07-14", reason: "" } }),
     fails("invalid_input"),
@@ -171,7 +170,7 @@ test("dates need their basis or reason, and typed times use the contributor's zo
 
   setTimeZone(fixture.context, MEMBER, "Asia/Tokyo");
   const local = await addArtifact(fixture, {
-    exactDate: { value: "2019-07-15 08:00", basis: "Chat log" },
+    exactDate: "2019-07-15 08:00",
   });
   const exact = local.dates.exact!.date;
   assert.equal(exact.kind === "instant" && exact.instantMs, Date.UTC(2019, 6, 14, 23));
@@ -179,7 +178,7 @@ test("dates need their basis or reason, and typed times use the contributor's zo
   assert.equal(exact.archiveDay, "2019-07-14");
 
   const explicit = await addArtifact(fixture, {
-    exactDate: { value: "2019-07-15 08:00 -04:00", basis: "Chat log" },
+    exactDate: "2019-07-15 08:00 -04:00",
   });
   assert.equal(explicit.dates.exact!.date.archiveDay, "2019-07-15");
 });
@@ -266,6 +265,35 @@ test("a stale edit is refused with the current values, and identical edits chang
   assert.equal(log(fixture).length, linesBefore);
 });
 
+test("the unidentified-people flag is set and cleared like any other edit", async (t) => {
+  const fixture = setup(t);
+  const artifact = await addArtifact(fixture);
+  const base = { archiveId: fixture.archiveId, id: artifact.id };
+  const flagged = updateArtifact(fixture.context, MEMBER, {
+    ...base,
+    expectedVersion: 1,
+    unidentifiedPeople: true,
+  });
+  assert.equal(flagged.unidentifiedPeople, true);
+  assert.deepEqual(log(fixture).at(-1)?.changes, { unidentifiedPeople: { old: false, new: true } });
+  assert.throws(
+    () =>
+      updateArtifact(fixture.context, MEMBER, {
+        ...base,
+        expectedVersion: 2,
+        unidentifiedPeople: "yes",
+      }),
+    fails("invalid_input"),
+  );
+  const cleared = updateArtifact(fixture.context, MEMBER, {
+    ...base,
+    expectedVersion: 2,
+    unidentifiedPeople: false,
+  });
+  assert.equal(cleared.unidentifiedPeople, false);
+  assert.equal(cleared.version, 3);
+});
+
 test("links must name existing records in the same archive", async (t) => {
   const fixture = setup(t);
   const other = createArchive(fixture.context, OWNER, { name: "Elsewhere" });
@@ -309,7 +337,7 @@ test("deleting an artifact keeps its media and removes only its own log lines", 
   const kept = await addArtifact(fixture, { links: { people: [sam.id] } });
   const removed = await addArtifact(fixture, {
     links: { people: [sam.id] },
-    exactDate: { value: "2019-07-14", basis: "Chat log" },
+    exactDate: "2019-07-14",
   });
   updateArtifact(fixture.context, MEMBER, {
     archiveId: fixture.archiveId,
@@ -582,7 +610,7 @@ test("people outside the archive cannot add or read artifacts", async (t) => {
 test("artifacts survive a restart", async (t) => {
   const fixture = setup(t);
   const artifact = await addArtifact(fixture, {
-    exactDate: { value: "2019-07-14", basis: "Chat log" },
+    exactDate: "2019-07-14",
   });
   const context = fixture.archivist.restart();
   const reloaded = getArtifact(context, MEMBER, { archiveId: fixture.archiveId, id: artifact.id });

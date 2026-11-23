@@ -8,6 +8,7 @@ import {
   differenceOption,
   EMBED_DESCRIPTION_LIMIT,
   interpretationNote,
+  peopleText,
   selectedDateText,
 } from "../../../src/lib/archivist-format.js";
 import { PENDING_LIFETIME_MS, recall, remember } from "../../../src/lib/archivist-pending.js";
@@ -35,7 +36,7 @@ function artifact(overrides: Partial<ArtifactDetails> = {}): ArtifactDetails {
       fileDateStatus: "found",
     },
     dates: { exact: null, estimated: null, file: null, selected: null },
-    identificationState: "unreviewed",
+    unidentifiedPeople: false,
     links: { people: [], accounts: [], servers: [], channels: [], events: [] },
     ...overrides,
   };
@@ -85,6 +86,8 @@ test("exact and estimated dates show their basis or reason", () => {
     },
   });
   assert.equal(selectedDateText(exact, TORONTO), "2019-07-14 (exact: Chat log)");
+  const noBasis = artifact({ dates: { ...exact.dates, exact: { date: exactDate, basis: null } } });
+  assert.equal(selectedDateText(noBasis, TORONTO), "2019-07-14 (exact)");
   const estimated = artifact({
     dates: {
       exact: null,
@@ -129,6 +132,13 @@ test("instants show in the archive's timezone, and typed times explain how they 
   assert.match(interpretationNote(offset) ?? "", /its own offset, -04:00/);
 });
 
+test("people text notes someone not identified yet", () => {
+  assert.equal(peopleText([], false), "Nobody linked yet");
+  assert.equal(peopleText(["Sam"], false), "Sam");
+  assert.equal(peopleText([], true), "Someone not identified yet");
+  assert.equal(peopleText(["Sam", "Lee"], true), "Sam, Lee, and someone not identified yet");
+});
+
 test("long descriptions are shortened only in the embed, with a pointer to the full text", () => {
   const long = artifact({ description: "x".repeat(25_000) });
   const embed = artifactEmbed(long, {
@@ -154,7 +164,7 @@ test("embeds name unknown people and missing previews plainly", () => {
     },
   ).toJSON();
   const fields = Object.fromEntries(embed.fields!.map((field) => [field.name, field.value]));
-  assert.equal(fields.People, "Not identified yet");
+  assert.equal(fields.People, "Nobody linked yet");
   assert.equal(fields["Added by"], "<@200000000000000002>");
   assert.match(fields.File!, /no preview/);
   assert.equal(embed.title, "History - artifact 3f9a1c2e");

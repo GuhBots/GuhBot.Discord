@@ -68,7 +68,8 @@ import { recall, remember } from "./archivist-pending.js";
 /**
  * The Discord artifact flow the owner approved: intake from an attachment or
  * a Drive link, a confirmation when a typed time has no zone, duplicate
- * review, and the reply's Edit, Add people, and Delete buttons.
+ * review, and the reply's Edit, Add people, Someone unidentified, and Delete
+ * buttons.
  */
 
 const ephemeral = { flags: MessageFlags.Ephemeral } as const;
@@ -105,23 +106,17 @@ export interface IntakeOptions {
   driveLink?: string;
   people?: string;
   exactDate?: string;
-  exactBasis?: string;
   estimatedDay?: string;
   estimateReason?: string;
-  identification?: string;
 }
 
 function invalid(message: string, field: string): ArchivistError {
   return new ArchivistError("invalid_input", message, { field });
 }
 
-/** An exact date with its basis, or undefined when neither was given. */
-function exactPair(date?: string, basis?: string) {
-  if (!date?.trim() && !basis?.trim()) return undefined;
-  if (!date?.trim()) throw invalid("exact_basis needs an exact_date to go with it.", "exact_date");
-  if (!basis?.trim())
-    throw invalid("An exact date needs exact_basis, saying how you know it.", "exact_basis");
-  return { value: date, basis };
+/** The typed exact date, or undefined when the field was left empty. */
+function exactText(date?: string): string | undefined {
+  return date?.trim() ? date : undefined;
 }
 
 function estimatePair(day?: string, reason?: string) {
@@ -151,7 +146,11 @@ function archiveName(context: ArchivistContext, archiveId: string): string {
   return registeredArchive(context, archiveId)?.name ?? "the archive";
 }
 
-/** The private reply showing an artifact, with its Edit, Add people, and Delete buttons. */
+/**
+ * The private reply showing an artifact, with its Edit, Add people, Someone
+ * unidentified, and Delete buttons. The flag button reads "Everyone
+ * identified" while the flag is set, and pressing it clears the flag.
+ */
 export function artifactReply(
   context: ArchivistContext,
   archiveId: string,
@@ -170,6 +169,10 @@ export function artifactReply(
     new ButtonBuilder()
       .setCustomId(recordId("people", archiveId, artifact.id, artifact.version))
       .setLabel("Add people")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(recordId("unid", archiveId, artifact.id, artifact.version))
+      .setLabel(artifact.unidentifiedPeople ? "Everyone identified" : "Someone unidentified")
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(recordId("delete", archiveId, artifact.id, artifact.version))
@@ -236,9 +239,8 @@ export async function startIntake(
             url: file.link.url,
             resourceKey: file.link.resourceKey,
           },
-    exactDate: exactPair(options.exactDate, options.exactBasis),
+    exactDate: exactText(options.exactDate),
     estimatedDate: estimatePair(options.estimatedDay, options.estimateReason),
-    identificationState: options.identification,
     links: { people: resolvePeople(store.db, options.people) },
     submission: { guildId: interaction.guildId ?? undefined, channelId: interaction.channelId },
   };
@@ -558,13 +560,6 @@ export async function showEditForm(
       100,
     ),
     textInput(
-      "exact_basis",
-      "How you know the exact date",
-      artifact.dates.exact?.basis,
-      TextInputStyle.Short,
-      MODAL_TEXT_LIMIT,
-    ),
-    textInput(
       "estimated_day",
       "Estimated day, YYYY-MM-DD",
       artifact.dates.estimated?.date.originalText,
@@ -597,7 +592,7 @@ export async function submitEdit(interaction: ModalSubmitInteraction): Promise<v
   const actor = await actorOf(interaction);
   const current = getArtifact(context, actor, { archiveId, id: artifactId });
   const exactDate = field(interaction, "exact_date");
-  const exact = exactPair(exactDate, field(interaction, "exact_basis"));
+  const exact = exactText(exactDate);
   const estimate = estimatePair(
     field(interaction, "estimated_day"),
     field(interaction, "estimate_reason"),
@@ -680,6 +675,35 @@ export async function submitAddPeople(interaction: ModalSubmitInteraction): Prom
   await interaction.editReply(
     artifactReply(context, archiveId, updated, `Updated artifact \`${updated.id.slice(0, 8)}\`.`),
   );
+}
+
+/**
+ * Sets or clears the flag that someone in the artifact is not identified yet,
+ * which the research board uses for missing-people cards. The same message
+ * is updated, so its buttons carry the new version.
+ */
+export async function toggleUnidentified(interaction: ButtonInteraction): Promise<void> {
+  const { archiveId, artifactId, version } = parseRecordId(interaction.customId);
+  const context = archivist();
+  const actor = await actorOf(interaction);
+  const current = getArtifact(context, actor, { archiveId, id: artifactId });
+  const updated = updateArtifact(context, actor, {
+    archiveId,
+    id: artifactId,
+    expectedVersion: version,
+    unidentifiedPeople: !current.unidentifiedPeople,
+  });
+  await interaction.update({
+    ...artifactReply(
+      context,
+      archiveId,
+      updated,
+      updated.unidentifiedPeople
+        ? `Artifact \`${updated.id.slice(0, 8)}\` is marked as having someone not identified yet.`
+        : `Artifact \`${updated.id.slice(0, 8)}\` is no longer marked as having someone unidentified.`,
+    ),
+    attachments: [],
+  });
 }
 
 export async function askDelete(interaction: ButtonInteraction): Promise<void> {

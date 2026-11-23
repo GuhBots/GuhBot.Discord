@@ -59,7 +59,6 @@ const LINK_KINDS = Object.keys(LINKS) as LinkKind[];
 
 type Links = Record<LinkKind, string[]>;
 
-export type IdentificationState = "unreviewed" | "incomplete" | "complete";
 export type DateBasis = "exact" | "estimated" | "file";
 
 export interface ArtifactDetails {
@@ -82,12 +81,14 @@ export interface ArtifactDetails {
     fileDateStatus: string;
   };
   dates: {
-    exact: { date: StoredDate; basis: string } | null;
+    /** `basis` holds a reason given before exact dates stopped needing one. */
+    exact: { date: StoredDate; basis: string | null } | null;
     estimated: { date: StoredDate; reason: string } | null;
     file: StoredDate | null;
     selected: { basis: DateBasis; date: StoredDate } | null;
   };
-  identificationState: IdentificationState;
+  /** Someone in it has not been identified yet, which puts it on the research board. */
+  unidentifiedPeople: boolean;
   links: Links;
 }
 
@@ -112,7 +113,7 @@ interface ArtifactRow {
   estimate_reason: string | null;
   file_date_id: string | null;
   selected_date_id: string | null;
-  identification_state: IdentificationState;
+  unidentified_people: 0 | 1;
   original_filename: string;
   mime_type: string;
   byte_length: number;
@@ -188,12 +189,12 @@ export function readArtifact(db: Database.Database, id: string): ArtifactDetails
       fileDateStatus: metadata.fileDate?.status ?? "absent",
     },
     dates: {
-      exact: exact ? { date: exact, basis: row.exact_basis! } : null,
+      exact: exact ? { date: exact, basis: row.exact_basis } : null,
       estimated: estimated ? { date: estimated, reason: row.estimate_reason! } : null,
       file,
       selected: basis && selectedDate ? { basis, date: selectedDate } : null,
     },
-    identificationState: row.identification_state,
+    unidentifiedPeople: row.unidentified_people === 1,
     links: readLinks(db, row.id),
   };
 }
@@ -244,18 +245,14 @@ function sourceValue(input: SourceInput): Required<SourceInput> {
   }
 }
 
-function identificationValue(value: unknown): IdentificationState {
-  if (value === "unreviewed" || value === "incomplete" || value === "complete") return value;
-  throw new ArchivistError(
-    "invalid_input",
-    "Identification must be unreviewed, incomplete, or complete.",
-    { field: "identificationState" },
-  );
+function flagValue(field: string, value: unknown): boolean {
+  if (typeof value === "boolean") return value;
+  throw new ArchivistError("invalid_input", `${field} must be true or false.`, { field });
 }
 
+/** An exact date needs no written basis. Only estimates need a reason. */
 interface ExactInput {
   value: DateValue;
-  basis: string;
 }
 
 interface EstimateInput {
@@ -267,13 +264,10 @@ function exactValue(
   session: ArchiveSession,
   context: ArchivistContext,
   actor: Actor,
-  input: { value: unknown; basis: unknown },
+  value: unknown,
 ): ExactInput {
   const zone = inputTimeZone(context, actor, session.details.timezone);
-  return {
-    value: parseDateInput("exactDate", input.value, zone),
-    basis: requiredText("exactBasis", input.basis, TEXT_LIMITS.reason),
-  };
+  return { value: parseDateInput("exactDate", value, zone) };
 }
 
 function estimateValue(input: { day: unknown; reason: unknown }): EstimateInput {
@@ -313,9 +307,9 @@ export interface CreateArtifactInput {
   media: StagedMedia;
   source: SourceInput;
   submission?: { guildId?: unknown; channelId?: unknown; messageId?: unknown };
-  exactDate?: { value: unknown; basis: unknown } | null;
+  /** The exact date as typed. */
+  exactDate?: unknown;
   estimatedDate?: { day: unknown; reason: unknown } | null;
-  identificationState?: unknown;
   links?: LinkInput;
 }
 
@@ -338,8 +332,6 @@ export interface CheckedIntake {
   description: string;
   exact: ExactInput | null;
   estimate: EstimateInput | null;
-  identificationState: IdentificationState;
-  identificationGiven: boolean;
   links: Links;
   submission: { guildId: string | null; channelId: string | null; messageId: string | null };
 }
@@ -356,12 +348,11 @@ export function checkIntake(
   const session = openForActor(context, actor, input.archiveId);
   const source = sourceValue(input.source);
   const description = requiredText("description", input.description, TEXT_LIMITS.description);
-  const exact = input.exactDate ? exactValue(session, context, actor, input.exactDate) : null;
+  const exact =
+    input.exactDate !== undefined && input.exactDate !== null
+      ? exactValue(session, context, actor, input.exactDate)
+      : null;
   const estimate = input.estimatedDate ? estimateValue(input.estimatedDate) : null;
-  const identificationGiven = input.identificationState !== undefined;
-  const identificationState = identificationGiven
-    ? identificationValue(input.identificationState)
-    : "unreviewed";
   const links = linksValue(input.links, session.store.db);
   const submission = {
     guildId: input.submission?.guildId ? discordId("guildId", input.submission.guildId) : null,
@@ -378,8 +369,6 @@ export function checkIntake(
     description,
     exact,
     estimate,
-    identificationState,
-    identificationGiven,
     links,
     submission,
   };
@@ -394,8 +383,11 @@ export function createArtifact(
   const { store } = session;
   const existing = findArtifactBySource(store.db, input.source.provider, input.source.key);
   if (existing) return { status: "duplicate", artifact: existing };
-  const { source, description, exact, estimate, identificationState, links, submission } =
-    checkIntake(context, actor, input);
+  const { source, description, exact, estimate, links, submission } = checkIntake(
+    context,
+    actor,
+    input,
+  );
 
   const media = input.media;
   const artifactId = newId();
@@ -412,7 +404,7 @@ export function createArtifact(
   if (exact) {
     changes.exactDate = {
       old: null,
-      new: { date: dateText(exact), as: interpreted(exact.value), basis: exact.basis },
+      new: { date: dateText(exact), as: interpreted(exact.value) },
     };
   }
   if (estimate) {
@@ -423,9 +415,6 @@ export function createArtifact(
   }
   if (media.fileDate.value) {
     changes.fileDate = { old: null, new: media.fileDate.value.originalText };
-  }
-  if (identificationState !== "unreviewed") {
-    changes.identificationState = { old: null, new: identificationState };
   }
   for (const kind of LINK_KINDS) {
     if (links[kind].length > 0) changes[kind] = { old: null, new: links[kind] };
@@ -457,9 +446,8 @@ export function createArtifact(
         `INSERT INTO artifacts (id, created_at, created_by, updated_at, media_id, description,
            source_provider, source_key, source_url, source_resource_key,
            submission_guild_id, submission_channel_id, submission_message_id,
-           exact_date_id, exact_basis, estimated_date_id, estimate_reason, file_date_id, selected_date_id,
-           identification_state)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           exact_date_id, estimated_date_id, estimate_reason, file_date_id, selected_date_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         artifactId,
         now,
@@ -475,12 +463,10 @@ export function createArtifact(
         submission.channelId,
         submission.messageId,
         exactId,
-        exact?.basis ?? null,
         estimateId,
         estimate?.reason ?? null,
         fileId,
         exactId ?? estimateId ?? fileId,
-        identificationState,
       );
       insertLinks(db, artifactId, links);
     },
@@ -508,10 +494,10 @@ export interface UpdateArtifactInput {
   id: unknown;
   expectedVersion: unknown;
   description?: unknown;
-  /** Null clears the exact date, falling back to the estimate or file date. */
-  exactDate?: { value: unknown; basis: unknown } | null;
+  /** The exact date as typed. Null clears it, falling back to the estimate or file date. */
+  exactDate?: unknown;
   estimatedDate?: { day: unknown; reason: unknown } | null;
-  identificationState?: unknown;
+  unidentifiedPeople?: unknown;
   addLinks?: LinkInput;
   removeLinks?: LinkInput;
 }
@@ -525,9 +511,9 @@ function interpreted(value: DateValue): string {
 
 interface EditableState {
   description: string;
-  exactDate: { date: string; as: string; basis: string } | null;
+  exactDate: { date: string; as: string } | null;
   estimatedDate: { date: string; reason: string } | null;
-  identificationState: IdentificationState;
+  unidentifiedPeople: boolean;
   people: string[];
   accounts: string[];
   servers: string[];
@@ -543,7 +529,6 @@ function editableState(artifact: ArtifactDetails): EditableState {
       ? {
           date: artifact.dates.exact.date.originalText,
           as: interpreted(artifact.dates.exact.date),
-          basis: artifact.dates.exact.basis,
         }
       : null,
     estimatedDate: artifact.dates.estimated
@@ -552,7 +537,7 @@ function editableState(artifact: ArtifactDetails): EditableState {
           reason: artifact.dates.estimated.reason,
         }
       : null,
-    identificationState: artifact.identificationState,
+    unidentifiedPeople: artifact.unidentifiedPeople,
     ...artifact.links,
   };
 }
@@ -561,7 +546,7 @@ const EDITABLE_FIELDS = [
   "description",
   "exactDate",
   "estimatedDate",
-  "identificationState",
+  "unidentifiedPeople",
   ...LINK_KINDS,
 ] as const;
 
@@ -592,7 +577,7 @@ export function updateArtifact(
   if (input.exactDate !== undefined) {
     exact = input.exactDate === null ? null : exactValue(session, context, actor, input.exactDate);
     after.exactDate = exact
-      ? { date: exact.value.originalText, as: interpreted(exact.value), basis: exact.basis }
+      ? { date: exact.value.originalText, as: interpreted(exact.value) }
       : null;
   }
   if (input.estimatedDate !== undefined) {
@@ -601,8 +586,8 @@ export function updateArtifact(
       ? { date: estimate.value.originalText, reason: estimate.reason }
       : null;
   }
-  if (input.identificationState !== undefined) {
-    after.identificationState = identificationValue(input.identificationState);
+  if (input.unidentifiedPeople !== undefined) {
+    after.unidentifiedPeople = flagValue("unidentifiedPeople", input.unidentifiedPeople);
   }
   const additions = linksValue(input.addLinks, store.db);
   const removals = {} as Links;
@@ -643,7 +628,8 @@ export function updateArtifact(
       let exactBasis = row.exact_basis;
       if (exact !== undefined && changes.exactDate) {
         exactId = exact ? insertDate(db, exact.value, timezone) : null;
-        exactBasis = exact?.basis ?? null;
+        // A basis from before it was dropped belongs to the replaced date.
+        exactBasis = null;
       }
       let estimateId = row.estimated_date_id;
       let estimateReason = row.estimate_reason;
@@ -654,7 +640,7 @@ export function updateArtifact(
       db.prepare(
         `UPDATE artifacts SET description = ?, exact_date_id = ?, exact_basis = ?,
            estimated_date_id = ?, estimate_reason = ?, selected_date_id = ?,
-           identification_state = ?, version = version + 1, updated_at = ?
+           unidentified_people = ?, version = version + 1, updated_at = ?
          WHERE id = ? AND version = ?`,
       ).run(
         after.description,
@@ -663,7 +649,7 @@ export function updateArtifact(
         estimateId,
         estimateReason,
         exactId ?? estimateId ?? row.file_date_id,
-        after.identificationState,
+        after.unidentifiedPeople ? 1 : 0,
         now,
         id,
         current.version,
@@ -740,13 +726,13 @@ export function deleteArtifact(
 
 /** One change a duplicate submission proposes to the existing artifact. */
 export interface DuplicateDifference {
-  key: "description" | "exactDate" | "estimatedDate" | "identificationState" | LinkKind;
+  key: "description" | "exactDate" | "estimatedDate" | LinkKind;
   current: string;
   proposed: string;
 }
 
-function describeExact(exact: { text: string; basis: string } | null): string {
-  return exact ? `${exact.text} (exact, ${exact.basis})` : "none";
+function describeExact(text: string | null): string {
+  return text ? `${text} (exact)` : "none";
 }
 
 function describeEstimate(estimate: { text: string; reason: string } | null): string {
@@ -772,20 +758,12 @@ export function duplicateDifferences(
   }
   if (intake.exact) {
     const current = existing.dates.exact;
-    const same =
-      current !== null &&
-      interpreted(current.date) === interpreted(intake.exact.value) &&
-      current.basis === intake.exact.basis;
+    const same = current !== null && interpreted(current.date) === interpreted(intake.exact.value);
     if (!same) {
       differences.push({
         key: "exactDate",
-        current: describeExact(
-          current && { text: current.date.originalText, basis: current.basis },
-        ),
-        proposed: describeExact({
-          text: intake.exact.value.originalText,
-          basis: intake.exact.basis,
-        }),
+        current: describeExact(current?.date.originalText ?? null),
+        proposed: describeExact(intake.exact.value.originalText),
       });
     }
   }
@@ -807,13 +785,6 @@ export function duplicateDifferences(
         }),
       });
     }
-  }
-  if (intake.identificationGiven && intake.identificationState !== existing.identificationState) {
-    differences.push({
-      key: "identificationState",
-      current: existing.identificationState,
-      proposed: intake.identificationState,
-    });
   }
   for (const kind of LINK_KINDS) {
     const added = intake.links[kind].filter((id) => !existing.links[kind].includes(id));
@@ -851,9 +822,6 @@ export function applyDuplicateReview(
     description: selected.has("description") ? intake.description : undefined,
     exactDate: selected.has("exactDate") ? input.intake.exactDate : undefined,
     estimatedDate: selected.has("estimatedDate") ? input.intake.estimatedDate : undefined,
-    identificationState: selected.has("identificationState")
-      ? intake.identificationState
-      : undefined,
     addLinks,
   });
 }

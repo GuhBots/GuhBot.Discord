@@ -71,6 +71,7 @@ import {
   startIntake,
   submitAddPeople,
   submitEdit,
+  toggleUnidentified,
 } from "../lib/archivist-intake.js";
 import { GUILD_ONLY } from "../lib/categories.js";
 import { Cooldown } from "../lib/cooldown.js";
@@ -379,14 +380,6 @@ export class Archivist {
     })
     exactDate: string | undefined,
     @SlashOption({
-      name: "exact_basis",
-      description: "How you know the exact date, such as a message timestamp",
-      type: ApplicationCommandOptionType.String,
-      required: false,
-      maxLength: 1000,
-    })
-    exactBasis: string | undefined,
-    @SlashOption({
       name: "estimated_day",
       description: "Your best guess at the day, such as 2019-07-01",
       type: ApplicationCommandOptionType.String,
@@ -402,18 +395,6 @@ export class Archivist {
       maxLength: 1000,
     })
     estimateReason: string | undefined,
-    @SlashChoice(
-      { name: "Not reviewed", value: "unreviewed" },
-      { name: "Some people unidentified", value: "incomplete" },
-      { name: "Everyone identified", value: "complete" },
-    )
-    @SlashOption({
-      name: "identification",
-      description: "Whether everyone in it has been identified",
-      type: ApplicationCommandOptionType.String,
-      required: false,
-    })
-    identification: string | undefined,
     interaction: CommandInteraction,
   ): Promise<void> {
     await runArchivist(interaction, () =>
@@ -424,10 +405,8 @@ export class Archivist {
         driveLink,
         people,
         exactDate,
-        exactBasis,
         estimatedDay,
         estimateReason,
-        identification,
       }),
     );
   }
@@ -475,6 +454,11 @@ export class Archivist {
   @ModalComponent({ id: /^ax:peoplem:/ })
   async peopleSubmit(interaction: ModalSubmitInteraction): Promise<void> {
     await runArchivist(interaction, () => submitAddPeople(interaction));
+  }
+
+  @ButtonComponent({ id: /^ax:unid:/ })
+  async unidentifiedToggle(interaction: ButtonInteraction): Promise<void> {
+    await runArchivist(interaction, () => toggleUnidentified(interaction));
   }
 
   @ButtonComponent({ id: /^ax:delete:/ })
