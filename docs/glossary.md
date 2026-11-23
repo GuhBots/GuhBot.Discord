@@ -13,12 +13,14 @@ Add or update definitions when terminology changes, and link to them from other 
 | AMD | Advanced Micro Devices, a maker of the 64-bit x86 processors used in most desktops, laptops, and servers |
 | API | Application programming interface |
 | ARM | A processor architecture used by the Raspberry Pi and many small devices |
+| ASCII | American Standard Code for Information Interchange, the basic Latin character set |
 | CI | Continuous integration |
 | CLI | Command-line interface |
 | COVID | Coronavirus disease. The original bot had a COVID-19 statistics command |
 | CRLF | Carriage return and line feed, the line ending used by Windows |
 | ES | ECMAScript, the standard that JavaScript follows. ES modules use `import` and `export` |
 | GHCR | GitHub Container Registry, where this repository publishes its images |
+| HTTP | Hypertext Transfer Protocol, the protocol web browsers and servers use |
 | HTTPS | Hypertext Transfer Protocol Secure, the encrypted protocol for websites |
 | ID | Identifier |
 | LF | Line feed, the line ending used by Linux and macOS |
@@ -30,6 +32,7 @@ Add or update definitions when terminology changes, and link to them from other 
 | SSH | Secure Shell, used to log in to another machine's command line |
 | USB | Universal Serial Bus |
 | VS Code | Visual Studio Code, a code editor |
+| WAL | Write-ahead log, a SQLite journal mode that keeps recent changes in a separate file |
 | WIP | Work in progress. The placeholder `/archivist` command replies with it |
 | WSL | Windows Subsystem for Linux |
 | YAML | A configuration file format, used by `compose.yaml` and the GitHub workflows |

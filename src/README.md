@@ -12,6 +12,7 @@ The bot's TypeScript source. `npm run build` compiles it to `build/`.
 | `commands/` | One file per module, plus `owner.ts` for owner commands |
 | `events/` | Gateway event listeners, such as the AFK listener |
 | `lib/` | Shared helpers for command sync, embeds, cooldowns, the database, presence, and shutdown |
+| `archivist/` | Archivist's shared storage and rules, described in its [README](archivist/README.md) |
 
 ## Modules
 

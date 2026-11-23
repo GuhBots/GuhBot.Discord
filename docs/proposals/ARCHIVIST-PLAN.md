@@ -80,7 +80,7 @@ These are planned directories. Add their required READMEs and parent navigation 
   archivist-exports/
 ```
 
-Use generated stable archive IDs as directory names. Archive display names contain 1 to 100 non-blank characters and are unique ignoring case within the installation. Renaming never moves a folder. All stored media paths are relative to that archive folder. Reject paths that escape it. No archive depends on another archive's records or media.
+Use generated stable archive IDs as directory names. Archive display names contain 1 to 100 non-blank characters and are unique ignoring case within the installation. Uniqueness uses a stored key that folds Unicode case and compatibility forms, because SQLite's `NOCASE` folds only ASCII. Registering an archive whose name is already taken is rejected, and the owner supplies a new display name. Renaming never moves a folder. All stored media paths are relative to that archive folder. Reject paths that escape it. No archive depends on another archive's records or media.
 
 The portable folder contains historical data and its schema version, original and derived media, and the edit log. Operational registry, whitelists, sessions, personal timezone preferences, remembered archive selections, API keys, pending interactions, delivery tracking, and temporary jobs stay outside it. The operational database extends the current `guhbot.db` without changing AFK records.
 
@@ -320,7 +320,7 @@ Retain group-qualified raw tag names and values in `metadata_json`. Do not combi
 
 ### Archive Schema Draft
 
-This is the executable initial archive schema for review, not an installed migration. Implement it as the first versioned migration after build authorization. Additional migrations must update the embedded version and `PRAGMA user_version` together, preserve existing data, and back up before destructive changes. Refuse writes to a newer unsupported schema. There is no automatic downgrade.
+This is the initial archive schema. It is implemented as migration version 1 in [archive-schema.ts](../../src/archivist/migrations/archive-schema.ts), which must match this block. Additional migrations must update the embedded version and `PRAGMA user_version` together, preserve existing data, and back up before destructive changes. Refuse writes to a newer unsupported schema. Version checks use `>= 1` so later migrations need not rebuild the metadata table. Code refuses versions newer than it supports. There is no automatic downgrade.
 
 ```sql
 PRAGMA foreign_keys = ON;
@@ -654,7 +654,7 @@ CREATE TABLE archive_meta (
   singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
   version INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1),
   archive_id TEXT NOT NULL UNIQUE,
-  schema_version INTEGER NOT NULL CHECK (schema_version = 1),
+  schema_version INTEGER NOT NULL CHECK (schema_version >= 1),
   name TEXT NOT NULL,
   timezone TEXT NOT NULL DEFAULT 'America/Toronto',
   main_server_id TEXT REFERENCES servers(id) ON DELETE RESTRICT,
@@ -711,12 +711,13 @@ PRAGMA foreign_keys = ON;
 
 CREATE TABLE archivist_schema (
   singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-  version INTEGER NOT NULL CHECK (version = 1)
+  version INTEGER NOT NULL CHECK (version >= 1)
 );
 
 CREATE TABLE archivist_archives (
   archive_id TEXT PRIMARY KEY,
-  name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+  name TEXT NOT NULL,
+  name_key TEXT NOT NULL UNIQUE,
   relative_path TEXT NOT NULL UNIQUE,
   registered_at TEXT NOT NULL,
   registered_by TEXT NOT NULL
