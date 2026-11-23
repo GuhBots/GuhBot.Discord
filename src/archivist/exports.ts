@@ -113,7 +113,7 @@ function zipName(archiveName: string, now: Date): string {
   return `${safe.slice(0, 60)}-${now.toISOString().slice(0, 10)}.zip`;
 }
 
-const ALREADY_COMPRESSED = /\.(jpe?g|png|gif|webp|mp4)$/i;
+const ALREADY_COMPRESSED = /\.(jpe?g|png|gif|webp|mp4|mov|webm|mkv|avi|mp3|m4a|ogg|flac)$/i;
 
 /**
  * Exports an archive to a zip and returns the finished job. Owners and

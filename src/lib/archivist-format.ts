@@ -110,6 +110,8 @@ export function artifactEmbed(artifact: ArtifactDetails, view: ArtifactView): Em
     embed.setImage(`attachment://${PREVIEW_ATTACHMENT}`);
   } else if (artifact.media.mimeType.startsWith("video/")) {
     embed.addFields({ name: "File", value: `Video, ${artifact.media.originalFilename}` });
+  } else if (artifact.media.mimeType.startsWith("audio/")) {
+    embed.addFields({ name: "File", value: `Audio, ${artifact.media.originalFilename}` });
   } else {
     embed.addFields({
       name: "File",

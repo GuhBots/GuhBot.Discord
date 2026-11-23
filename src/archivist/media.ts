@@ -42,9 +42,25 @@ export const MEDIA_TYPES: Record<MediaFormat, { mimeType: string; extension: str
   gif: { mimeType: "image/gif", extension: "gif" },
   webp: { mimeType: "image/webp", extension: "webp" },
   mp4: { mimeType: "video/mp4", extension: "mp4" },
+  mov: { mimeType: "video/quicktime", extension: "mov" },
+  webm: { mimeType: "video/webm", extension: "webm" },
+  mkv: { mimeType: "video/x-matroska", extension: "mkv" },
+  avi: { mimeType: "video/x-msvideo", extension: "avi" },
+  mp3: { mimeType: "audio/mpeg", extension: "mp3" },
+  m4a: { mimeType: "audio/mp4", extension: "m4a" },
+  wav: { mimeType: "audio/wav", extension: "wav" },
+  ogg: { mimeType: "audio/ogg", extension: "ogg" },
+  flac: { mimeType: "audio/flac", extension: "flac" },
 };
 
-/** MP4 brands. QuickTime (`qt  `), HEIF, and audio-only brands are not accepted. */
+/** What people are told the bot accepts, matching `detectFormat`. */
+export const ACCEPTED_FORMATS_TEXT =
+  "images (JPEG, PNG, WebP, GIF), videos (MP4, MOV, WebM, MKV, AVI), and audio (MP3, M4A, WAV, Ogg, FLAC)";
+
+/** Only still images get a preview. Videos and audio are shown by name. */
+const IMAGE_FORMATS = new Set<MediaFormat>(["jpeg", "png", "gif", "webp"]);
+
+/** MP4 video brands. HEIF images are not accepted. */
 const MP4_BRANDS = new Set([
   "isom",
   "iso2",
@@ -61,8 +77,30 @@ const MP4_BRANDS = new Set([
   "mmp4",
 ]);
 
+/** Apple audio brands in the same container. */
+const M4A_BRANDS = new Set(["M4A ", "M4B "]);
+
+/**
+ * The first atom of an older QuickTime file that has no `ftyp` atom. These
+ * names are QuickTime's own, so such a file is read as a MOV.
+ */
+const QUICKTIME_ATOMS = new Set(["moov", "mdat", "wide", "free", "skip", "pnot"]);
+
 const PREVIEW_SIZE = 1024;
-const HEADER_BYTES = 32;
+/** Enough for a Matroska header to name its document type. */
+const HEADER_BYTES = 64;
+
+/** An MPEG audio layer III frame header, the start of an MP3 without ID3 tags. */
+function isMp3Frame(header: Buffer): boolean {
+  if (header.length < 3 || header[0] !== 0xff) return false;
+  const second = header[1]!;
+  const third = header[2]!;
+  const syncAndLayer3 = (second & 0xe6) === 0xe2;
+  const version = (second >> 3) & 0x03;
+  const bitrate = third >> 4;
+  const sampleRate = (third >> 2) & 0x03;
+  return syncAndLayer3 && version !== 1 && bitrate !== 0 && bitrate !== 15 && sampleRate !== 3;
+}
 
 /** Identifies a supported format from a file's first bytes, ignoring its name. */
 export function detectFormat(header: Buffer): MediaFormat | null {
@@ -74,8 +112,30 @@ export function detectFormat(header: Buffer): MediaFormat | null {
   }
   const ascii = header.toString("latin1");
   if (ascii.startsWith("GIF87a") || ascii.startsWith("GIF89a")) return "gif";
-  if (ascii.startsWith("RIFF") && ascii.slice(8, 12) === "WEBP") return "webp";
-  if (ascii.slice(4, 8) === "ftyp" && MP4_BRANDS.has(ascii.slice(8, 12))) return "mp4";
+  if (ascii.startsWith("RIFF")) {
+    const kind = ascii.slice(8, 12);
+    if (kind === "WEBP") return "webp";
+    if (kind === "AVI ") return "avi";
+    if (kind === "WAVE") return "wav";
+    return null;
+  }
+  if (ascii.slice(4, 8) === "ftyp") {
+    const brand = ascii.slice(8, 12);
+    if (MP4_BRANDS.has(brand)) return "mp4";
+    if (brand === "qt  ") return "mov";
+    if (M4A_BRANDS.has(brand)) return "m4a";
+    return null;
+  }
+  if (QUICKTIME_ATOMS.has(ascii.slice(4, 8))) return "mov";
+  if (header.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]))) {
+    // The EBML header names its document type near the start.
+    if (ascii.includes("webm")) return "webm";
+    if (ascii.includes("matroska")) return "mkv";
+    return null;
+  }
+  if (ascii.startsWith("OggS")) return "ogg";
+  if (ascii.startsWith("fLaC")) return "flac";
+  if (ascii.startsWith("ID3") || isMp3Frame(header)) return "mp3";
   return null;
 }
 
@@ -173,7 +233,7 @@ export async function stageMedia(
   if (!format) {
     throw new ArchivistError(
       "unsupported_media_type",
-      "Only JPEG, PNG, WebP, GIF, and MP4 files can be archived.",
+      `Only ${ACCEPTED_FORMATS_TEXT} can be archived.`,
       { field: "file" },
     );
   }
@@ -185,7 +245,7 @@ export async function stageMedia(
 
   let previewFile: string | null = null;
   let readable = metadata.errors.length === 0;
-  if (format !== "mp4") {
+  if (IMAGE_FORMATS.has(format)) {
     const target = join(folder, "preview.webp");
     try {
       await sharp(input.file, { animated: false, failOn: "error" })

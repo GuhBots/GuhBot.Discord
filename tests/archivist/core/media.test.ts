@@ -30,7 +30,14 @@ import {
   writeJournal,
 } from "../../../src/archivist/mutations.js";
 import { makeArchivist, OWNER } from "../helpers/context.js";
-import { closeFixtureWriter, writeImage, writeMp4 } from "../helpers/media.js";
+import {
+  closeFixtureWriter,
+  writeImage,
+  writeMatroska,
+  writeMp3,
+  writeMp4,
+  writeWav,
+} from "../helpers/media.js";
 
 after(async () => {
   await closeMetadataReader();
@@ -60,7 +67,23 @@ test("formats are recognized from their bytes, not their names", () => {
   assert.equal(detectFormat(Buffer.from("GIF89a")), "gif");
   assert.equal(detectFormat(Buffer.from("RIFF\0\0\0\0WEBPVP8 ")), "webp");
   assert.equal(detectFormat(Buffer.from("\0\0\0\x18ftypmp42")), "mp4");
-  assert.equal(detectFormat(Buffer.from("\0\0\0\x18ftypqt  ")), null);
+  assert.equal(detectFormat(Buffer.from("\0\0\0\x18ftypqt  ")), "mov");
+  assert.equal(detectFormat(Buffer.from("\0\0\0\x08wide\0\0\0\0mdat")), "mov");
+  assert.equal(detectFormat(Buffer.from("\0\0\0\x1cftypM4A ")), "m4a");
+  assert.equal(detectFormat(Buffer.from("RIFF\0\0\0\0AVI LIST")), "avi");
+  assert.equal(detectFormat(Buffer.from("RIFF\0\0\0\0WAVEfmt ")), "wav");
+  assert.equal(detectFormat(Buffer.from("\x1a\x45\xdf\xa3\x9f\x42\x82\x84webm", "latin1")), "webm");
+  assert.equal(
+    detectFormat(Buffer.from("\x1a\x45\xdf\xa3\xa3\x42\x82\x88matroska", "latin1")),
+    "mkv",
+  );
+  assert.equal(detectFormat(Buffer.from("OggS\0\x02")), "ogg");
+  assert.equal(detectFormat(Buffer.from("fLaC\0\0\0\x22")), "flac");
+  assert.equal(detectFormat(Buffer.from("ID3\x04\0\0")), "mp3");
+  assert.equal(detectFormat(Buffer.from([0xff, 0xfb, 0x90, 0x64])), "mp3");
+  // AAC without a container, an unknown RIFF kind, HEIF, and HTML are refused.
+  assert.equal(detectFormat(Buffer.from([0xff, 0xf1, 0x50, 0x80])), null);
+  assert.equal(detectFormat(Buffer.from("RIFF\0\0\0\0CDXA")), null);
   assert.equal(detectFormat(Buffer.from("\0\0\0\x18ftypheic")), null);
   assert.equal(detectFormat(Buffer.from("<html>")), null);
 });
@@ -207,6 +230,47 @@ test("an MP4's container date stays local, and an offset creation date wins", as
   );
 });
 
+test("other videos and audio are kept without a preview, dated only by their own tags", async (t) => {
+  const { context } = makeArchivist(t);
+  const created = Date.UTC(2019, 6, 15, 22, 30);
+  const stage = async (name: string, write: (target: string) => void | Promise<void>) =>
+    stageMedia(context, { file: await staged(context, write), originalFilename: name });
+
+  const movie = await stage("clip.mov", (target) => writeMp4(target, created, {}, "qt  "));
+  assert.equal(movie.format, "mov");
+  assert.equal(movie.mimeType, "video/quicktime");
+  assert.equal(movie.extension, "mov");
+  assert.equal(movie.previewFile, null);
+  assert.equal(movie.readable, true);
+  assert.equal(movie.fileDate.value?.kind, "unknown_local");
+
+  const webm = await stage("clip.webm", (target) => writeMatroska(target, "webm", created));
+  assert.equal(webm.format, "webm");
+  assert.equal(webm.fileDate.sourceTag, "Info:DateTimeOriginal");
+  assert.equal(webm.fileDate.value?.kind === "instant" && webm.fileDate.value.instantMs, created);
+  const mkv = await stage("clip.mkv", (target) => writeMatroska(target, "matroska"));
+  assert.equal(mkv.format, "mkv");
+  assert.equal(mkv.fileDate.status, "absent");
+
+  const wav = await stage("memo.wav", (target) => writeWav(target, "2019-07-15"));
+  assert.equal(wav.format, "wav");
+  assert.equal(wav.mimeType, "audio/wav");
+  assert.equal(wav.previewFile, null);
+  assert.equal(wav.fileDate.tier, "creation");
+  assert.deepEqual(wav.fileDate.value, {
+    kind: "day",
+    originalText: "2019:07:15",
+    calendarDay: "2019-07-15",
+  });
+
+  // An MP3's year tag is a song's release year, not when the file was made.
+  const song = await stage("song.mp3", (target) => writeMp3(target, "2019"));
+  assert.equal(song.format, "mp3");
+  assert.equal(song.readable, true);
+  assert.ok(Object.values(song.tags).includes(2019));
+  assert.equal(song.fileDate.status, "absent");
+});
+
 test("empty, oversized, and unsupported files are refused", async (t) => {
   const { context } = makeArchivist(t);
   const empty = await staged(context, (target) => writeFileSync(target, ""));
@@ -229,9 +293,9 @@ test("empty, oversized, and unsupported files are refused", async (t) => {
     stageMedia(context, { file: text, originalFilename: "a.jpg" }),
     fails("unsupported_media_type"),
   );
-  const movie = await staged(context, (target) => writeMp4(target, 0, {}, "qt  "));
+  const heif = await staged(context, (target) => writeMp4(target, 0, {}, "heic"));
   await assert.rejects(
-    stageMedia(context, { file: movie, originalFilename: "a.mp4" }),
+    stageMedia(context, { file: heif, originalFilename: "a.heic" }),
     fails("unsupported_media_type"),
   );
 });

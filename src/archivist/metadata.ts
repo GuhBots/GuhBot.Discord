@@ -11,7 +11,21 @@ import type { DateValue } from "./dates.js";
  * was read. Timezones are never guessed from location or other tags.
  */
 
-export type MediaFormat = "jpeg" | "png" | "gif" | "webp" | "mp4";
+export type MediaFormat =
+  | "jpeg"
+  | "png"
+  | "gif"
+  | "webp"
+  | "mp4"
+  | "mov"
+  | "webm"
+  | "mkv"
+  | "avi"
+  | "mp3"
+  | "m4a"
+  | "wav"
+  | "ogg"
+  | "flac";
 
 /** Group-qualified raw tags, such as `ExifIFD:DateTimeOriginal`. */
 export type RawTags = Record<string, unknown>;
@@ -96,6 +110,32 @@ const STILL_IMAGE_FIELDS: FieldTiers = {
   ],
 };
 
+/** MP4, QuickTime, and M4A files share the QuickTime container and its tags. */
+const QUICKTIME_FIELDS: FieldTiers = {
+  capture: [
+    { tag: "XMP-exif:DateTimeOriginal" },
+    { tag: "UserData:DateTimeOriginal" },
+    { tag: "Keys:CreationDate", requireOffset: true },
+    { tag: "ItemList:CreationDate", requireOffset: true },
+  ],
+  // The movie header's date is often written in local time despite the
+  // format calling for UTC, so it stays a local value with unknown zone.
+  creation: [{ tag: "QuickTime:CreateDate" }],
+};
+
+/** AVI and WAV keep dates in RIFF chunks: a camera's original date, then the file's creation date. */
+const RIFF_FIELDS: FieldTiers = {
+  capture: [{ tag: "RIFF:DateTimeOriginal" }],
+  creation: [{ tag: "RIFF:DateCreated" }],
+};
+
+/**
+ * Formats with no accepted date tags. MP3, Ogg, and FLAC date tags hold a
+ * recording's release date or year, not when the file was made, so these
+ * files are dated by hand.
+ */
+const NO_FIELDS: FieldTiers = { capture: [], creation: [] };
+
 /** The plan's field map. PNG modification times and filesystem dates are deliberately absent. */
 const FIELDS: Record<MediaFormat, FieldTiers> = {
   jpeg: STILL_IMAGE_FIELDS,
@@ -105,17 +145,17 @@ const FIELDS: Record<MediaFormat, FieldTiers> = {
     capture: [{ tag: "XMP-exif:DateTimeOriginal" }, { tag: "XMP-photoshop:DateCreated" }],
     creation: [{ tag: "XMP-xmp:CreateDate" }],
   },
-  mp4: {
-    capture: [
-      { tag: "XMP-exif:DateTimeOriginal" },
-      { tag: "UserData:DateTimeOriginal" },
-      { tag: "Keys:CreationDate", requireOffset: true },
-      { tag: "ItemList:CreationDate", requireOffset: true },
-    ],
-    // The movie header's date is often written in local time despite the
-    // format calling for UTC, so it stays a local value with unknown zone.
-    creation: [{ tag: "QuickTime:CreateDate" }],
-  },
+  mp4: QUICKTIME_FIELDS,
+  mov: QUICKTIME_FIELDS,
+  m4a: QUICKTIME_FIELDS,
+  // Matroska stores one date, in UTC, which ExifTool reports with a Z.
+  webm: { capture: [{ tag: "Info:DateTimeOriginal" }], creation: [] },
+  mkv: { capture: [{ tag: "Info:DateTimeOriginal" }], creation: [] },
+  avi: RIFF_FIELDS,
+  wav: RIFF_FIELDS,
+  mp3: NO_FIELDS,
+  ogg: NO_FIELDS,
+  flac: NO_FIELDS,
 };
 
 export interface FileDateCandidate {

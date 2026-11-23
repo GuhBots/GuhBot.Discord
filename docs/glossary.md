@@ -14,26 +14,38 @@ Add or update definitions when terminology changes, and link to them from other 
 | API | Application programming interface |
 | ARM | A processor architecture used by the Raspberry Pi and many small devices |
 | ASCII | American Standard Code for Information Interchange, the basic Latin character set |
+| AVI | Audio Video Interleave, an older video file format |
 | CI | Continuous integration |
 | CLI | Command-line interface |
 | COVID | Coronavirus disease. The original bot had a COVID-19 statistics command |
 | CRLF | Carriage return and line feed, the line ending used by Windows |
 | ES | ECMAScript, the standard that JavaScript follows. ES modules use `import` and `export` |
+| FLAC | Free Lossless Audio Codec, an audio file format |
 | GHCR | GitHub Container Registry, where this repository publishes its images |
+| GIF | Graphics Interchange Format, an image format that can be animated |
 | HTTP | Hypertext Transfer Protocol, the protocol web browsers and servers use |
 | HTTPS | Hypertext Transfer Protocol Secure, the encrypted protocol for websites |
 | ID | Identifier |
+| JPEG | Joint Photographic Experts Group, whose standard is the common photo file format |
 | LF | Line feed, the line ending used by Linux and macOS |
 | LTS | Long-term support, a release maintained for several years |
-| MP4 | A common video file format, the only one Archivist accepts |
+| M4A | An audio file in the same container as MP4, often made by phone voice recorders |
+| MKV | Matroska video, a video file format |
+| MOV | Apple's QuickTime video file format, which iPhone cameras record |
+| MP3 | A common audio file format |
+| MP4 | A common video file format |
 | OS | Operating system |
+| PNG | Portable Network Graphics, an image file format |
 | PR | Pull request |
+| RIFF | Resource Interchange File Format, the container AVI and WAV files use |
 | SD | Secure Digital, a type of memory card |
 | SSD | Solid-state drive |
 | SSH | Secure Shell, used to log in to another machine's command line |
 | USB | Universal Serial Bus |
+| UTC | Coordinated Universal Time, the standard that timezones are measured from |
 | VS Code | Visual Studio Code, a code editor |
 | WAL | Write-ahead log, a SQLite journal mode that keeps recent changes in a separate file |
+| WAV | Waveform Audio File Format, an uncompressed audio file format |
 | WIP | Work in progress. The placeholder `/archivist` command replies with it |
 | WSL | Windows Subsystem for Linux |
 | YAML | A configuration file format, used by `compose.yaml` and the GitHub workflows |

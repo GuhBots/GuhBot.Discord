@@ -400,7 +400,7 @@ export class Archivist {
     @SlashOption(archiveOption) archive: string | undefined,
     @SlashOption({
       name: "file",
-      description: "A JPEG, PNG, WebP, GIF, or MP4 up to 100 MiB",
+      description: "An image, video, or audio file up to 100 MiB",
       type: ApplicationCommandOptionType.Attachment,
       required: false,
     })

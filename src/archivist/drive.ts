@@ -9,6 +9,7 @@ import {
   writeBody,
 } from "./download.js";
 import { ArchivistError } from "./errors.js";
+import { ACCEPTED_FORMATS_TEXT } from "./media.js";
 
 /**
  * Public Google Drive files. Contributors paste a link to a single file in
@@ -62,7 +63,7 @@ export function parseDriveLink(text: unknown): DriveLink {
   }
   if (/^\/(document|spreadsheets|presentation|forms|drawings)\//.test(path)) {
     throw linkError(
-      "Google Docs, Sheets, and Slides cannot be archived. Upload an image or video file.",
+      "Google Docs, Sheets, and Slides cannot be archived. Link an image, video, or audio file.",
     );
   }
   const fromPath = /^\/file\/d\/([^/]+)/.exec(path)?.[1];
@@ -92,7 +93,11 @@ export interface DriveClientOptions {
 }
 
 const API = "https://www.googleapis.com/drive/v3/files/";
-const ACCEPTED_TYPES = /^(image\/|video\/|application\/octet-stream$)/;
+/**
+ * Drive's own type label, checked before downloading so a document is not
+ * fetched for nothing. The file's bytes decide the real format afterward.
+ */
+const ACCEPTED_TYPES = /^(image|video|audio)\/|^application\/(octet-stream|ogg)$/;
 
 /** Google's API and download hosts, the only places a Drive request may go. */
 function isGoogleHost(host: string): boolean {
@@ -178,7 +183,7 @@ export class DriveClient {
       if (mimeType.startsWith("application/vnd.google-apps.")) {
         throw new ArchivistError(
           "invalid_input",
-          "Google Docs, Sheets, Slides, and other Google files cannot be archived. Upload an image or video file.",
+          "Google Docs, Sheets, Slides, and other Google files cannot be archived. Link an image, video, or audio file.",
           { field: "drive_link" },
         );
       }
@@ -186,7 +191,7 @@ export class DriveClient {
       if (!ACCEPTED_TYPES.test(mimeType)) {
         throw new ArchivistError(
           "unsupported_media_type",
-          "Only JPEG, PNG, WebP, GIF, and MP4 files can be archived.",
+          `Only ${ACCEPTED_FORMATS_TEXT} can be archived.`,
           { field: "drive_link" },
         );
       }

@@ -109,7 +109,7 @@ Use seven-day absolute server-side sessions in bot operational storage and provi
 
 ### Accepted Sources And Formats
 
-Accept one direct Discord attachment, one web upload, or one publicly readable Drive binary file link per submission. Accept `.jpg`, `.jpeg`, `.png`, `.webp`, `.gif`, and `.mp4`, up to 104,857,600 bytes per original. Discord's own upload limits also apply. Validate actual file format rather than trusting the name. Do not transcode originals or infer people or dates from image text automatically.
+Accept one direct Discord attachment, one web upload, or one publicly readable Drive binary file link per submission. Accept images (`.jpg`, `.jpeg`, `.png`, `.webp`, and `.gif`), videos (`.mp4`, `.mov`, `.webm`, `.mkv`, and `.avi`), and audio (`.mp3`, `.m4a`, `.wav`, `.ogg`, and `.flac`), up to 104,857,600 bytes per original. Only still images get a generated preview. Videos and audio are shown by kind and file name, and a browser that cannot play a format offers the original for download. Discord's own upload limits also apply. Validate actual file format rather than trusting the name. Do not transcode originals or infer people or dates from image text automatically.
 
 Preserve received original bytes unchanged, including embedded metadata. Generate previews separately. Preview failure uses a placeholder and does not invalidate the original. Failed original preservation creates no completed artifact or metadata-only draft. Return an actionable retry error. Temporary partial files are not archive records and are cleaned after failure or expiry.
 
@@ -316,7 +316,10 @@ Read raw metadata tags using ExifTool without changing originals or inferring ti
 | --- | --- | --- |
 | `.jpg`, `.jpeg`, `.png`, and `.webp` | Embedded `DateTimeOriginal`, including matching subsecond and original-offset tags, or embedded `DateCreated` | Embedded `CreateDate` with its own matching offset, then a valid embedded creation-time field |
 | `.gif` | A recognized embedded original-capture tag if actually present | A recognized embedded creation tag if present, otherwise unknown |
-| `.mp4` | Embedded `DateTimeOriginal` or offset-bearing media `CreationDate` | Embedded container `CreateDate`, preserving unknown timezone when the source field does not establish one |
+| `.mp4`, `.mov`, and `.m4a` | Embedded `DateTimeOriginal` or offset-bearing media `CreationDate` | Embedded container `CreateDate`, preserving unknown timezone when the source field does not establish one |
+| `.webm` and `.mkv` | Matroska `DateUTC`, which is in UTC by definition | None |
+| `.avi` and `.wav` | RIFF `DateTimeOriginal` | RIFF `DateCreated` (the `ICRD` chunk) |
+| `.mp3`, `.ogg`, and `.flac` | None, because their date tags hold a recording's release date or year | None |
 
 Retain group-qualified raw tag names and values in `metadata_json`. Do not combine an offset from one metadata field with another field's date. If a library normalizes dates, retain raw values so its interpretation can be checked. A known source-standard offset may be used only with that field's documented basis. Malformed dates, same-priority conflicts, and absent dates remain unknown pending explicit correction. Manual historical dates continue to override the metadata default.
 
@@ -1025,6 +1028,7 @@ The owner's accepted batches A through F are reconciled here. Later clarificatio
 | Main accounts | Characters have a dated main-account history, and their pictures follow it along the timeline |
 | Discord intake | Comma-separated people with autocomplete, separate exact and estimate date fields, a private reply with Edit, Add people, Someone unidentified, and Delete, short IDs, and tick-to-apply duplicate review |
 | Typed dates | Common written forms are accepted. Each person chooses year-month-day, month-day-year, or day-month-year for all-number dates, defaulting to year-month-day. Dates display with month names for everyone |
+| Formats | Images, videos, and audio are accepted: JPEG, PNG, WebP, GIF, MP4, MOV, WebM, MKV, AVI, MP3, M4A, WAV, Ogg, and FLAC |
 | Exact-date basis | Exact dates need no written basis, for artifacts and events. Only estimates need a reason. Archive schema version 2 removes the basis requirement and keeps earlier values |
 
 The earlier `Q01` through `Q19` topic discussion is resolved into the contract sections rather than retained as a competing open-question table. Accepted request and announcement clarifications are incorporated. The rows from archive selection through the end of the table record owner clarifications from 2026-11-23, including the test-server rehearsal feedback. If a final review changes a rule, update its contract, schema, interfaces, and acceptance fixture together.
