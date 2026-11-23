@@ -3,6 +3,7 @@ import type { Actor, ArchivistContext } from "./context.js";
 import { type DateValue, parseDateInput, parseDayInput } from "./dates.js";
 import { insertDate, pruneDates, readDate, type StoredDate } from "./date-store.js";
 import type { FieldChange } from "./edit-log.js";
+import { cardsOf, syncGaps } from "./board.js";
 import { ArchivistError } from "./errors.js";
 import { discordId, newId, requiredText, TEXT_LIMITS, timestamp } from "./fields.js";
 import { insertMediaRow, mediaPaths, placeStagedMedia, type StagedMedia } from "./media.js";
@@ -460,6 +461,7 @@ export function createArtifact(
         exactId ?? estimateId ?? fileId,
       );
       insertLinks(db, artifactId, links);
+      syncGaps(db, now, actor.userId);
     },
     append: [logEntry(context, actor, "artifact", artifactId, changes)],
   });
@@ -653,6 +655,7 @@ export function updateArtifact(
       }
       insertLinks(db, id, additions);
       pruneDates(db);
+      syncGaps(db, now, actor.userId);
     },
     append: [logEntry(context, actor, "artifact", id, changes)],
   });
@@ -705,6 +708,7 @@ export function deleteArtifact(
       );
       for (const request of reopened) reopen.run(now, request.id);
       pruneDates(db);
+      syncGaps(db, now, actor.userId);
     },
     append: reopened.map((request) =>
       logEntry(context, actor, "request", request.id, {
@@ -712,7 +716,10 @@ export function deleteArtifact(
         foundArtifacts: { old: [id], new: [] },
       }),
     ),
-    removeRecords: [{ record: "artifact", id }],
+    removeRecords: [
+      { record: "artifact", id },
+      ...cardsOf(store.db, "artifact", id).map((card) => ({ record: "gap", id: card })),
+    ],
   });
 }
 

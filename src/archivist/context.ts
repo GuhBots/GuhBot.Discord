@@ -2,8 +2,9 @@ import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type Database from "better-sqlite3";
 import { openArchiveDatabase } from "./archive-database.js";
+import { SYSTEM_EDITOR, syncGaps } from "./board.js";
 import { ArchivistError } from "./errors.js";
-import { nameKey } from "./fields.js";
+import { nameKey, timestamp } from "./fields.js";
 import {
   type ArchiveStore,
   type FollowUp,
@@ -101,6 +102,9 @@ export function openStore(context: ArchivistContext, archiveId: string): Archive
   };
   try {
     recoverPendingMutation(store, mutationHooks(context));
+    // Archives from before the research board, or edited elsewhere, get
+    // their derived gap cards in line before anyone reads them.
+    store.db.transaction(() => syncGaps(store.db, timestamp(context.now()), SYSTEM_EDITOR))();
   } catch (error) {
     store.db.close();
     throw error;

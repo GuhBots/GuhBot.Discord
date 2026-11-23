@@ -1,5 +1,6 @@
 import type { Actor, ArchivistContext } from "./context.js";
 import { dayText, parseDayInput } from "./dates.js";
+import { cardsOf, syncGaps } from "./board.js";
 import { pruneDates } from "./date-store.js";
 import { getDateOrder } from "./preferences.js";
 import { ArchivistError } from "./errors.js";
@@ -354,6 +355,7 @@ export function createAccount(
         `INSERT INTO accounts (id, created_at, created_by, updated_at, discord_id, kind, label, character_id)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(id, now, by, now, accountDiscordId, kind, label, characterId);
+      syncGaps(db, now, by);
     },
     append: [
       logEntry(context, actor, "account", id, {
@@ -412,13 +414,16 @@ export function deleteEntity(
       { record: kind, id, references: blockers },
     );
   }
+  const cards = kind === "channel" ? [] : cardsOf(store.db, kind, id);
+  const now = timestamp(context.now());
   commitMutation(store, {
     expectations: [{ table, id, state: "absent" }],
     apply(db) {
       db.prepare(`DELETE FROM ${table} WHERE id = ?`).run(id);
       pruneDates(db);
+      syncGaps(db, now, actor.userId);
     },
-    removeRecords: [{ record: kind, id }],
+    removeRecords: [{ record: kind, id }, ...cards.map((card) => ({ record: "gap", id: card }))],
   });
 }
 
@@ -612,6 +617,7 @@ export function updateEntity(
             `UPDATE ${table} SET ${set}, version = version + 1, updated_at = @now WHERE id = @id AND version = @version`,
           )
           .run({ ...after, now, id, version: row.version });
+        syncGaps(target, now, actor.userId);
       },
       append: [logEntry(context, actor, kind, id, changes)],
     });
