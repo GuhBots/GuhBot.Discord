@@ -26,6 +26,7 @@ Archivist is being built in milestones. This directory currently holds storage, 
 | `date-store.ts` | Stores immutable date rows and removes rows nothing refers to |
 | `artifacts.ts` | Creating, reading, editing, and deleting artifacts, with date precedence, source uniqueness, and links |
 | `entities.ts` | Creating, editing, and deleting characters, accounts, servers, and channels, with stale-edit checks and reference blockers |
+| `history.ts` | Dated history edited through its parent record (aliases, names, avatars, icons, main accounts, ownership, bot owners, memberships, server owners, introductions), and lookups of what applied on a day, such as a character's picture |
 | `palette.ts` | Colors assigned to new servers, channels, and events |
 | `download.ts` | Bounded downloads with size, stall, and overall limits, allowed-host redirects, and retries |
 | `drive.ts` | Public Google Drive links: parsing, metadata checks, and binary downloads, directly or through the Drive API when a key is set |

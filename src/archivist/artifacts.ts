@@ -5,7 +5,7 @@ import { insertDate, pruneDates, readDate, type StoredDate } from "./date-store.
 import type { FieldChange } from "./edit-log.js";
 import { ArchivistError } from "./errors.js";
 import { discordId, newId, requiredText, TEXT_LIMITS, timestamp } from "./fields.js";
-import { mediaPaths, placeStagedMedia, type StagedMedia } from "./media.js";
+import { insertMediaRow, mediaPaths, placeStagedMedia, type StagedMedia } from "./media.js";
 import { commitMutation, type Expectation } from "./mutations.js";
 import { resolveShortId } from "./people.js";
 import { getDateOrder, inputTimeZone } from "./preferences.js";
@@ -429,20 +429,7 @@ export function createArtifact(
     newFiles: [paths.original, ...(paths.preview ? [paths.preview] : [])],
     placeFiles: () => placeStagedMedia(store.folder, media, paths),
     apply(db) {
-      db.prepare(
-        `INSERT INTO media (id, original_path, preview_path, original_filename, mime_type, byte_length, sha256, metadata_json, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run(
-        mediaId,
-        paths.original,
-        paths.preview,
-        media.originalFilename,
-        media.mimeType,
-        media.byteLength,
-        media.sha256,
-        JSON.stringify({ tags: media.tags, fileDate: media.fileDate, readable: media.readable }),
-        now,
-      );
+      insertMediaRow(db, mediaId, paths, media, now);
       const exactId = exact ? insertDate(db, exact.value, timezone) : null;
       const estimateId = estimate ? insertDate(db, estimate.value, timezone) : null;
       const fileId = media.fileDate.value ? insertDate(db, media.fileDate.value, timezone) : null;

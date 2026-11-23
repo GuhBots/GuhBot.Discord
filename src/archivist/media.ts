@@ -282,6 +282,38 @@ export async function stageMedia(
   };
 }
 
+/**
+ * Records a staged file in the `media` table. Runs inside the mutation that
+ * also places the file with `placeStagedMedia`.
+ */
+export function insertMediaRow(
+  db: import("better-sqlite3").Database,
+  mediaId: string,
+  paths: { original: string; preview: string | null },
+  media: StagedMedia,
+  createdAt: string,
+): void {
+  db.prepare(
+    `INSERT INTO media (id, original_path, preview_path, original_filename, mime_type, byte_length, sha256, metadata_json, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    mediaId,
+    paths.original,
+    paths.preview,
+    media.originalFilename,
+    media.mimeType,
+    media.byteLength,
+    media.sha256,
+    JSON.stringify({ tags: media.tags, fileDate: media.fileDate, readable: media.readable }),
+    createdAt,
+  );
+}
+
+/** Whether a staged file is a still image, as avatars, icons, and pictures must be. */
+export function isImage(media: StagedMedia): boolean {
+  return IMAGE_FORMATS.has(media.format);
+}
+
 /** Where a media record's files live, relative to its archive folder. */
 export function mediaPaths(mediaId: string, extension: string, hasPreview: boolean) {
   return {
