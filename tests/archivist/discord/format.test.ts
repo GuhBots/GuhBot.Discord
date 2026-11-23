@@ -1,13 +1,11 @@
 import assert from "node:assert/strict";
 import { mock, test } from "node:test";
 import type { ArtifactDetails } from "../../../src/archivist/artifacts.js";
-import type { GapCard } from "../../../src/archivist/board.js";
 import type { EventDetails } from "../../../src/archivist/events.js";
 import type { RequestDetails } from "../../../src/archivist/requests.js";
 import { ArchivistError } from "../../../src/archivist/errors.js";
 import {
   artifactEmbed,
-  boardLine,
   dateText,
   differenceOption,
   EMBED_DESCRIPTION_LIMIT,
@@ -16,7 +14,6 @@ import {
   interpretationNote,
   peopleText,
   requestEmbed,
-  requestLine,
   selectedDateText,
 } from "../../../src/lib/archivist-format.js";
 import { PENDING_LIFETIME_MS, recall, remember } from "../../../src/lib/archivist-pending.js";
@@ -271,7 +268,7 @@ test("events say what their range means, and say when nothing supports them", ()
   assert.equal(embed.color, 0xeb459e);
 });
 
-test("requests and board cards read as plain lines with the IDs to act on", () => {
+test("a request shows its bucket and the reason it cannot be found", () => {
   const request: RequestDetails = {
     id: "5d6e7f80-0000-4000-8000-000000000000",
     version: 2,
@@ -291,32 +288,10 @@ test("requests and board cards read as plain lines with the IDs to act on", () =
     events: [],
     foundArtifacts: [],
   };
-  assert.equal(
-    requestLine(request),
-    '**MEDIUM** Missing media: Photos from the first meetup - Before "Summer season" (it starts Jun 1, 2020) (request `5d6e7f80`)',
-  );
   const fields = Object.fromEntries(
     requestEmbed(request, { archiveName: "History", peopleNames: ["Sam"], eventNames: [] })
       .toJSON()
       .fields!.map((field) => [field.name, field.value]),
   );
   assert.equal(fields.Status, "Unrecoverable: Nobody kept them.");
-  const card: GapCard = {
-    id: "1a2b3c4d-0000-4000-8000-000000000000",
-    version: 1,
-    kind: "date_research",
-    status: "needed",
-    priority: "medium",
-    subject: { kind: "artifact", id: "a1", label: "Road trip\nphoto" },
-    field: "date",
-    reason: "The phone's clock was wrong.",
-    createdAt: "2026-11-20T00:00:00.000Z",
-    createdBy: "200000000000000002",
-    updatedAt: "2026-11-20T00:00:00.000Z",
-    derived: false,
-  };
-  assert.equal(
-    boardLine(card),
-    "**MEDIUM** Check the date: The phone's clock was wrong. - Road trip photo (card `1a2b3c4d`)",
-  );
 });

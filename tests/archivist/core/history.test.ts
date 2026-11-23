@@ -10,6 +10,7 @@ import {
   createChannel,
   createCharacter,
   createServer,
+  assertEntityDeletable,
   deleteEntity,
   entityBlockers,
 } from "../../../src/archivist/entities.js";
@@ -429,6 +430,12 @@ test("memberships, owners, and introductions link records and block their deleti
     "bot owner records": 1,
     introductions: 1,
   });
+  assert.throws(
+    () => assertEntityDeletable(db, "character", sam.id),
+    (error: unknown) =>
+      fails("reference_blocked")(error) &&
+      /1 bot owner records, 1 introductions/.test((error as Error).message),
+  );
 
   // Owned history goes with its parent once the links are gone.
   removeHistory(context, MEMBER, {

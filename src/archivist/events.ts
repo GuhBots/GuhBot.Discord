@@ -489,6 +489,26 @@ export function updateEvent(
 }
 
 /**
+ * Refuses deleting an event that a missing-media request uses as its date.
+ * Discord runs this before asking for confirmation, so a blocked delete is
+ * refused before the Delete permanently button appears.
+ */
+export function assertEventDeletable(db: Database.Database, id: string): void {
+  const anchored = (
+    db.prepare("SELECT count(*) AS n FROM research_requests WHERE anchor_event_id = ?").get(id) as {
+      n: number;
+    }
+  ).n;
+  if (anchored > 0) {
+    throw new ArchivistError(
+      "reference_blocked",
+      `${anchored} missing-media request${anchored === 1 ? " uses" : "s use"} this event as ${anchored === 1 ? "its" : "their"} date. Give ${anchored === 1 ? "it" : "them"} another date first.`,
+      { record: "event", id, references: { "missing-media requests": anchored } },
+    );
+  }
+}
+
+/**
  * Permanently deletes an event. Its links and gap cards go with it, and the
  * artifacts that supported it stay. A missing-media request that uses the
  * event as its date blocks deletion until that request's date is replaced.
@@ -506,18 +526,7 @@ export function deleteEvent(
     { version: number } | undefined;
   if (!row) throw notFoundRecord("event");
   if (row.version !== expectedVersion) throw staleVersion("event", id, row.version, {});
-  const anchored = (
-    db.prepare("SELECT count(*) AS n FROM research_requests WHERE anchor_event_id = ?").get(id) as {
-      n: number;
-    }
-  ).n;
-  if (anchored > 0) {
-    throw new ArchivistError(
-      "reference_blocked",
-      `${anchored} missing-media request${anchored === 1 ? " uses" : "s use"} this event as ${anchored === 1 ? "its" : "their"} date. Give ${anchored === 1 ? "it" : "them"} another date first.`,
-      { record: "event", id, references: { "missing-media requests": anchored } },
-    );
-  }
+  assertEventDeletable(db, id);
   const now = timestamp(context.now());
   commitMutation(store, {
     expectations: [{ table: "events", id, state: "absent" }],

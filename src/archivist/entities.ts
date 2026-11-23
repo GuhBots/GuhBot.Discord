@@ -386,6 +386,28 @@ export function entityBlockers(
 }
 
 /**
+ * Refuses deleting an entity that something still links to, naming what.
+ * Discord runs this before asking for confirmation, so a blocked delete is
+ * refused before the Delete permanently button appears.
+ */
+export function assertEntityDeletable(
+  db: import("better-sqlite3").Database,
+  kind: EntityKind,
+  id: string,
+): void {
+  const blockers = entityBlockers(db, kind, id);
+  if (Object.keys(blockers).length === 0) return;
+  const summary = Object.entries(blockers)
+    .map(([label, count]) => `${count} ${label}`)
+    .join(", ");
+  throw new ArchivistError(
+    "reference_blocked",
+    `This ${kind} is still linked from ${summary}. Remove those links first.`,
+    { record: kind, id, references: blockers },
+  );
+}
+
+/**
  * Permanently deletes an entity once nothing links to it. Its own history and
  * its own edit-log lines go with it. There is no trash or deletion log.
  */
@@ -403,17 +425,7 @@ export function deleteEntity(
     { version: number } | undefined;
   if (!row) throw notFoundRecord(kind);
   if (row.version !== expectedVersion) throw staleVersion(kind, id, row.version, {});
-  const blockers = entityBlockers(store.db, kind, id);
-  if (Object.keys(blockers).length > 0) {
-    const summary = Object.entries(blockers)
-      .map(([label, count]) => `${count} ${label}`)
-      .join(", ");
-    throw new ArchivistError(
-      "reference_blocked",
-      `This ${kind} is still linked from ${summary}. Remove those links first.`,
-      { record: kind, id, references: blockers },
-    );
-  }
+  assertEntityDeletable(store.db, kind, id);
   const cards = kind === "channel" ? [] : cardsOf(store.db, kind, id);
   const now = timestamp(context.now());
   commitMutation(store, {

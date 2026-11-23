@@ -2,7 +2,6 @@ import { EmbedBuilder } from "discord.js";
 import type { ArtifactDetails, DuplicateDifference } from "../archivist/artifacts.js";
 import { dayText, localDateTime, localText } from "../archivist/dates.js";
 import type { StoredDate } from "../archivist/date-store.js";
-import type { GapCard } from "../archivist/board.js";
 import type { EntityDetails } from "../archivist/entities.js";
 import type { EventDetails } from "../archivist/events.js";
 import type { RequestDetails } from "../archivist/requests.js";
@@ -253,26 +252,4 @@ export function requestEmbed(
   if (request.researchNotes)
     embed.addFields({ name: "Notes", value: shorten(request.researchNotes, FIELD_LIMIT) });
   return embed;
-}
-
-/** What each kind of board card is about, as people read it. */
-export const CARD_KINDS: Record<GapCard["kind"], string> = {
-  unreadable_media: "Unreadable file",
-  missing_people: "Someone unidentified",
-  account_character: "Account without a character",
-  undated: "No date",
-  missing_evidence: "Event without evidence",
-  date_research: "Check the date",
-  custom: "Research",
-};
-
-/** One line of the board: priority in words, what is missing, the record, and the IDs to act on. */
-export function boardLine(card: GapCard): string {
-  const reason = card.reason ? `: ${shorten(card.reason.replace(/\s+/g, " "), 80)}` : "";
-  return `**${card.priority.toUpperCase()}** ${CARD_KINDS[card.kind]}${reason} - ${shorten(card.subject.label.replace(/\s+/g, " "), 60)} (card \`${card.id.slice(0, 8)}\`)`;
-}
-
-/** One line for a request in the board list. */
-export function requestLine(request: RequestDetails): string {
-  return `**${request.priority.toUpperCase()}** Missing media: ${shorten(request.label, 60)} - ${shorten(request.wording, 60)} (request \`${request.id.slice(0, 8)}\`)`;
 }

@@ -65,13 +65,9 @@ import {
 import {
   askDeleteEvent,
   askDeleteEventButton,
-  backlogFlagCommand,
-  backlogListCommand,
-  backlogUpdateCommand,
   confirmDeleteEvent,
   createEventFromCommand,
   createRequestFromCommand,
-  moveRequestCommand,
   openEventEdit,
   openRequestEdit,
   showEventCommand,
@@ -80,9 +76,7 @@ import {
   showRequestForm,
   submitEventForm,
   submitRequestForm,
-  suggestCardIds,
   suggestEventIds,
-  suggestRecordIds,
   suggestRequestIds,
 } from "../lib/archivist-research.js";
 import {
@@ -298,7 +292,6 @@ function contributorCommands(
   @SlashGroup({ name: "entity", description: "People, accounts, servers, and channels", root })
   @SlashGroup({ name: "event", description: "Things that happened", root })
   @SlashGroup({ name: "request", description: "Media the archive is missing", root })
-  @SlashGroup({ name: "backlog", description: "The research board", root })
   class ArchivistCommands {
     @Slash({ name: "list", description: "List the archives you can use", ...GUILD_ONLY })
     @SlashGroup("archive", root)
@@ -1030,197 +1023,6 @@ function contributorCommands(
         const request = getRequest(archivist(), actor, { archiveId: selected.archiveId, id });
         await showRequestForm(interaction, selected.archiveId, request.id, request.version);
       });
-    }
-
-    @Slash({ name: "resolve", description: "Mark a request found, linking where", ...GUILD_ONLY })
-    @SlashGroup("request", root)
-    @Guard(Cooldown(3))
-    async requestResolve(
-      @SlashOption(requestIdOption) id: string,
-      @SlashOption({
-        name: "artifact",
-        description: "The artifact that has it",
-        type: ApplicationCommandOptionType.String,
-        required: true,
-        autocomplete: suggestArtifactIds,
-      })
-      artifact: string,
-      @SlashOption(archiveOption) archive: string | undefined,
-      interaction: CommandInteraction,
-    ): Promise<void> {
-      await runArchivist(interaction, () =>
-        moveRequestCommand(interaction, { archive, id, status: "resolved", artifact }),
-      );
-    }
-
-    @Slash({
-      name: "unrecoverable",
-      description: "Mark a request as unlikely to be found",
-      ...GUILD_ONLY,
-    })
-    @SlashGroup("request", root)
-    @Guard(Cooldown(3))
-    async requestUnrecoverable(
-      @SlashOption(requestIdOption) id: string,
-      @SlashOption({
-        name: "reason",
-        description: "Why it cannot be found",
-        type: ApplicationCommandOptionType.String,
-        required: true,
-        maxLength: 4000,
-      })
-      reason: string,
-      @SlashOption(archiveOption) archive: string | undefined,
-      interaction: CommandInteraction,
-    ): Promise<void> {
-      await runArchivist(interaction, () =>
-        moveRequestCommand(interaction, { archive, id, status: "unrecoverable", reason }),
-      );
-    }
-
-    @Slash({ name: "reopen", description: "Move a request back to Needed", ...GUILD_ONLY })
-    @SlashGroup("request", root)
-    @Guard(Cooldown(3))
-    async requestReopen(
-      @SlashOption(requestIdOption) id: string,
-      @SlashOption(archiveOption) archive: string | undefined,
-      interaction: CommandInteraction,
-    ): Promise<void> {
-      await runArchivist(interaction, () =>
-        moveRequestCommand(interaction, { archive, id, status: "needed" }),
-      );
-    }
-
-    @Slash({ name: "list", description: "Show the research board", ...GUILD_ONLY })
-    @SlashGroup("backlog", root)
-    @Guard(Cooldown(3))
-    async backlogList(
-      @SlashChoice(
-        { name: "Needed", value: "needed" },
-        { name: "Resolved", value: "resolved" },
-        { name: "Unrecoverable", value: "unrecoverable" },
-      )
-      @SlashOption({
-        name: "show",
-        description: "Which bucket. Needed if empty",
-        type: ApplicationCommandOptionType.String,
-        required: false,
-      })
-      show: string | undefined,
-      @SlashChoice(
-        { name: "Missing media only", value: "requests" },
-        { name: "Gaps only", value: "gaps" },
-      )
-      @SlashOption({
-        name: "only",
-        description: "Show only missing-media requests or only gaps",
-        type: ApplicationCommandOptionType.String,
-        required: false,
-      })
-      only: string | undefined,
-      @SlashOption(archiveOption) archive: string | undefined,
-      interaction: CommandInteraction,
-    ): Promise<void> {
-      await runArchivist(interaction, () =>
-        backlogListCommand(interaction, { archive, show, only }),
-      );
-    }
-
-    @Slash({
-      name: "flag",
-      description: "Put a date or a question on the research board",
-      ...GUILD_ONLY,
-    })
-    @SlashGroup("backlog", root)
-    @Guard(Cooldown(3))
-    async backlogFlag(
-      @SlashChoice(
-        { name: "Check an artifact's date", value: "date_research" },
-        { name: "Other research", value: "custom" },
-      )
-      @SlashOption({
-        name: "kind",
-        description: "What needs research",
-        type: ApplicationCommandOptionType.String,
-        required: true,
-      })
-      kind: string,
-      @SlashOption({
-        name: "record",
-        description: "The record it is about",
-        type: ApplicationCommandOptionType.String,
-        required: true,
-        autocomplete: suggestRecordIds,
-      })
-      record: string,
-      @SlashOption({
-        name: "reason",
-        description: "What is wrong or what to find out",
-        type: ApplicationCommandOptionType.String,
-        required: true,
-        maxLength: 4000,
-      })
-      reason: string,
-      @SlashChoice(
-        { name: "Artifact", value: "artifact" },
-        { name: "Character", value: "character" },
-        { name: "Account", value: "account" },
-        { name: "Server", value: "server" },
-        { name: "Event", value: "event" },
-      )
-      @SlashOption({
-        name: "record_kind",
-        description: "For other research: what kind of record. Artifact if empty",
-        type: ApplicationCommandOptionType.String,
-        required: false,
-      })
-      recordKind: string | undefined,
-      @SlashOption(archiveOption) archive: string | undefined,
-      interaction: CommandInteraction,
-    ): Promise<void> {
-      await runArchivist(interaction, () =>
-        backlogFlagCommand(interaction, { archive, kind, recordKind, record, reason }),
-      );
-    }
-
-    @Slash({ name: "update", description: "Move a board card between buckets", ...GUILD_ONLY })
-    @SlashGroup("backlog", root)
-    @Guard(Cooldown(3))
-    async backlogUpdate(
-      @SlashOption({
-        name: "card",
-        description: "The card, by what it is about",
-        type: ApplicationCommandOptionType.String,
-        required: true,
-        autocomplete: suggestCardIds,
-      })
-      card: string,
-      @SlashChoice(
-        { name: "Needed", value: "needed" },
-        { name: "Resolved", value: "resolved" },
-        { name: "Unrecoverable", value: "unrecoverable" },
-      )
-      @SlashOption({
-        name: "status",
-        description: "Where it goes",
-        type: ApplicationCommandOptionType.String,
-        required: true,
-      })
-      status: string,
-      @SlashOption({
-        name: "reason",
-        description: "Needed for Unrecoverable",
-        type: ApplicationCommandOptionType.String,
-        required: false,
-        maxLength: 4000,
-      })
-      reason: string | undefined,
-      @SlashOption(archiveOption) archive: string | undefined,
-      interaction: CommandInteraction,
-    ): Promise<void> {
-      await runArchivist(interaction, () =>
-        backlogUpdateCommand(interaction, { archive, card, status, reason }),
-      );
     }
   }
   return ArchivistCommands;

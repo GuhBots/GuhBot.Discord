@@ -19,7 +19,13 @@ import {
   updateEntity,
 } from "../../../src/archivist/entities.js";
 import { ArchivistError, type ErrorCode } from "../../../src/archivist/errors.js";
-import { createEvent, deleteEvent, getEvent, updateEvent } from "../../../src/archivist/events.js";
+import {
+  assertEventDeletable,
+  createEvent,
+  deleteEvent,
+  getEvent,
+  updateEvent,
+} from "../../../src/archivist/events.js";
 import { createStagingFolder, stageMedia } from "../../../src/archivist/media.js";
 import { addMember } from "../../../src/archivist/members.js";
 import { closeMetadataReader } from "../../../src/archivist/metadata.js";
@@ -248,7 +254,7 @@ test("an event without evidence gets a card that clears and reopens with its lin
 });
 
 test("missing-media requests take each temporal form, and event anchors follow corrections", (t) => {
-  const { context, archiveId, sam, lee } = setup(t);
+  const { context, archiveId, db, sam, lee } = setup(t);
   const season = createEvent(context, MEMBER, {
     archiveId,
     title: "Summer season",
@@ -331,6 +337,8 @@ test("missing-media requests take each temporal form, and event anchors follow c
       fails("reference_blocked")(error) &&
       (error as ArchivistError).details.references !== undefined,
   );
+  // Discord runs the same check before showing the confirmation button.
+  assert.throws(() => assertEventDeletable(db(), season.id), fails("reference_blocked"));
   updateRequest(context, MEMBER, {
     archiveId,
     id: before.id,

@@ -89,22 +89,18 @@ Archivist is being built in milestones. These commands exist so far.
 | `/archivist entity create <kind> <name> [...] [archive]` | None | Adds a character, account, server, or channel. Optional fields apply to one kind each, such as `birth_day` for characters or `server` for channels |
 | `/archivist entity show <kind> <id> [archive]` | None | Shows a character, account, server, or channel. Suggests them by name |
 | `/archivist entity edit <kind> <id> [archive]` | None | Opens a form for the record's own fields: names, Discord ID, linked character, account kind, or lane color. Show and create replies have an Edit button too. Dated history and merging characters are on the website |
-| `/archivist entity delete <kind> <id> [archive]` | None | Deletes permanently once nothing links to it, or says what still does |
+| `/archivist entity delete <kind> <id> [archive]` | None | Says what still links to it and stops, or asks for confirmation and deletes permanently |
 | `/archivist event create <title> <description> <kind> <start> [end] [certainty] [people] [server] [channel] [color] [archive]` | None | Records something that happened: one day, a range it lasted, or a range it happened sometime in. No evidence or explanation is needed. The strip color is picked for you if left empty |
 | `/archivist event show <id> [archive]` | None | Shows an event with its Edit and Delete buttons. Suggests events by title |
 | `/archivist event edit <id> [kind] [certainty] [archive]` | None | Opens a form for the title, description, dates, and a disputed reason. `kind` and `certainty` change the kind of date |
-| `/archivist event delete <id> [archive]` | None | Asks for confirmation, then deletes permanently. Refused while a missing-media request uses the event as its date |
+| `/archivist event delete <id> [archive]` | None | Asks for confirmation, then deletes permanently. While a missing-media request uses the event as its date, it is refused before the confirmation |
 | `/archivist request create <description> <people> <when> [day] [start] [end] [event] [notes] [archive]` | None | Puts missing media on the research board. `when` is around a day, between two days, before a day, or before or after an event. Requests tied to an event follow it if its dates are corrected |
 | `/archivist request show <id> [archive]` | None | Shows a request with an Edit button |
 | `/archivist request edit <id> [archive]` | None | Opens a form for the description and research notes |
-| `/archivist request resolve <id> <artifact> [archive]` | None | Marks it found, linking the artifact that has it |
-| `/archivist request unrecoverable <id> <reason> [archive]` | None | Marks it as unlikely to be found. It can be reopened later |
-| `/archivist request reopen <id> [archive]` | None | Moves it back to Needed, keeping its description and date |
-| `/archivist backlog list [show] [only] [archive]` | None | Shows the research board: missing-media requests and gaps such as unreadable files, unidentified people, accounts without a character, undated artifacts, and events without evidence. Nobody is assigned anything |
-| `/archivist backlog flag <kind> <record> <reason> [record_kind] [archive]` | None | Asks for research: checking an artifact's date, or another question about a record |
-| `/archivist backlog update <card> <status> [reason] [archive]` | None | Moves a card between Needed, Resolved, and Unrecoverable. Gaps such as a missing date resolve by themselves when the information is added |
 | `/set-artifact-logs-channel [channel] [archive]` | None | Announces every new artifact in the archive in a channel, this one by default. The bot must be able to post embeds and files there |
 | `/remove-artifact-logs-channel [archive]` | None | Stops future announcements. Earlier posts stay |
+
+Discord is for adding to an archive quickly. The research board, and moving missing-media requests between Needed, Resolved, and Unrecoverable, are not Discord commands. The plan puts them on the website, which is not built yet. Board gaps such as a missing date or an account without a character resolve by themselves when the information is added.
 
 `/a` is a short name for `/archivist` with the same commands, such as `/a artifact add`. /help lists them once, under `/archivist`.
 

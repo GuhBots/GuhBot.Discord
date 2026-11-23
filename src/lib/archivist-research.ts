@@ -5,7 +5,6 @@ import {
   type ButtonInteraction,
   ButtonStyle,
   type CommandInteraction,
-  EmbedBuilder,
   type InteractionReplyOptions,
   MessageFlags,
   ModalBuilder,
@@ -15,15 +14,9 @@ import {
 } from "discord.js";
 import { registeredArchive } from "../archivist/access.js";
 import { archiveDetails } from "../archivist/archives.js";
-import {
-  flagForResearch,
-  type GapKind,
-  type GapStatus,
-  listGapCards,
-  updateGapCard,
-} from "../archivist/board.js";
 import { type ArchivistContext, openStore } from "../archivist/context.js";
 import {
+  assertEventDeletable,
   createEvent,
   deleteEvent,
   type EventDateKind,
@@ -38,36 +31,22 @@ import {
   type ConstraintInput,
   createRequest,
   getRequest,
-  listRequests,
   type RequestDetails,
-  type RequestStatus,
   updateRequest,
 } from "../archivist/requests.js";
-import {
-  searchArtifacts,
-  searchEntities,
-  searchEvents,
-  searchRequests,
-} from "../archivist/search.js";
+import { searchEvents, searchRequests } from "../archivist/search.js";
 import { actorOf, archivist } from "./archivist.js";
 import { typedArchive } from "./archivist-entities.js";
-import {
-  ARCHIVIST_COLOR,
-  boardLine,
-  eventEmbed,
-  requestEmbed,
-  requestLine,
-  shorten,
-} from "./archivist-format.js";
+import { eventEmbed, requestEmbed, shorten } from "./archivist-format.js";
 
 /**
- * Discord handlers for events, missing-media requests, and the research
- * board. Dated history and character merge are website-only, by the owner's
- * decision of 2026-11-23.
+ * Discord handlers for events and missing-media requests. Discord is for
+ * quick additions, so the research board, moving requests between buckets,
+ * dated history, and character merge are on the website only, by the
+ * owner's decisions of 2026-11-23.
  */
 
 const ephemeral = { flags: MessageFlags.Ephemeral } as const;
-const BOARD_LINES = 20;
 
 function archiveName(context: ArchivistContext, archiveId: string): string {
   return registeredArchive(context, archiveId)?.name ?? "the archive";
@@ -340,6 +319,7 @@ export async function askDeleteEvent(
   version: number,
 ): Promise<void> {
   const event = getEvent(archivist(), await actorOf(interaction), { archiveId, id: eventId });
+  assertEventDeletable(openStore(archivist(), archiveId).db, event.id);
   await interaction.reply({
     ...ephemeral,
     content:
@@ -536,134 +516,6 @@ export async function submitRequestForm(interaction: ModalSubmitInteraction): Pr
   });
 }
 
-/**
- * Moves a request between buckets from a command. The command states the
- * outcome, so it applies to the request as it is now, and the reply shows
- * the result.
- */
-export async function moveRequestCommand(
-  interaction: CommandInteraction,
-  options: {
-    archive?: string;
-    id: string;
-    status: RequestStatus;
-    artifact?: string;
-    reason?: string;
-  },
-): Promise<void> {
-  const context = archivist();
-  const actor = await actorOf(interaction);
-  const archive = resolveArchiveSelection(context, actor, options.archive);
-  const current = getRequest(context, actor, { archiveId: archive.archiveId, id: options.id });
-  const db = openStore(context, archive.archiveId).db;
-  const updated = updateRequest(context, actor, {
-    archiveId: archive.archiveId,
-    id: current.id,
-    expectedVersion: current.version,
-    status: options.status,
-    foundArtifacts: options.artifact
-      ? [resolveShortId(db, "artifacts", options.artifact, "artifact")]
-      : undefined,
-    unrecoverableReason: options.reason,
-  });
-  const headline = {
-    needed: "Moved back to Needed. Its description and date are unchanged.",
-    resolved: "Marked resolved.",
-    unrecoverable: "Moved to Unrecoverable. It can be reopened if it turns up.",
-  }[updated.status];
-  await interaction.reply({
-    ...ephemeral,
-    ...requestReply(context, archive.archiveId, updated, headline),
-  });
-}
-
-/* Research board */
-
-export async function backlogListCommand(
-  interaction: CommandInteraction,
-  options: { archive?: string; show?: string; only?: string },
-): Promise<void> {
-  const context = archivist();
-  const actor = await actorOf(interaction);
-  const archive = resolveArchiveSelection(context, actor, options.archive);
-  const status = (options.show ?? "needed") as GapStatus & RequestStatus;
-  const lines = [
-    ...(options.only === "gaps"
-      ? []
-      : listRequests(context, actor, { archiveId: archive.archiveId, status }).map(requestLine)),
-    ...(options.only === "requests"
-      ? []
-      : listGapCards(context, actor, { archiveId: archive.archiveId, status }).map(boardLine)),
-  ];
-  const shown = lines.slice(0, BOARD_LINES);
-  const embed = new EmbedBuilder()
-    .setColor(ARCHIVIST_COLOR)
-    .setTitle(shorten(`${archive.name} - research board, ${status}`, 256))
-    .setDescription(shorten(shown.join("\n") || "Nothing here.", 4096))
-    .setFooter({
-      text:
-        lines.length > shown.length
-          ? `Showing ${shown.length} of ${lines.length}. The website shows the whole board.`
-          : `${lines.length} item${lines.length === 1 ? "" : "s"}. Nobody is assigned anything.`,
-    });
-  await interaction.reply({ ...ephemeral, embeds: [embed], allowedMentions: { parse: [] } });
-}
-
-export async function backlogFlagCommand(
-  interaction: CommandInteraction,
-  options: {
-    archive?: string;
-    kind: string;
-    recordKind?: string;
-    record: string;
-    reason: string;
-    field?: string;
-  },
-): Promise<void> {
-  const context = archivist();
-  const actor = await actorOf(interaction);
-  const archive = resolveArchiveSelection(context, actor, options.archive);
-  const card = flagForResearch(context, actor, {
-    archiveId: archive.archiveId,
-    kind: options.kind,
-    subjectKind: options.kind === "date_research" ? "artifact" : (options.recordKind ?? "artifact"),
-    subjectId: options.record,
-    reason: options.reason,
-    field: options.field,
-  });
-  await interaction.reply({
-    ...ephemeral,
-    content: `On the board: ${boardLine(card)}`,
-    allowedMentions: { parse: [] },
-  });
-}
-
-export async function backlogUpdateCommand(
-  interaction: CommandInteraction,
-  options: { archive?: string; card: string; status: string; reason?: string },
-): Promise<void> {
-  const context = archivist();
-  const actor = await actorOf(interaction);
-  const archive = resolveArchiveSelection(context, actor, options.archive);
-  const db = openStore(context, archive.archiveId).db;
-  const id = resolveShortId(db, "gap_cards", options.card, "card");
-  const { version } = db.prepare("SELECT version FROM gap_cards WHERE id = ?").get(id) as {
-    version: number;
-  };
-  const card = updateGapCard(context, actor, {
-    archiveId: archive.archiveId,
-    id,
-    expectedVersion: version,
-    status: options.status,
-    reason: options.reason,
-  });
-  await interaction.reply({
-    ...ephemeral,
-    content: `Updated: ${boardLine(card)} is now ${card.status}.`,
-    allowedMentions: { parse: [] },
-  });
-}
-
 /* Suggestions */
 
 async function respond(
@@ -695,47 +547,3 @@ export async function suggestRequestIds(interaction: AutocompleteInteraction): P
     searchRequests(openStore(archivist(), archiveId).db, String(interaction.options.getFocused())),
   );
 }
-
-/** Cards still open, matching what was typed. */
-export async function suggestCardIds(interaction: AutocompleteInteraction): Promise<void> {
-  const archiveId = await typedArchive(interaction);
-  if (!archiveId) return interaction.respond([]);
-  const typed = String(interaction.options.getFocused()).toLowerCase();
-  const cards = listGapCards(archivist(), await actorOf(interaction), { archiveId })
-    .filter((card) => card.status !== "resolved")
-    .filter(
-      (card) =>
-        !typed || card.subject.label.toLowerCase().includes(typed) || card.id.startsWith(typed),
-    )
-    .slice(0, 25);
-  await respond(
-    interaction,
-    cards.map((card) => ({
-      id: card.id,
-      label: `${card.kind.replace("_", " ")}: ${card.subject.label}`,
-    })),
-  );
-}
-
-/** Records for a research flag, of the kind chosen in the same command. */
-export async function suggestRecordIds(interaction: AutocompleteInteraction): Promise<void> {
-  const archiveId = await typedArchive(interaction);
-  if (!archiveId) return interaction.respond([]);
-  const db = openStore(archivist(), archiveId).db;
-  const typed = String(interaction.options.getFocused());
-  const kind =
-    interaction.options.getString("kind") === "date_research"
-      ? "artifact"
-      : (interaction.options.getString("record_kind") ?? "artifact");
-  const hits =
-    kind === "artifact"
-      ? searchArtifacts(db, typed)
-      : kind === "event"
-        ? searchEvents(db, typed)
-        : kind === "character" || kind === "account" || kind === "server"
-          ? searchEntities(db, kind, typed)
-          : [];
-  await respond(interaction, hits);
-}
-
-export type { GapKind };

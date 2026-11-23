@@ -209,7 +209,7 @@ The initial form takes one temporal constraint. Preserve open bounds and show re
 
 ### Bucket Transitions
 
-New requests start Needed. Contributors may move one to Unrecoverable with a required reason. When evidence is found, explicitly link its artifact and mark the request Resolved, including from Unrecoverable. Contributors may reopen it to Needed when a conclusion was wrong. Preserve the original description and constraint. Unrecoverable means the information remains missing, not verified or complete.
+Bucket moves and the research board are on the website only. Discord is for quick additions and has no board, flag, or bucket commands. New requests start Needed. Contributors may move one to Unrecoverable with a required reason. When evidence is found, explicitly link its artifact and mark the request Resolved, including from Unrecoverable. Contributors may reopen it to Needed when a conclusion was wrong. Preserve the original description and constraint. Unrecoverable means the information remains missing, not verified or complete.
 
 Derived gap cards resolve from underlying data and reopen if the same gap returns. Maintain one card per record, gap kind, and requested field rather than duplicating cards. Retain resolved cards for research history while their subject still exists. Not applicable requires a reason and a field where that state is meaningful. It cannot pretend media or event evidence exists. A manual date-research flag requires a reason.
 
@@ -847,13 +847,9 @@ Owner commands use `/archivist-admin` in `OWNER_GUILD_ID` to preserve the existi
 | `/archivist archive list` | List only accessible archives, or all for the owner |
 | `/archivist artifact add` | Archive, description, and exactly one attachment or Drive file link. Optional dates and links to existing records. Return saved record or duplicate review |
 | `/archivist artifact show`, `edit`, `delete` | Archive and artifact ID. Edit requires current version. Delete follows confirmation and cleanup rules |
-| `/archivist entity create`, `show`, `edit`, `delete` | Archive, entity kind, and ID where relevant. Kind is character, account, server, or channel. A bot is an account kind. Edit changes a record's own fields, such as names, Discord ID, linked character, place, and lane color. Dated history and character merge are edited on the website |
-| `/archivist event create`, `show`, `edit`, `delete` | Archive, event fields or ID, and current version for mutation. Enforce date and anchor blockers |
+| `/archivist entity create`, `show`, `edit`, `delete` | Archive, entity kind, and ID where relevant. Kind is character, account, server, or channel. A bot is an account kind. Edit changes a record's own fields, such as names, Discord ID, linked character, place, and lane color. Delete reports what still links to the record before showing the confirmation. Dated history and character merge are edited on the website |
+| `/archivist event create`, `show`, `edit`, `delete` | Archive, event fields or ID, and current version for mutation. Enforce date and anchor blockers. Check delete blockers before showing the confirmation |
 | `/archivist request create`, `show`, `edit` | Archive and missing-media request fields or ID. Creation requires description, people, and temporal constraint |
-| `/archivist request resolve` | Request, current version, and found-artifact IDs. Require at least one valid same-archive artifact |
-| `/archivist request unrecoverable` | Request, current version, and reason |
-| `/archivist request reopen` | Request and current version. Move to Needed without inventing a date |
-| `/archivist backlog list`, `flag`, `update` | Archive and relevant record, kind, reason, and current version. Apply the accepted derived-card rules |
 | `/archivist preferences show`, `timezone`, `date-order`, `reset` | Self-service named timezone and all-number date order. Reset clears both, falling back to the selected archive timezone and year-month-day |
 | `/set-artifact-logs-channel` | Required archive and optional channel, defaulting to current channel. Configure one destination for all new artifacts in that archive |
 | `/remove-artifact-logs-channel` | Required archive. Remove future delivery setting, preserving old messages |
@@ -1031,6 +1027,7 @@ The owner's accepted batches A through F are reconciled here. Later clarificatio
 | Typed dates | Common written forms are accepted. Each person chooses year-month-day, month-day-year, or day-month-year for all-number dates, defaulting to year-month-day. Dates display with month names for everyone |
 | Exports | Owner-only, from `/archivist-admin export`. The zip is written on the host and kept until the owner deletes it. No Discord or web download |
 | Editing split | Discord is for uploads and quick edits. Dated history editing and character merge are website-only, because editing is easier with the whole record in view |
+| Research on the website | The research board, manual research flags, and moving missing-media requests between buckets are website-only. Derived gap cards clear themselves when the data is added. A request resolves when someone links the artifact that has the media, since the archive cannot tell by itself that an upload is the missing media. Deletes that would be refused are refused before the confirmation button appears |
 | Prototype timing | The clickable prototype is built during `M3`, so layout feedback arrives before the `M4` views are built |
 | Command shape | `/a` is a short alias of `/archivist` with the same commands. The archive option comes last in every command, because contributors change it least |
 | Drive without a key | Public Drive links download from Google's public download address without setup. An optional `GOOGLE_DRIVE_API_KEY` switches to the official Drive API |

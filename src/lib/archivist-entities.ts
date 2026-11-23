@@ -19,7 +19,7 @@ import {
   createCharacter,
   createServer,
   deleteEntity,
-  entityBlockers,
+  assertEntityDeletable,
   type EntityKind,
   type EntityDetails,
   entityKindValue,
@@ -320,16 +320,7 @@ export async function askDeleteEntity(
     kind: options.kind,
     id: options.id,
   });
-  const blockers = entityBlockers(openStore(context, archive.archiveId).db, entity.kind, entity.id);
-  if (Object.keys(blockers).length > 0) {
-    const summary = Object.entries(blockers)
-      .map(([label, count]) => `${count} ${label}`)
-      .join(", ");
-    throw new ArchivistError(
-      "reference_blocked",
-      `${entity.name} is still linked from ${summary}. Remove those links first.`,
-    );
-  }
+  assertEntityDeletable(openStore(context, archive.archiveId).db, entity.kind, entity.id);
   await interaction.reply({
     ...ephemeral,
     content:
