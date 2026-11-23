@@ -2,12 +2,18 @@
 
 The shared application code for Archivist, the archival feature described in the [Archivist plan](../../docs/proposals/ARCHIVIST-PLAN.md). The Discord commands and the optional web app call these operations, so both interfaces apply the same validation, permissions, dates, logging, and deletion rules.
 
-Archivist is being built in milestones. This directory currently holds the storage foundation. Operations, media intake, exports, and the web server are added here as they are implemented.
+Archivist is being built in milestones. This directory currently holds storage, the archive registry, permissions, and preferences. Record operations, media intake, exports, and the web server are added here as they are implemented.
 
 ## Contents
 
 | Path | Contents |
 | --- | --- |
+| `context.ts` | The shared context the Discord commands and web routes use, the actor type, and the cache of open archives |
+| `access.ts` | Permission checks. Non-members see no archive, and members are refused owner-only actions |
+| `archives.ts` | Owner operations to create, rename, register, unregister, and configure archives |
+| `members.ts` | The owner's per-archive whitelist |
+| `preferences.ts` | Personal timezones and the archive remembered for Discord commands |
+| `versions.ts` | Expected-version checks and stale-version errors |
 | `errors.ts` | `ArchivistError` and the error codes both interfaces report, with their HTTP statuses |
 | `fields.ts` | Shared field rules for text limits, colors, Discord IDs, archive name keys, record IDs, and timestamps |
 | `dates.ts` | Date values and timezone rules for days, instants, daylight-saving gaps, and archive-day buckets |
