@@ -327,25 +327,41 @@ export type CreateArtifactResult =
  * the archive, nothing changes and the existing artifact is returned for
  * duplicate review. The caller discards the staging folder afterward.
  */
-export function createArtifact(
+/** Everything an intake supplies except the file, as the contributor typed it. */
+export type IntakeInput = Omit<CreateArtifactInput, "media">;
+
+/** An intake after validation. */
+export interface CheckedIntake {
+  session: ArchiveSession;
+  source: Required<SourceInput>;
+  description: string;
+  exact: ExactInput | null;
+  estimate: EstimateInput | null;
+  identificationState: IdentificationState;
+  identificationGiven: boolean;
+  links: Links;
+  submission: { guildId: string | null; channelId: string | null; messageId: string | null };
+}
+
+/**
+ * Validates an intake without its file, so an adapter can refuse bad input
+ * before downloading anything. Creating the artifact repeats these checks.
+ */
+export function checkIntake(
   context: ArchivistContext,
   actor: Actor,
-  input: CreateArtifactInput,
-): CreateArtifactResult {
+  input: IntakeInput,
+): CheckedIntake {
   const session = openForActor(context, actor, input.archiveId);
-  const { store } = session;
   const source = sourceValue(input.source);
-  const existing = findArtifactBySource(store.db, source.provider, source.key);
-  if (existing) return { status: "duplicate", artifact: existing };
-
   const description = requiredText("description", input.description, TEXT_LIMITS.description);
   const exact = input.exactDate ? exactValue(session, context, actor, input.exactDate) : null;
   const estimate = input.estimatedDate ? estimateValue(input.estimatedDate) : null;
-  const identificationState =
-    input.identificationState === undefined
-      ? "unreviewed"
-      : identificationValue(input.identificationState);
-  const links = linksValue(input.links, store.db);
+  const identificationGiven = input.identificationState !== undefined;
+  const identificationState = identificationGiven
+    ? identificationValue(input.identificationState)
+    : "unreviewed";
+  const links = linksValue(input.links, session.store.db);
   const submission = {
     guildId: input.submission?.guildId ? discordId("guildId", input.submission.guildId) : null,
     channelId: input.submission?.channelId
@@ -355,6 +371,30 @@ export function createArtifact(
       ? discordId("messageId", input.submission.messageId)
       : null,
   };
+  return {
+    session,
+    source,
+    description,
+    exact,
+    estimate,
+    identificationState,
+    identificationGiven,
+    links,
+    submission,
+  };
+}
+
+export function createArtifact(
+  context: ArchivistContext,
+  actor: Actor,
+  input: CreateArtifactInput,
+): CreateArtifactResult {
+  const session = openForActor(context, actor, input.archiveId);
+  const { store } = session;
+  const existing = findArtifactBySource(store.db, input.source.provider, input.source.key);
+  if (existing) return { status: "duplicate", artifact: existing };
+  const { source, description, exact, estimate, identificationState, links, submission } =
+    checkIntake(context, actor, input);
 
   const media = input.media;
   const artifactId = newId();
@@ -691,5 +731,125 @@ export function deleteArtifact(
       }),
     ),
     removeRecords: [{ record: "artifact", id }],
+  });
+}
+
+/** One change a duplicate submission proposes to the existing artifact. */
+export interface DuplicateDifference {
+  key: "description" | "exactDate" | "estimatedDate" | "identificationState" | LinkKind;
+  current: string;
+  proposed: string;
+}
+
+function describeExact(exact: { text: string; basis: string } | null): string {
+  return exact ? `${exact.text} (exact, ${exact.basis})` : "none";
+}
+
+function describeEstimate(estimate: { text: string; reason: string } | null): string {
+  return estimate ? `${estimate.text} (estimated, ${estimate.reason})` : "none";
+}
+
+/**
+ * Lists what a resubmission of an existing source would change. Only values
+ * the contributor supplied are compared. Links can only be added, so a link
+ * difference lists the records not linked yet.
+ */
+export function duplicateDifferences(
+  existing: ArtifactDetails,
+  intake: CheckedIntake,
+): DuplicateDifference[] {
+  const differences: DuplicateDifference[] = [];
+  if (intake.description !== existing.description) {
+    differences.push({
+      key: "description",
+      current: existing.description,
+      proposed: intake.description,
+    });
+  }
+  if (intake.exact) {
+    const current = existing.dates.exact;
+    const same =
+      current !== null &&
+      interpreted(current.date) === interpreted(intake.exact.value) &&
+      current.basis === intake.exact.basis;
+    if (!same) {
+      differences.push({
+        key: "exactDate",
+        current: describeExact(
+          current && { text: current.date.originalText, basis: current.basis },
+        ),
+        proposed: describeExact({
+          text: intake.exact.value.originalText,
+          basis: intake.exact.basis,
+        }),
+      });
+    }
+  }
+  if (intake.estimate) {
+    const current = existing.dates.estimated;
+    const same =
+      current !== null &&
+      current.date.originalText === intake.estimate.value.originalText &&
+      current.reason === intake.estimate.reason;
+    if (!same) {
+      differences.push({
+        key: "estimatedDate",
+        current: describeEstimate(
+          current && { text: current.date.originalText, reason: current.reason },
+        ),
+        proposed: describeEstimate({
+          text: intake.estimate.value.originalText,
+          reason: intake.estimate.reason,
+        }),
+      });
+    }
+  }
+  if (intake.identificationGiven && intake.identificationState !== existing.identificationState) {
+    differences.push({
+      key: "identificationState",
+      current: existing.identificationState,
+      proposed: intake.identificationState,
+    });
+  }
+  for (const kind of LINK_KINDS) {
+    const added = intake.links[kind].filter((id) => !existing.links[kind].includes(id));
+    if (added.length > 0) differences.push({ key: kind, current: "", proposed: added.join(",") });
+  }
+  return differences;
+}
+
+/**
+ * Applies the differences a contributor ticked in a duplicate review. It
+ * re-validates the intake, applies only ticked values, and only adds links.
+ * If the artifact changed since the review was shown, it is refused as stale
+ * so the contributor can review the latest differences.
+ */
+export function applyDuplicateReview(
+  context: ArchivistContext,
+  actor: Actor,
+  input: {
+    intake: IntakeInput;
+    artifactId: string;
+    expectedVersion: number;
+    selected: readonly string[];
+  },
+): ArtifactDetails {
+  const intake = checkIntake(context, actor, input.intake);
+  const selected = new Set(input.selected);
+  const addLinks: LinkInput = {};
+  for (const kind of LINK_KINDS) {
+    if (selected.has(kind)) addLinks[kind] = intake.links[kind];
+  }
+  return updateArtifact(context, actor, {
+    archiveId: input.intake.archiveId,
+    id: input.artifactId,
+    expectedVersion: input.expectedVersion,
+    description: selected.has("description") ? intake.description : undefined,
+    exactDate: selected.has("exactDate") ? input.intake.exactDate : undefined,
+    estimatedDate: selected.has("estimatedDate") ? input.intake.estimatedDate : undefined,
+    identificationState: selected.has("identificationState")
+      ? intake.identificationState
+      : undefined,
+    addLinks,
   });
 }
