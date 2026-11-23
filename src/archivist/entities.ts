@@ -15,13 +15,13 @@ import {
 import { commitMutation, type VersionedTable } from "./mutations.js";
 import { nextColor } from "./palette.js";
 import { resolveShortId } from "./people.js";
-import { logEntry, notFoundRecord, openForActor } from "./records.js";
+import { diffFields, logEntry, notFoundRecord, openForActor } from "./records.js";
 import { expectedVersionValue, staleVersion } from "./versions.js";
 
 /**
- * Characters, accounts, servers, and channels. This file covers creating and
- * deleting them. Names, avatars, memberships, and other history are edited
- * through their parent record.
+ * Characters, accounts, servers, and channels: creating them, editing their
+ * own fields, and deleting them. Dated history such as aliases, names,
+ * avatars, and memberships is edited separately, through the parent record.
  */
 
 export type EntityKind = "character" | "account" | "server" | "channel";
@@ -92,8 +92,14 @@ function assertDiscordIdFree(
   db: import("better-sqlite3").Database,
   table: string,
   id: string | null,
+  exceptId?: string,
 ): void {
-  if (id && db.prepare(`SELECT 1 FROM ${table} WHERE discord_id = ?`).get(id)) {
+  if (
+    id &&
+    db
+      .prepare(`SELECT 1 FROM ${table} WHERE discord_id = ? AND id IS NOT ?`)
+      .get(id, exceptId ?? null)
+  ) {
     throw new ArchivistError(
       "invalid_input",
       "That Discord ID is already recorded in this archive.",
@@ -192,6 +198,70 @@ export function createServer(
 const CHANNEL_KINDS = ["guild_channel", "thread", "direct_message", "group_chat"] as const;
 type ChannelKind = (typeof CHANNEL_KINDS)[number];
 
+function channelKindValue(value: unknown): ChannelKind {
+  if (!CHANNEL_KINDS.includes(value as ChannelKind)) {
+    throw new ArchivistError(
+      "invalid_input",
+      "Channel kind must be guild_channel, thread, direct_message, or group_chat.",
+      { field: "kind" },
+    );
+  }
+  return value as ChannelKind;
+}
+
+/**
+ * Checks where a channel sits: server channels and threads need a server,
+ * direct messages and group chats have none, and only threads have a parent,
+ * which must be a channel in the same server.
+ */
+function checkChannelPlacement(
+  db: import("better-sqlite3").Database,
+  kind: ChannelKind,
+  serverId: string | null,
+  parentChannelId: string | null,
+  selfId?: string,
+): void {
+  const inServer = kind === "guild_channel" || kind === "thread";
+  if (inServer !== (serverId !== null)) {
+    throw new ArchivistError(
+      "invalid_input",
+      inServer
+        ? "Server channels and threads need a server."
+        : "Direct messages and group chats have no server.",
+      { field: "serverId" },
+    );
+  }
+  if (serverId && !db.prepare("SELECT 1 FROM servers WHERE id = ?").get(serverId)) {
+    throw new ArchivistError("invalid_input", "That server does not exist in this archive.", {
+      field: "serverId",
+    });
+  }
+  if ((kind === "thread") !== (parentChannelId !== null)) {
+    throw new ArchivistError(
+      "invalid_input",
+      "Only threads have a parent channel, and they need one.",
+      { field: "parentChannelId" },
+    );
+  }
+  if (parentChannelId) {
+    const parent = db
+      .prepare("SELECT server_id AS serverId, kind FROM channels WHERE id = ?")
+      .get(parentChannelId) as { serverId: string | null; kind: ChannelKind } | undefined;
+    if (
+      !parent ||
+      parentChannelId === selfId ||
+      parent.kind !== "guild_channel" ||
+      parent.serverId !== serverId
+    ) {
+      throw new ArchivistError(
+        "invalid_input",
+        "A thread's parent must be a channel in the same server.",
+        { field: "parentChannelId" },
+      );
+    }
+  }
+}
+
 export function createChannel(
   context: ArchivistContext,
   actor: Actor,
@@ -206,56 +276,14 @@ export function createChannel(
   },
 ): CreatedEntity {
   const { store } = openForActor(context, actor, input.archiveId);
-  if (!CHANNEL_KINDS.includes(input.kind as ChannelKind)) {
-    throw new ArchivistError(
-      "invalid_input",
-      "Channel kind must be guild_channel, thread, direct_message, or group_chat.",
-      { field: "kind" },
-    );
-  }
-  const kind = input.kind as ChannelKind;
+  const kind = channelKindValue(input.kind);
   const label = requiredText("label", input.label, TEXT_LIMITS.name);
   const serverId = typeof input.serverId === "string" && input.serverId ? input.serverId : null;
   const parentChannelId =
     typeof input.parentChannelId === "string" && input.parentChannelId
       ? input.parentChannelId
       : null;
-  const inServer = kind === "guild_channel" || kind === "thread";
-  if (inServer !== (serverId !== null)) {
-    throw new ArchivistError(
-      "invalid_input",
-      inServer
-        ? "Server channels and threads need a server."
-        : "Direct messages and group chats have no server.",
-      { field: "serverId" },
-    );
-  }
-  if (serverId && !store.db.prepare("SELECT 1 FROM servers WHERE id = ?").get(serverId)) {
-    throw new ArchivistError("invalid_input", "That server does not exist in this archive.", {
-      field: "serverId",
-    });
-  }
-  if ((kind === "thread") !== (parentChannelId !== null)) {
-    throw new ArchivistError(
-      "invalid_input",
-      "Only threads have a parent channel, and they need one.",
-      {
-        field: "parentChannelId",
-      },
-    );
-  }
-  if (parentChannelId) {
-    const parent = store.db
-      .prepare("SELECT server_id AS serverId, kind FROM channels WHERE id = ?")
-      .get(parentChannelId) as { serverId: string | null; kind: ChannelKind } | undefined;
-    if (!parent || parent.kind !== "guild_channel" || parent.serverId !== serverId) {
-      throw new ArchivistError(
-        "invalid_input",
-        "A thread's parent must be a channel in the same server.",
-        { field: "parentChannelId" },
-      );
-    }
-  }
+  checkChannelPlacement(store.db, kind, serverId, parentChannelId);
   const channelDiscordId = optionalDiscordId("discordId", input.discordId);
   assertDiscordIdFree(store.db, "channels", channelDiscordId);
   const color =
@@ -395,6 +423,201 @@ export function deleteEntity(
 }
 
 export { kindValue as entityKindValue };
+
+/** Fields an edit may change. Undefined leaves a field alone, and null or "" clears an optional one. */
+export interface UpdateEntityInput {
+  archiveId: unknown;
+  kind: unknown;
+  id: unknown;
+  expectedVersion: unknown;
+  /** Characters. */
+  knownName?: unknown;
+  realName?: unknown;
+  birthDay?: unknown;
+  metInPerson?: unknown;
+  /** Accounts, servers, and channels. */
+  label?: unknown;
+  discordId?: unknown;
+  /** Accounts: `human` or `bot`. Channels: the channel kind. */
+  subkind?: unknown;
+  /** Accounts. */
+  characterId?: unknown;
+  /** Servers and channels. */
+  color?: unknown;
+  /** Channels. */
+  serverId?: unknown;
+  parentChannelId?: unknown;
+}
+
+type Editable = Record<string, string | null>;
+
+const COLUMNS: Record<EntityKind, Record<string, string>> = {
+  character: {
+    knownName: "known_name",
+    realName: "real_name",
+    birthDay: "birth_day",
+    metInPerson: "met_in_person",
+  },
+  account: {
+    subkind: "kind",
+    label: "label",
+    discordId: "discord_id",
+    characterId: "character_id",
+  },
+  server: { label: "label", discordId: "discord_id", color: "color" },
+  channel: {
+    subkind: "kind",
+    label: "label",
+    discordId: "discord_id",
+    serverId: "server_id",
+    parentChannelId: "parent_channel_id",
+    color: "color",
+  },
+};
+
+const cleared = (value: unknown) => value === null || value === "";
+
+/** A related record's ID from full or short form, or null when cleared. */
+function relatedId(
+  db: import("better-sqlite3").Database,
+  table: "characters" | "servers" | "channels",
+  value: unknown,
+  record: string,
+): string | null {
+  return cleared(value) ? null : resolveShortId(db, table, value, record);
+}
+
+/**
+ * Edits an entity's own fields as the contributor saw them at
+ * `expectedVersion`. A stale edit is refused with the current values, and an
+ * edit that changes nothing saves nothing. Dated history is edited separately.
+ */
+export function updateEntity(
+  context: ArchivistContext,
+  actor: Actor,
+  input: UpdateEntityInput,
+): EntityDetails {
+  const { store } = openForActor(context, actor, input.archiveId);
+  const db = store.db;
+  const kind = kindValue(input.kind);
+  const table = TABLES[kind];
+  const id = resolveShortId(db, table, input.id, kind);
+  const expectedVersion = expectedVersionValue(input.expectedVersion);
+  const columns = COLUMNS[kind];
+  const row = db
+    .prepare(`SELECT version, ${Object.values(columns).join(", ")} FROM ${table} WHERE id = ?`)
+    .get(id) as (Record<string, string | null> & { version: number }) | undefined;
+  if (!row) throw notFoundRecord(kind);
+  const before: Editable = Object.fromEntries(
+    Object.entries(columns).map(([field, column]) => [field, row[column] ?? null]),
+  );
+  const after: Editable = { ...before };
+  const given = (field: keyof UpdateEntityInput) => field in columns && input[field] !== undefined;
+
+  if (kind === "character") {
+    if (given("knownName")) {
+      after.knownName = requiredText("knownName", input.knownName, TEXT_LIMITS.name);
+    }
+    if (given("realName")) {
+      after.realName = optionalText("realName", input.realName, TEXT_LIMITS.name);
+    }
+    if (given("birthDay")) {
+      after.birthDay = cleared(input.birthDay)
+        ? null
+        : parseDayInput("birthDay", input.birthDay, getDateOrder(context, actor));
+    }
+    if (given("metInPerson")) {
+      if (!["unknown", "yes", "no"].includes(input.metInPerson as string)) {
+        throw new ArchivistError("invalid_input", "Met in person must be unknown, yes, or no.", {
+          field: "metInPerson",
+        });
+      }
+      after.metInPerson = input.metInPerson as string;
+    }
+  } else {
+    if (given("label")) after.label = requiredText("label", input.label, TEXT_LIMITS.name);
+    if (given("discordId")) {
+      after.discordId = optionalDiscordId("discordId", input.discordId);
+      assertDiscordIdFree(db, table, after.discordId, id);
+    }
+    if (given("color")) after.color = colorValue("color", input.color);
+  }
+
+  if (kind === "account") {
+    if (given("subkind")) {
+      if (input.subkind !== "human" && input.subkind !== "bot") {
+        throw new ArchivistError("invalid_input", "Account kind must be human or bot.", {
+          field: "kind",
+        });
+      }
+      after.subkind = input.subkind;
+    }
+    if (given("characterId")) {
+      after.characterId = relatedId(db, "characters", input.characterId, "character");
+    }
+    if (after.subkind === "bot" && after.characterId) {
+      throw new ArchivistError(
+        "invalid_input",
+        "Bot accounts record their owners separately rather than one character.",
+        { field: "characterId" },
+      );
+    }
+  }
+
+  if (kind === "channel") {
+    if (given("subkind")) after.subkind = channelKindValue(input.subkind);
+    if (given("serverId")) after.serverId = relatedId(db, "servers", input.serverId, "server");
+    if (given("parentChannelId")) {
+      after.parentChannelId = relatedId(db, "channels", input.parentChannelId, "channel");
+    }
+    checkChannelPlacement(
+      db,
+      after.subkind as ChannelKind,
+      after.serverId ?? null,
+      after.parentChannelId ?? null,
+      id,
+    );
+    const threads = (
+      db.prepare("SELECT count(*) AS n FROM channels WHERE parent_channel_id = ?").get(id) as {
+        n: number;
+      }
+    ).n;
+    if (threads > 0 && (after.subkind !== "guild_channel" || after.serverId !== before.serverId)) {
+      throw new ArchivistError(
+        "reference_blocked",
+        `${threads} thread${threads === 1 ? "" : "s"} still belong to this channel. Move or delete them first.`,
+        { field: "kind", references: { threads } },
+      );
+    }
+  }
+
+  const fields = Object.keys(columns);
+  const changes = diffFields(before, after, fields);
+  if (row.version !== expectedVersion) {
+    const attempted = Object.fromEntries(
+      Object.keys(changes).map((field) => [field, before[field]]),
+    );
+    throw staleVersion(kind, id, row.version, attempted);
+  }
+  if (Object.keys(changes).length > 0) {
+    const now = timestamp(context.now());
+    const set = Object.keys(changes)
+      .map((field) => `${columns[field]} = @${field}`)
+      .join(", ");
+    commitMutation(store, {
+      expectations: [{ table, id, version: row.version + 1 }],
+      apply(target) {
+        target
+          .prepare(
+            `UPDATE ${table} SET ${set}, version = version + 1, updated_at = @now WHERE id = @id AND version = @version`,
+          )
+          .run({ ...after, now, id, version: row.version });
+      },
+      append: [logEntry(context, actor, kind, id, changes)],
+    });
+  }
+  return getEntity(context, actor, { archiveId: input.archiveId, kind, id });
+}
 
 export interface EntityDetails {
   kind: EntityKind;
