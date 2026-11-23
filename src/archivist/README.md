@@ -2,7 +2,7 @@
 
 The shared application code for Archivist, the archival feature described in the [Archivist plan](../../docs/proposals/ARCHIVIST-PLAN.md). The Discord commands and the optional web app call these operations, so both interfaces apply the same validation, permissions, dates, logging, and deletion rules.
 
-Archivist is being built in milestones. This directory currently holds storage, the archive registry, permissions, and preferences. Record operations, media intake, exports, and the web server are added here as they are implemented.
+Archivist is being built in milestones. This directory currently holds storage, the archive registry, permissions, preferences, media staging, artifacts, and basic entities. Event, request, research board, export, Discord, and web code is added as it is implemented.
 
 ## Contents
 
@@ -22,6 +22,11 @@ Archivist is being built in milestones. This directory currently holds storage, 
 | `mutations.ts` | Journaled archive changes that keep the database, edit log, and bot-database follow-ups consistent across crashes |
 | `metadata.ts` | Reads embedded metadata with ExifTool and picks the file date from the plan's field map |
 | `media.ts` | Stages intake files, checks their real format and size, hashes them, makes previews, and moves originals into an archive |
+| `records.ts` | Shared helpers for record operations, such as opening an archive for an actor, link checks, and field diffs |
+| `date-store.ts` | Stores immutable date rows and removes rows nothing refers to |
+| `artifacts.ts` | Creating, reading, editing, and deleting artifacts, with date precedence, source uniqueness, and links |
+| `entities.ts` | Creating and deleting characters, accounts, servers, and channels, with reference blockers |
+| `palette.ts` | Colors assigned to new servers, channels, and events |
 | `archive-database.ts` | Opens an archive's `archive.db`, refuses newer schemas, and applies migrations |
 | `operational-database.ts` | Prepares Archivist's tables in the bot's shared `guhbot.db` |
 | `migrations/` | The archive and operational schemas as ordered migrations, and the code that applies them |
