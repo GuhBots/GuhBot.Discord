@@ -27,6 +27,8 @@ Archivist is being built in milestones. This directory currently holds storage, 
 | `artifacts.ts` | Creating, reading, editing, and deleting artifacts, with date precedence, source uniqueness, and links |
 | `entities.ts` | Creating and deleting characters, accounts, servers, and channels, with reference blockers |
 | `palette.ts` | Colors assigned to new servers, channels, and events |
+| `download.ts` | Bounded downloads with size, stall, and overall limits, allowed-host redirects, and retries |
+| `drive.ts` | Public Google Drive links: parsing, metadata checks, and binary downloads with an API key |
 | `archive-database.ts` | Opens an archive's `archive.db`, refuses newer schemas, and applies migrations |
 | `operational-database.ts` | Prepares Archivist's tables in the bot's shared `guhbot.db` |
 | `migrations/` | The archive and operational schemas as ordered migrations, and the code that applies them |
