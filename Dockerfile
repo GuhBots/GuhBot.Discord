@@ -90,11 +90,14 @@ RUN npm run build \
 FROM ubuntu:${UBUNTU_VERSION} AS runtime
 
 # Install only what the service needs at run time. CA certificates let it
-# make HTTPS connections.
+# make HTTPS connections. Perl runs ExifTool, which Archivist uses to read
+# photo and video metadata. The base image's minimal Perl lacks modules
+# ExifTool needs for dates, text encodings, and compressed metadata.
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         ca-certificates \
+        perl \
     && rm -rf /var/lib/apt/lists/*
 
 # Run as an unprivileged user. /data holds files that must survive updates,
