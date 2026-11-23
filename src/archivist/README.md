@@ -2,7 +2,7 @@
 
 The shared application code for Archivist, the archival feature described in the [Archivist plan](../../docs/proposals/ARCHIVIST-PLAN.md). The Discord commands and the optional web app call these operations, so both interfaces apply the same validation, permissions, dates, logging, and deletion rules.
 
-Archivist is being built in milestones. This directory currently holds storage, the archive registry, permissions, preferences, media staging, artifacts, entities and their dated history, events, missing-media requests, the research board, and exports. Character merge and web code is added as it is implemented.
+Archivist is being built in milestones. This directory currently holds storage, the archive registry, permissions, preferences, media staging, artifacts, entities and their dated history, events, missing-media requests, the research board, character merge, and exports. Web code is added as it is implemented.
 
 ## Contents
 
@@ -30,6 +30,7 @@ Archivist is being built in milestones. This directory currently holds storage, 
 | `events.ts` | Events with a single day, a duration, or an occurrence window, exact or estimated, with colors, disputed reasons, links, and deletion blocked by anchored requests |
 | `requests.ts` | Missing-media requests with five temporal forms, required people, event anchors that follow corrections, and Needed, Resolved, and Unrecoverable buckets |
 | `board.ts` | The research board's gap cards: derived cards kept in step with the data, and manual date-research and custom flags |
+| `merge.ts` | Explicit character merge: a preview of conflicts and links, the contributor's choices, alias preservation, and link reassignment |
 | `palette.ts` | Colors assigned to new servers, channels, and events |
 | `download.ts` | Bounded downloads with size, stall, and overall limits, allowed-host redirects, and retries |
 | `drive.ts` | Public Google Drive links: parsing, metadata checks, and binary downloads, directly or through the Drive API when a key is set |
