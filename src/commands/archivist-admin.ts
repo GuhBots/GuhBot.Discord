@@ -20,6 +20,8 @@ import {
   unregisterArchive,
   updateArchiveSettings,
 } from "../archivist/archives.js";
+import { dayText } from "../archivist/dates.js";
+import { type ExportJob, listExports, startExport } from "../archivist/exports.js";
 import { addMember, listMembers, removeMember } from "../archivist/members.js";
 import { config } from "../config.js";
 import {
@@ -78,6 +80,26 @@ function describeArchive(interaction: CommandInteraction, archive: ArchiveDetail
     );
 }
 
+function megabytes(bytes: number): string {
+  return `${(bytes / 1_048_576).toFixed(1)} MB`;
+}
+
+/** One line about an export for the owner. */
+function exportLine(job: ExportJob): string {
+  const started = `<t:${Math.floor(job.createdMs / 1000)}:f>`;
+  const where = job.path ? `\`${job.path}\`` : "";
+  switch (job.state) {
+    case "ready":
+      return job.onDisk
+        ? `**${job.archiveName}**, ${started}: ready, ${megabytes(job.byteLength ?? 0)}, ${where}`
+        : `**${job.archiveName}**, ${started}: deleted from the host`;
+    case "failed":
+      return `**${job.archiveName}**, ${started}: failed (${job.errorCode ?? "unknown"})`;
+    default:
+      return `**${job.archiveName}**, ${started}: still writing ${where}`;
+  }
+}
+
 /** Resolves an omitted version to the archive's current one. */
 function versionOrCurrent(interaction: CommandInteraction, archiveId: string, version?: number) {
   return (
@@ -94,6 +116,11 @@ function versionOrCurrent(interaction: CommandInteraction, archiveId: string, ve
 @SlashGroup({
   name: "whitelist",
   description: "Manage who can use an archive",
+  root: "archivist-admin",
+})
+@SlashGroup({
+  name: "export",
+  description: "Zip a whole archive on the bot's host",
   root: "archivist-admin",
 })
 export class ArchivistAdmin {
@@ -370,7 +397,7 @@ export class ArchivistAdmin {
       const current = Math.min(page ?? 1, pages);
       const shown = members.slice((current - 1) * MEMBERS_PER_PAGE, current * MEMBERS_PER_PAGE);
       const lines = shown.map(
-        (member) => `<@${member.userId}>  added ${member.grantedAt.slice(0, 10)}`,
+        (member) => `<@${member.userId}>  added ${dayText(member.grantedAt.slice(0, 10))}`,
       );
       await interaction.reply({
         ...ephemeral,
@@ -380,6 +407,67 @@ export class ArchivistAdmin {
             .setTitle(`👥 ${archive.name} members`)
             .setDescription(lines.join("\n") || "Nobody yet. Only you can use this archive.")
             .setFooter({ text: `Page ${current} of ${pages}, ${members.length} members` }),
+        ],
+      });
+    });
+  }
+
+  @Slash({
+    name: "create",
+    description: "Zip a whole archive into the bot's data folder",
+    ...GUILD_ONLY,
+  })
+  @SlashGroup("export", "archivist-admin")
+  async exportCreate(
+    @SlashOption(archiveOption) archiveId: string,
+    interaction: CommandInteraction,
+  ): Promise<void> {
+    await runArchivist(interaction, async () => {
+      await interaction.deferReply(ephemeral);
+      const { job, done } = startExport(archivist(), await actorOf(interaction), { archiveId });
+      await interaction.editReply({
+        content:
+          `Writing the export of **${job.archiveName}** to \`${job.path}\`. ` +
+          "The snapshot is taken, so later changes are not in it. This reply updates when the zip is done. " +
+          "Large archives can take a while, so check `/archivist-admin export list` if it does not.",
+      });
+      // The reply token lasts 15 minutes. A longer export still finishes, and
+      // the list shows it.
+      done.then(
+        (finished) =>
+          interaction
+            .editReply({
+              content:
+                `The export of **${finished.archiveName}** is ready: \`${finished.path}\` ` +
+                `(${megabytes(finished.byteLength ?? 0)}). It stays there until you delete it.`,
+            })
+            .catch(() => undefined),
+        (error: unknown) =>
+          interaction
+            .editReply({
+              content: `The export of **${job.archiveName}** failed. ${
+                error instanceof Error ? error.message : ""
+              }`,
+            })
+            .catch(() => undefined),
+      );
+    });
+  }
+
+  @Slash({ name: "list", description: "List recent exports and where they are", ...GUILD_ONLY })
+  @SlashGroup("export", "archivist-admin")
+  async exportList(interaction: CommandInteraction): Promise<void> {
+    await runArchivist(interaction, async () => {
+      const jobs = listExports(archivist(), await actorOf(interaction));
+      await interaction.reply({
+        ...ephemeral,
+        embeds: [
+          baseEmbed(interaction)
+            .setTitle("🗜️ Recent exports")
+            .setDescription(
+              jobs.map(exportLine).join("\n") ||
+                "No exports yet. Make one with `/archivist-admin export create`.",
+            ),
         ],
       });
     });

@@ -94,14 +94,15 @@ An archive member means a Discord user currently whitelisted for that archive. B
 | --- | --- | --- | --- |
 | View, submit, edit, link, merge characters, and delete permitted archive records | Yes | Yes | No |
 | Add and manage research requests, review gaps, and flag disputed claims | Yes | Yes | No |
-| Export archive, read edit log, and download allowed media | Yes | Yes | No |
+| Read edit log and download allowed media | Yes | Yes | No |
+| Export an archive to a zip on the host | Yes | No | No |
 | Set or remove that archive's announcement channel | Yes | Yes | No |
 | Set personal timezone | Yes | Yes, for self | No |
 | Create, rename, register, unregister, and change archive display settings | Yes | No | No |
 | Add, remove, or list whitelist members | Yes | No | No |
 | Start or stop the optional web app | Yes | No | No |
 
-Store unique membership pairs `(archive_id, discord_user_id)`. Check current owner or membership authorization on every archive request, including media and export download requests. Discord sign-in alone grants no archive access. Removal takes effect on the next request, including an existing session. An already-running download may finish. Membership in another archive is irrelevant. Refresh owner status at login and at most every five minutes during active requests.
+Store unique membership pairs `(archive_id, discord_user_id)`. Check current owner or membership authorization on every archive request, including media download requests. Discord sign-in alone grants no archive access. Removal takes effect on the next request, including an existing session. An already-running download may finish. Membership in another archive is irrelevant. Refresh owner status at login and at most every five minutes during active requests.
 
 Use seven-day absolute server-side sessions in bot operational storage and provide logout. Discord sign-in requests only the identity access needed for authentication. Use an unpredictable session cookie, same-origin mutation checks, a protected sign-in state value, and session invalidation on logout. Production cookies require HTTPS. Localhost testing supports the configured local callback without pretending it is a public deployment.
 
@@ -248,7 +249,7 @@ At desktop width, the app has three columns. The left column lists servers and g
 
 Selecting a server or group chat opens its object view. Selecting a character opens their character page. The page shows their known name, aliases, accounts with name and avatar history, main-account history, age, and acquaintance state, followed by their artifacts and events. It offers actions to filter the timeline to that character, open the graph around them, and edit permitted fields.
 
-A top bar holds the archive switcher, view switcher, search, calendar, and account controls. Below the current view, a tray holds that view's actions, such as zoom, filters, layer toggles, adding an artifact or event, and export. Each view declares its own tray buttons, so the tray can differ between views and gain buttons later. The owner confirms the exact tray contents and the top bar in the prototype review described under [Delivery And Acceptance](#delivery-and-acceptance).
+A top bar holds the archive switcher, view switcher, search, calendar, and account controls. Below the current view, a tray holds that view's actions, such as zoom, filters, layer toggles, and adding an artifact or event. Each view declares its own tray buttons, so the tray can differ between views and gain buttons later. The owner confirms the exact tray contents and the top bar in the prototype review described under [Delivery And Acceptance](#delivery-and-acceptance).
 
 ### Shared Search And Filters
 
@@ -286,9 +287,9 @@ One listener in the bot process serves all allowed archives, the frontend, and b
 
 Test on localhost first. Remote deployment uses a configured public address and external HTTPS reverse proxy. Do not build certificate, tunnel, or router automation. Graceful bot shutdown closes the listener and finishes or aborts archive operations consistently. Port conflict or listener-start failure leaves the bot working and reports a useful error.
 
-Archive members and owners may request an export. Create a consistent snapshot under the archive write lock, release it before zip compression, and zip the complete portable folder. Include its database, log, originals, previews, and retained unreferenced media. Exclude operational state, temporary recovery files, secrets, sessions, and other archives. Do not simply copy a live SQLite main file while ignoring pending writes.
+Only the owner exports, from `/archivist-admin export create`. Create a consistent snapshot under the archive write lock, release it before zip compression, and zip the complete portable folder. Include its database, log, originals, previews, and retained unreferenced media. Exclude operational state, temporary recovery files, secrets, sessions, and other archives. Do not simply copy a live SQLite main file while ignoring pending writes.
 
-Create export jobs in `archivist-exports/`, outside the portable folder. Send the zip through Discord if within its current attachment limit. Otherwise report ready status and require the owner to start the web app for an authenticated download. Never silently start it. Web requests use the same export operation. Recheck access at download time. Expire completed temporary downloads after 24 hours. Restoring/registering an exported archive for hosting is owner-only and never grants old whitelist access.
+Write each zip directly into `archivist-exports/` on the host, outside the portable folder, under a temporary name that becomes the final `.zip` name only when complete. Nothing is sent through Discord or the web app, because archives may reach hundreds of gigabytes. The owner copies the zip off the host and deletes it when done. Archivist never deletes a finished zip. A restart during compression marks the job failed and removes its partial file. Restoring/registering an exported archive for hosting is owner-only and never grants old whitelist access.
 
 ## Exact Data Contract
 
@@ -839,6 +840,7 @@ Owner commands use `/archivist-admin` in `OWNER_GUILD_ID` to preserve the existi
 | `/archivist-admin whitelist add` | Archive and Discord user. Add idempotently |
 | `/archivist-admin whitelist remove` | Archive and Discord user. Remove idempotently, effective on next request |
 | `/archivist-admin whitelist list` | Archive. List every entry with pagination and an empty state |
+| `/archivist-admin export create`, `list` | Archive for create. Take a consistent snapshot, write the zip on the host, and report its path, size, or failure. List recent exports with their state and whether the zip is still on disk |
 | `/archivist-admin web start`, `stop`, `status` | Global listener control and availability |
 | `/archivist archive list` | List only accessible archives, or all for the owner |
 | `/archivist artifact add` | Archive, description, and exactly one attachment or Drive file link. Optional dates and links to existing records. Return saved record or duplicate review |
@@ -851,7 +853,6 @@ Owner commands use `/archivist-admin` in `OWNER_GUILD_ID` to preserve the existi
 | `/archivist request unrecoverable` | Request, current version, and reason |
 | `/archivist request reopen` | Request and current version. Move to Needed without inventing a date |
 | `/archivist backlog list`, `flag`, `update` | Archive and relevant record, kind, reason, and current version. Apply the accepted derived-card rules |
-| `/archivist export create`, `status`, `download` | Archive and job ID where needed. Create consistent zip, report progress or failure, and recheck download access |
 | `/archivist preferences show`, `timezone`, `date-order`, `reset` | Self-service named timezone and all-number date order. Reset clears both, falling back to the selected archive timezone and year-month-day |
 | `/set-artifact-logs-channel` | Required archive and optional channel, defaulting to current channel. Configure one destination for all new artifacts in that archive |
 | `/remove-artifact-logs-channel` | Required archive. Remove future delivery setting, preserving old messages |
@@ -891,7 +892,6 @@ Serve frontend and backend from the same origin. Prefix archive routes with `/ap
 | `GET /media/:mediaId`, `GET /media/:mediaId/preview` | Authorized original or preview streaming, including retained media. Never a direct filesystem path |
 | `GET /edit-log` | Authorized log download |
 | `PUT /artifact-logs-channel`, `DELETE /artifact-logs-channel` | Equivalent contributor configuration after Discord channel access and bot-permission checks |
-| `POST /exports`, `GET /exports/:jobId`, `GET /exports/:jobId/download` | Export creation, status, or authorized download |
 
 The bracket notation in the table abbreviates separate collection and item routes, not a literal route string. Historical record and archive-setting mutations return the current record and version. Requests take `expectedVersion` on their changes and deletion. Operational membership, preference, and announcement-setting commands apply atomically without historical record versions. Source-specific fields and ordinary editable columns come from the schema and date contract. Relationship updates explicitly list additions and removals. A duplicate-review operation accepts additions only.
 
@@ -1028,6 +1028,7 @@ The owner's accepted batches A through F are reconciled here. Later clarificatio
 | Main accounts | Characters have a dated main-account history, and their pictures follow it along the timeline |
 | Discord intake | Comma-separated people with autocomplete, separate exact and estimate date fields, a private reply with Edit, Add people, Someone unidentified, and Delete, short IDs, and tick-to-apply duplicate review |
 | Typed dates | Common written forms are accepted. Each person chooses year-month-day, month-day-year, or day-month-year for all-number dates, defaulting to year-month-day. Dates display with month names for everyone |
+| Exports | Owner-only, from `/archivist-admin export`. The zip is written on the host and kept until the owner deletes it. No Discord or web download |
 | Formats | Images, videos, and audio are accepted: JPEG, PNG, WebP, GIF, MP4, MOV, WebM, MKV, AVI, MP3, M4A, WAV, Ogg, and FLAC |
 | Exact-date basis | Exact dates need no written basis, for artifacts and events. Only estimates need a reason. Archive schema version 2 removes the basis requirement and keeps earlier values |
 

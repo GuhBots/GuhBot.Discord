@@ -15,7 +15,7 @@ import {
   createArchivistContext,
 } from "../archivist/context.js";
 import { ArchivistError, type ErrorCode } from "../archivist/errors.js";
-import { expireExports, settleInterruptedExports } from "../archivist/exports.js";
+import { settleInterruptedExports } from "../archivist/exports.js";
 import { cleanStaging } from "../archivist/media.js";
 import { closeMetadataReader } from "../archivist/metadata.js";
 import { config } from "../config.js";
@@ -42,7 +42,6 @@ export function archivist(): ArchivistContext {
     context = createArchivistContext({ dataDir: config.dataDir, botDb: getDatabase() });
     cleanStaging(context);
     settleInterruptedExports(context);
-    expireExports(context);
     const unknown = settleInterruptedAnnouncements(context);
     if (unknown > 0) {
       console.warn(
@@ -52,7 +51,6 @@ export function archivist(): ArchivistContext {
     const sweeper = setInterval(() => {
       if (!context) return;
       cleanStaging(context);
-      expireExports(context);
     }, SWEEP_INTERVAL_MS);
     sweeper.unref();
     onShutdown(async () => {

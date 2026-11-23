@@ -4,6 +4,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -11,42 +12,47 @@ import {
 import { join, relative, sep } from "node:path";
 import { finished } from "node:stream/promises";
 import { ZipArchive, type ZipEntryData } from "archiver";
-import { requireArchiveAccess } from "./access.js";
+import { registeredArchive, requireArchiveOwner, requireOwner } from "./access.js";
 import { type Actor, type ArchivistContext, mutationHooks, openStore } from "./context.js";
 import { logFile, recoverPendingMutation } from "./mutations.js";
 import { ArchivistError } from "./errors.js";
 import { newId } from "./fields.js";
 
 /**
- * Complete-folder zip exports. A consistent snapshot is taken first: any
- * unfinished change is completed, the database is copied with VACUUM INTO,
- * the edit log is copied, and the archive's files are listed. Archive
- * changes run synchronously, so nothing can change the archive while this
- * happens. Compression runs afterward, while new changes may continue.
- * Original and preview files never change once written, so the listed
- * files match the snapshot.
+ * Complete-folder zip exports, made by the bot owner and left on the host.
+ * The owner decided on 2026-11-23 that exports are owner-only, are never sent
+ * through Discord or the web app, and stay until the owner deletes them.
  *
- * The zip holds one folder named by the archive ID, with its database,
- * edit log, originals, previews, and media no longer referenced by any
- * record. Operational state, staging, journals, and other archives live
- * outside the archive folder and are never included. Exports are kept in
- * `archivist-exports/` for 24 hours.
+ * A consistent snapshot is taken first: any unfinished change is completed,
+ * the database is copied with VACUUM INTO, the edit log is copied, and the
+ * archive's files are listed. Archive changes run synchronously, so nothing
+ * can change the archive while this happens. Compression runs afterward,
+ * while new changes may continue. Original and preview files never change
+ * once written, so the listed files match the snapshot.
+ *
+ * The zip holds one folder named by the archive ID, with its database, edit
+ * log, originals, previews, and media no longer referenced by any record.
+ * Operational state, staging, journals, and other archives live outside the
+ * archive folder and are never included. The zip is written under a
+ * `.partial` name and renamed when complete, so a file in
+ * `archivist-exports/` with a `.zip` name is always whole.
  */
-
-export const EXPORT_LIFETIME_MS = 24 * 60 * 60_000;
 
 export type ExportState = "queued" | "running" | "ready" | "failed" | "expired";
 
 export interface ExportJob {
   id: string;
   archiveId: string;
+  archiveName: string;
   requestedBy: string;
   state: ExportState;
   createdMs: number;
-  expiresMs: number | null;
-  /** The zip's size in bytes once ready. */
+  /** Where the zip is, or will be, on the bot's host. */
+  path: string | null;
+  /** The zip's size in bytes once ready and still on disk. */
   byteLength: number | null;
-  fileName: string | null;
+  /** False once a ready zip has been deleted from the host. */
+  onDisk: boolean;
   errorCode: string | null;
 }
 
@@ -56,7 +62,6 @@ interface JobRow {
   requested_by: string;
   state: ExportState;
   created_ms: number;
-  expires_ms: number | null;
   relative_path: string | null;
   error_code: string | null;
 }
@@ -64,27 +69,34 @@ interface JobRow {
 /** Files in an archive folder that are transient and never exported. */
 const TRANSIENT = [/^archive\.db-(journal|wal|shm)$/, /\.rewrite$/, /\.tmp$/];
 
+const PARTIAL = ".partial";
+
+function snapshotDir(context: ArchivistContext, jobId: string): string {
+  return join(context.paths.tmpDir, "exports", jobId);
+}
+
 function toJob(context: ArchivistContext, row: JobRow): ExportJob {
-  const file = row.relative_path ? join(context.paths.exportsDir, row.relative_path) : null;
+  const path = row.relative_path ? join(context.paths.exportsDir, row.relative_path) : null;
+  const onDisk = path !== null && row.state === "ready" && existsSync(path);
   return {
     id: row.id,
     archiveId: row.archive_id,
+    archiveName: registeredArchive(context, row.archive_id)?.name ?? row.archive_id,
     requestedBy: row.requested_by,
     state: row.state,
     createdMs: row.created_ms,
-    expiresMs: row.expires_ms,
-    byteLength: file && row.state === "ready" && existsSync(file) ? statSync(file).size : null,
-    fileName: row.relative_path ? row.relative_path.split("/").pop()! : null,
+    path,
+    byteLength: onDisk ? statSync(path).size : null,
+    onDisk,
     errorCode: row.error_code,
   };
 }
 
-function readJob(context: ArchivistContext, archiveId: string, jobId: string): JobRow {
+function readJob(context: ArchivistContext, jobId: string): JobRow {
   const row = context.botDb
-    .prepare("SELECT * FROM archivist_export_jobs WHERE id = ? AND archive_id = ?")
-    .get(jobId, archiveId) as JobRow | undefined;
-  if (!row)
-    throw new ArchivistError("not_found", "There is no export with that ID for this archive.");
+    .prepare("SELECT * FROM archivist_export_jobs WHERE id = ?")
+    .get(jobId) as JobRow | undefined;
+  if (!row) throw new ArchivistError("not_found", "There is no export with that ID.");
   return row;
 }
 
@@ -104,75 +116,54 @@ function archiveFiles(folder: string): string[] {
   return files.filter((file) => file !== "archive.db" && file !== "edits.log").sort();
 }
 
-function zipName(archiveName: string, now: Date): string {
+/** A readable, unique zip name: the archive's name, the date, and the job's short ID. */
+function zipName(archiveName: string, now: Date, jobId: string): string {
   const safe =
     archiveName
       .normalize("NFKD")
       .replace(/[^A-Za-z0-9]+/g, "-")
       .replace(/^-|-$/g, "") || "archive";
-  return `${safe.slice(0, 60)}-${now.toISOString().slice(0, 10)}.zip`;
+  return `${safe.slice(0, 60)}-${now.toISOString().slice(0, 10)}-${jobId.slice(0, 8)}.zip`;
 }
 
 const ALREADY_COMPRESSED = /\.(jpe?g|png|gif|webp|mp4|mov|webm|mkv|avi|mp3|m4a|ogg|flac)$/i;
 
+export interface StartedExport {
+  /** The job as it stands once the snapshot is taken. */
+  job: ExportJob;
+  /** Settles when the zip is complete, or with the error that stopped it. */
+  done: Promise<ExportJob>;
+}
+
 /**
- * Exports an archive to a zip and returns the finished job. Owners and
- * members may export. The job is recorded first, so its status can be
- * checked if the requester's connection ends while it runs.
+ * Starts an export of an archive. Only the bot owner may export. The
+ * snapshot is taken before this returns, so the export reflects the archive
+ * at this moment even though compression continues afterward. The job is
+ * recorded first, so a restart during compression marks it failed.
  */
-export async function createExport(
+export function startExport(
   context: ArchivistContext,
   actor: Actor,
   input: { archiveId: unknown },
-): Promise<ExportJob> {
-  const archive = requireArchiveAccess(context, actor, input.archiveId);
+): StartedExport {
+  const archive = requireArchiveOwner(context, actor, input.archiveId, "export an archive");
   const store = openStore(context, archive.archiveId);
   const jobId = newId();
   const now = context.now();
-  const fileName = zipName(archive.name, now);
-  const jobDir = join(context.paths.exportsDir, jobId);
-  const relativePath = `${jobId}/${fileName}`;
+  const fileName = zipName(archive.name, now, jobId);
   context.botDb
     .prepare(
       `INSERT INTO archivist_export_jobs (id, archive_id, requested_by, state, created_ms, relative_path)
        VALUES (?, ?, ?, 'running', ?, ?)`,
     )
-    .run(jobId, archive.archiveId, actor.userId, now.getTime(), relativePath);
+    .run(jobId, archive.archiveId, actor.userId, now.getTime(), fileName);
 
-  try {
-    mkdirSync(jobDir, { recursive: true });
-    // Snapshot. Everything up to the file listing runs without awaiting, so
-    // no archive change can run in between.
-    recoverPendingMutation(store, mutationHooks(context));
-    const snapshotDb = join(jobDir, "snapshot.db");
-    store.db.prepare("VACUUM INTO ?").run(snapshotDb);
-    const snapshotLog = join(jobDir, "snapshot.log");
-    writeFileSync(snapshotLog, existsSync(logFile(store)) ? readFileSync(logFile(store)) : "");
-    const files = archiveFiles(store.folder);
-
-    const zipPath = join(jobDir, fileName);
-    const output = createWriteStream(zipPath);
-    const zip = new ZipArchive({ zlib: { level: 6 } });
-    const done = finished(output);
-    zip.pipe(output);
-    const root = archive.archiveId;
-    zip.file(snapshotDb, { name: `${root}/archive.db` });
-    zip.file(snapshotLog, { name: `${root}/edits.log` });
-    for (const file of files) {
-      // Media is already compressed, so it is stored rather than deflated again.
-      const entry: ZipEntryData = { name: `${root}/${file}`, store: ALREADY_COMPRESSED.test(file) };
-      zip.file(join(store.folder, file), entry);
-    }
-    await zip.finalize();
-    await done;
-    rmSync(snapshotDb, { force: true });
-    rmSync(snapshotLog, { force: true });
-
-    context.botDb
-      .prepare("UPDATE archivist_export_jobs SET state = 'ready', expires_ms = ? WHERE id = ?")
-      .run(context.now().getTime() + EXPORT_LIFETIME_MS, jobId);
-  } catch (error) {
-    rmSync(jobDir, { recursive: true, force: true });
+  const tmp = snapshotDir(context, jobId);
+  const zipPath = join(context.paths.exportsDir, fileName);
+  const partialPath = `${zipPath}${PARTIAL}`;
+  const fail = (error: unknown): never => {
+    rmSync(tmp, { recursive: true, force: true });
+    rmSync(partialPath, { force: true });
     context.botDb
       .prepare(
         "UPDATE archivist_export_jobs SET state = 'failed', error_code = ?, relative_path = NULL WHERE id = ?",
@@ -182,72 +173,102 @@ export async function createExport(
       ? error
       : new ArchivistError(
           "dependency_unavailable",
-          "The export could not be written. Try again later.",
+          "The export could not be written. Check the free space on the host and try again.",
         );
+  };
+
+  const snapshotDb = join(tmp, "archive.db");
+  const snapshotLog = join(tmp, "edits.log");
+  let files: string[] = [];
+  try {
+    mkdirSync(tmp, { recursive: true });
+    mkdirSync(context.paths.exportsDir, { recursive: true });
+    // Snapshot. Everything up to the file listing runs without awaiting, so
+    // no archive change can run in between.
+    recoverPendingMutation(store, mutationHooks(context));
+    store.db.prepare("VACUUM INTO ?").run(snapshotDb);
+    writeFileSync(snapshotLog, existsSync(logFile(store)) ? readFileSync(logFile(store)) : "");
+    files = archiveFiles(store.folder);
+  } catch (error) {
+    fail(error);
   }
-  return toJob(context, readJob(context, archive.archiveId, jobId));
+
+  const compress = async (): Promise<ExportJob> => {
+    try {
+      const output = createWriteStream(partialPath);
+      const zip = new ZipArchive({ zlib: { level: 6 } });
+      const written = finished(output);
+      zip.pipe(output);
+      const root = archive.archiveId;
+      zip.file(snapshotDb, { name: `${root}/archive.db` });
+      zip.file(snapshotLog, { name: `${root}/edits.log` });
+      for (const file of files) {
+        // Media is already compressed, so it is stored rather than deflated again.
+        const entry: ZipEntryData = {
+          name: `${root}/${file}`,
+          store: ALREADY_COMPRESSED.test(file),
+        };
+        zip.file(join(store.folder, file), entry);
+      }
+      await zip.finalize();
+      await written;
+      renameSync(partialPath, zipPath);
+      rmSync(tmp, { recursive: true, force: true });
+      context.botDb
+        .prepare("UPDATE archivist_export_jobs SET state = 'ready' WHERE id = ?")
+        .run(jobId);
+      return toJob(context, readJob(context, jobId));
+    } catch (error) {
+      return fail(error);
+    }
+  };
+
+  return { job: toJob(context, readJob(context, jobId)), done: compress() };
 }
 
+/** Exports an archive and waits for the zip to be complete. */
+export async function createExport(
+  context: ArchivistContext,
+  actor: Actor,
+  input: { archiveId: unknown },
+): Promise<ExportJob> {
+  return startExport(context, actor, input).done;
+}
+
+/** One export job. Owner only. */
 export function exportStatus(
   context: ArchivistContext,
   actor: Actor,
-  input: { archiveId: unknown; jobId: unknown },
+  input: { jobId: unknown },
 ): ExportJob {
-  const archive = requireArchiveAccess(context, actor, input.archiveId);
-  return toJob(context, readJob(context, archive.archiveId, String(input.jobId ?? "")));
+  requireOwner(actor, "see exports");
+  return toJob(context, readJob(context, String(input.jobId ?? "").trim()));
+}
+
+/** The most recent export jobs across all archives, newest first. Owner only. */
+export function listExports(context: ArchivistContext, actor: Actor, limit = 10): ExportJob[] {
+  requireOwner(actor, "see exports");
+  const rows = context.botDb
+    .prepare("SELECT * FROM archivist_export_jobs ORDER BY created_ms DESC, id LIMIT ?")
+    .all(limit) as JobRow[];
+  return rows.map((row) => toJob(context, row));
 }
 
 /**
- * Returns a ready export's file after checking access again, as every
- * download must. Expired and failed exports cannot be downloaded.
+ * Marks exports a restart interrupted as failed, and removes their partial
+ * zip and snapshot. Finished zips are never removed.
  */
-export function exportFile(
-  context: ArchivistContext,
-  actor: Actor,
-  input: { archiveId: unknown; jobId: unknown },
-): { path: string; fileName: string; byteLength: number } {
-  const archive = requireArchiveAccess(context, actor, input.archiveId);
-  const row = readJob(context, archive.archiveId, String(input.jobId ?? ""));
-  const job = toJob(context, row);
-  const expired = row.expires_ms !== null && row.expires_ms <= context.now().getTime();
-  if (job.state !== "ready" || expired || !row.relative_path || job.byteLength === null) {
-    throw new ArchivistError(
-      "not_found",
-      expired || job.state === "expired"
-        ? "That export has expired. Create a new one."
-        : "That export is not ready to download.",
-    );
-  }
-  return {
-    path: join(context.paths.exportsDir, row.relative_path),
-    fileName: job.fileName!,
-    byteLength: job.byteLength,
-  };
-}
-
-/** Deletes ready exports older than 24 hours. Returns how many expired. */
-export function expireExports(context: ArchivistContext): number {
-  const due = context.botDb
-    .prepare("SELECT id FROM archivist_export_jobs WHERE state = 'ready' AND expires_ms <= ?")
-    .all(context.now().getTime()) as { id: string }[];
-  for (const job of due) {
-    rmSync(join(context.paths.exportsDir, job.id), { recursive: true, force: true });
-    context.botDb
-      .prepare(
-        "UPDATE archivist_export_jobs SET state = 'expired', relative_path = NULL WHERE id = ?",
-      )
-      .run(job.id);
-  }
-  return due.length;
-}
-
-/** Marks exports a restart interrupted as failed, and removes their partial files. */
 export function settleInterruptedExports(context: ArchivistContext): number {
   const running = context.botDb
-    .prepare("SELECT id FROM archivist_export_jobs WHERE state IN ('queued', 'running')")
-    .all() as { id: string }[];
+    .prepare(
+      "SELECT id, relative_path FROM archivist_export_jobs WHERE state IN ('queued', 'running')",
+    )
+    .all() as { id: string; relative_path: string | null }[];
   for (const job of running) {
-    rmSync(join(context.paths.exportsDir, job.id), { recursive: true, force: true });
+    rmSync(snapshotDir(context, job.id), { recursive: true, force: true });
+    if (job.relative_path) {
+      rmSync(join(context.paths.exportsDir, `${job.relative_path}${PARTIAL}`), { force: true });
+    }
     context.botDb
       .prepare(
         "UPDATE archivist_export_jobs SET state = 'failed', error_code = 'interrupted', relative_path = NULL WHERE id = ?",

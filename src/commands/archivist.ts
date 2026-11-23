@@ -1,7 +1,6 @@
 import {
   ApplicationCommandOptionType,
   type Attachment,
-  AttachmentBuilder,
   type AutocompleteInteraction,
   type ButtonInteraction,
   ChannelType,
@@ -29,7 +28,6 @@ import { requireArchiveAccess } from "../archivist/access.js";
 import { removeAnnouncementChannel, setAnnouncementChannel } from "../archivist/announcements.js";
 import { listArchives } from "../archivist/archives.js";
 import { getArtifact } from "../archivist/artifacts.js";
-import { createExport, exportFile, exportStatus } from "../archivist/exports.js";
 import { openStore } from "../archivist/context.js";
 import { ArchivistError } from "../archivist/errors.js";
 import { suggestPeople } from "../archivist/people.js";
@@ -181,43 +179,6 @@ async function commandArtifact(
   };
 }
 
-const jobOption = {
-  name: "job",
-  description: "The export ID from when you created it",
-  type: ApplicationCommandOptionType.String,
-  required: true,
-  maxLength: 36,
-} as const;
-
-function megabytes(bytes: number): string {
-  return `${(bytes / 1_048_576).toFixed(1)} MB`;
-}
-
-/** Sends a ready export if Discord allows a file that size here, or explains where to get it. */
-async function deliverExport(
-  interaction: CommandInteraction,
-  archiveId: string,
-  jobId: string,
-  archiveName: string,
-) {
-  const file = exportFile(archivist(), await actorOf(interaction), { archiveId, jobId });
-  const contents =
-    "the database, edit log, originals, previews, and media no longer used by any record";
-  if (file.byteLength <= interaction.attachmentSizeLimit) {
-    await interaction.editReply({
-      content: `Export of **${archiveName}** (${megabytes(file.byteLength)}). It holds the whole archive folder: ${contents}.`,
-      files: [new AttachmentBuilder(file.path, { name: file.fileName })],
-    });
-    return;
-  }
-  await interaction.editReply({
-    content:
-      `The export of **${archiveName}** is ready but is ${megabytes(file.byteLength)}, more than Discord allows here ` +
-      `(${megabytes(interaction.attachmentSizeLimit)}). Large exports are downloaded from the Archivist web app, ` +
-      `which is not available yet. The export is kept for 24 hours as \`${jobId}\`.`,
-  });
-}
-
 /** Requires a server text channel the bot can post embeds and files in and the person can see. */
 function checkLogsChannel(interaction: CommandInteraction, channel: GuildBasedChannel | null) {
   if (!channel || !channel.isTextBased() || channel.isThread() || channel.isVoiceBased()) {
@@ -263,7 +224,6 @@ function checkLogsChannel(interaction: CommandInteraction, channel: GuildBasedCh
   description: "People, accounts, servers, and channels",
   root: "archivist",
 })
-@SlashGroup({ name: "export", description: "Download a whole archive as a zip", root: "archivist" })
 export class Archivist {
   @Slash({ name: "list", description: "List the archives you can use", ...GUILD_ONLY })
   @SlashGroup("archive", "archivist")
@@ -791,62 +751,5 @@ export class Archivist {
   @ButtonComponent({ id: /^ax:edel:/ })
   async entityDeleteConfirm(interaction: ButtonInteraction): Promise<void> {
     await runArchivist(interaction, () => confirmDeleteEntity(interaction));
-  }
-
-  @Slash({ name: "create", description: "Export a whole archive as a zip", ...GUILD_ONLY })
-  @SlashGroup("export", "archivist")
-  @Guard(Cooldown(30))
-  async exportCreate(
-    @SlashOption(archiveOption) archive: string | undefined,
-    interaction: CommandInteraction,
-  ): Promise<void> {
-    await runArchivist(interaction, async () => {
-      await interaction.deferReply(ephemeral);
-      const actor = await actorOf(interaction);
-      const selected = resolveArchiveSelection(archivist(), actor, archive);
-      const job = await createExport(archivist(), actor, { archiveId: selected.archiveId });
-      await deliverExport(interaction, selected.archiveId, job.id, selected.name);
-    });
-  }
-
-  @Slash({ name: "status", description: "Check an export", ...GUILD_ONLY })
-  @SlashGroup("export", "archivist")
-  @Guard(Cooldown(3))
-  async exportStatusCommand(
-    @SlashOption(jobOption) job: string,
-    @SlashOption(archiveOption) archive: string | undefined,
-    interaction: CommandInteraction,
-  ): Promise<void> {
-    await runArchivist(interaction, async () => {
-      const actor = await actorOf(interaction);
-      const selected = resolveArchiveSelection(archivist(), actor, archive);
-      const status = exportStatus(archivist(), actor, {
-        archiveId: selected.archiveId,
-        jobId: job.trim(),
-      });
-      const detail =
-        status.state === "ready" && status.byteLength !== null
-          ? `ready, ${megabytes(status.byteLength)}, kept until <t:${Math.floor((status.expiresMs ?? 0) / 1000)}:f>`
-          : status.state;
-      await interaction.reply({
-        ...ephemeral,
-        content: `Export \`${status.id}\` of **${selected.name}** is ${detail}.`,
-      });
-    });
-  }
-
-  @Slash({ name: "download", description: "Get a ready export again", ...GUILD_ONLY })
-  @SlashGroup("export", "archivist")
-  @Guard(Cooldown(10))
-  async exportDownload(
-    @SlashOption(jobOption) job: string,
-    @SlashOption(archiveOption) archive: string | undefined,
-    interaction: CommandInteraction,
-  ): Promise<void> {
-    await runArchivist(interaction, async () => {
-      await interaction.deferReply(ephemeral);
-      const selected = resolveArchiveSelection(archivist(), await actorOf(interaction), archive);
-      await deliverExport(interaction, selected.archiveId, job.trim(), selected.name);
-    });
   }
 }

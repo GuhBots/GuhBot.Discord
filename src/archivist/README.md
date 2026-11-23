@@ -32,7 +32,7 @@ Archivist is being built in milestones. This directory currently holds storage, 
 | `people.ts` | Picking people by name from a comma-separated list, people suggestions, and short-ID lookup |
 | `announcements.ts` | Per-archive announcement channels and delivery state that prevents repeated posts |
 | `search.ts` | Case-insensitive, Unicode-normalized search for artifacts and entities |
-| `exports.ts` | Consistent snapshots zipped into `archivist-exports/`, kept for 24 hours, with access rechecked at download |
+| `exports.ts` | Owner-only consistent snapshots zipped into `archivist-exports/` on the host, kept until the owner deletes them |
 | `archive-database.ts` | Opens an archive's `archive.db`, refuses newer schemas, and applies migrations |
 | `operational-database.ts` | Prepares Archivist's tables in the bot's shared `guhbot.db` |
 | `migrations/` | The archive and operational schemas as ordered migrations, and the code that applies them |
