@@ -170,15 +170,15 @@ Date-only exact values, approximate days, and date-only ranges never shift betwe
 
 A character is a real person with a required known name. Aliases, real name, birth date, fallback picture, and in-person acquaintance state are optional. Acquaintance state is unknown, yes, or no. Derive age from birth date. Do not store a separate changing age or create a fictional-character type.
 
-A character may have multiple Discord accounts. A human account has at most one current character and may be unlinked. An unlinked account creates a missing-character gap. Track historical account ownership. Bots are accounts marked as bots with separate, potentially multiple character owners and server memberships.
+A character may have multiple Discord accounts. A human account has at most one current character and may be unlinked. An unlinked account creates a missing-character gap. Track historical account ownership. Bots are accounts marked as bots with separate, potentially multiple character owners and server memberships. A character may have a main account, the account they used most during a period. Record main-account changes as dated observations of the character. The main account must be an account the character owns or owned.
 
-Record dated observations of account names, discriminators, avatars, character aliases, server names, icons, and owners. Unknown observation dates remain unknown. For historical display, use the latest dated observation at or before the selected historical position. If none exists, use a clearly marked fallback, never imply that today's profile is historically verified.
+Record dated observations of account names, discriminators, avatars, character aliases, character main accounts, server names, icons, and owners. Unknown observation dates remain unknown. For historical display, use the latest dated observation at or before the selected historical position. If none exists, use a clearly marked fallback, never imply that today's profile is historically verified. A character's historical picture is the avatar of their main account at that position, then their fallback picture, then initials.
 
 Introductions are directed character links with optional dates and multiple introducers. Server membership belongs to accounts, with multiple join and leave intervals. Character membership aggregates its accounts. Do not use one global character join date.
 
 Support guild channels, threads, direct messages, and group chats. Guild channels and threads have a server. Direct messages and group chats do not. Historical servers, channels, and accounts may lack external Discord IDs. Keep depicted locations separate from the submission guild, channel, and message.
 
-Artifacts may reference multiple people, accounts, servers, channels, and events. Events may reference multiple people and servers. All relationships are local to their archive. Character merge is explicit, chooses a survivor, preserves aliases, reassigns links after conflict review, and never auto-merges matching names. Known Discord account IDs are unique inside an archive.
+Artifacts may reference multiple people, accounts, servers, channels, and events. Events may reference multiple people, servers, and channels. All relationships are local to their archive. Character merge is explicit, chooses a survivor, preserves aliases, reassigns links after conflict review, and never auto-merges matching names. Known Discord account IDs are unique inside an archive.
 
 Store identification review state as unreviewed, incomplete, or complete. Zero linked people does not imply an unidentified person after a complete review. Linking someone does not prove everyone was identified.
 
@@ -238,6 +238,16 @@ Do not post a new announcement for failed intake, duplicate reuse, or an ordinar
 
 ## Hosted Views
 
+### Layout And Navigation
+
+The owner's [layout sketch](assets/archivist-layout-sketch.png) shows the intended desktop arrangement. The final app uses the dark design tokens below rather than the sketch's white background.
+
+At desktop width, the app has three columns. The left column lists servers and group chats as round icons. The center holds the current view. The right column lists every character in the archive with their picture and known name. The set of listed characters does not change while browsing the timeline. Pictures and icons follow the timeline position, which is the date at the center of the visible timeline. A character uses their historical picture rule. A server or group chat uses its icon observation in effect at that date. Outside the timeline, pictures use the latest known observation.
+
+Selecting a server or group chat opens its object view. Selecting a character opens their character page. The page shows their known name, aliases, accounts with name and avatar history, main-account history, age, and acquaintance state, followed by their artifacts and events. It offers actions to filter the timeline to that character, open the graph around them, and edit permitted fields.
+
+A top bar holds the archive switcher, view switcher, search, calendar, and account controls. Below the current view, a tray holds that view's actions, such as zoom, filters, layer toggles, adding an artifact or event, and export. Each view declares its own tray buttons, so the tray can differ between views and gain buttons later. The owner confirms the exact tray contents and the top bar in the prototype review described under [Delivery And Acceptance](#delivery-and-acceptance).
+
 ### Shared Search And Filters
 
 Search character and account names and aliases, artifact descriptions, and event titles and descriptions using case-insensitive Unicode-normalized substring matching. No media-text extraction. Filters cover character, account, server, channel, event, media type, date basis, identification state, and date range. Require every selected category to match and allow any selected value within a category. Keep filters shared across views within an archive. Clearing or switching archives clears incompatible IDs.
@@ -246,13 +256,19 @@ Default ordering is oldest first with stable ID tie-breaking. Put undated artifa
 
 ### Horizontal Timeline And Calendar
 
-Use artifact dots and downward event arrows, a month/year ruler, and day/month/year zoom. Use distinct solid duration spans and labeled patterned or dashed uncertainty windows. Stack same-day records and cluster overflow into an expandable count. Include a calendar modal in the top-right controls, with day selection moving to that period. Selecting a record opens details with permitted editing.
+The timeline stacks server and group-chat lanes above an event band and a month/year calendar ruler, with day, month, and year zoom. Dashes mean uncertainty throughout the timeline. Include a calendar modal in the top bar, with day selection moving to that period. Selecting a record opens details with permitted editing.
 
-The owner selects a main server with a persistent lane. Secondary lanes group filtered activity whose gaps are at most 90 calendar days, disappearing across larger gaps and reappearing with the same server identity. The threshold is an archive setting. Branches do not assert ancestry. Unknown-server records use an Unassigned lane. Show a multi-server event on its relevant lanes with one underlying record ID. Retain every item in detail/list access when clustering.
+The owner selects a main server whose lane is always shown, closest to the event band. Every server and group chat has its own solid lane color, assigned automatically from a palette that reads well on the dark theme and editable afterward. A record in a guild channel or thread belongs to its server's lane. Direct messages and records with no known server or group chat use an Unassigned lane. Secondary lanes group filtered activity whose gaps are at most 90 calendar days, disappearing across larger gaps and reappearing with the same identity. The threshold is an archive setting. A lane may be drawn branching from the main lane, but branches do not assert ancestry. Show a record linked to several lanes on each of them with one underlying record ID. Whether a single server's object view shows its channels as lanes is decided in the prototype review.
+
+Artifacts appear as one dot per lane and day. At coarser zoom, a dot covers a week or month. A darker green means more artifacts in that period. A dot with a dashed outline contains at least one artifact whose selected date is estimated or comes from file metadata. Selecting a dot opens a gallery of that period's artifacts in historical order. The gallery shows a large preview, description, people, and date with its basis, with previous and next controls, a thumbnail strip, and a link to full details. Retain every item in detail and list access.
+
+Ranged events appear in the event band as labeled strips in their event color. Overlapping events are placed in parallel rows so none hides another. A duration is a solid strip, and an occurrence window is a dashed strip. Event colors are assigned automatically from the palette and are editable. Events do not recolor lanes.
+
+Single-day events appear as red downward arrows with their names on their lanes. Several single-day events on one lane and day share an arrow with an expandable count. Server name and icon changes appear automatically as arrows in a separate color showing the new name and icon, because they mark the server's eras. Each lane's label shows the name and icon in effect at the visible position. Account name changes and character main-account changes form an optional marker layer, off by default. Tray toggles control each marker layer. Estimated events and markers are visibly labeled as estimates.
 
 ### Object Browser
 
-Use server and group-chat navigation on the left, channel navigation beside it when applicable, artifacts in the center, and character names and pictures on the right. Character selection opens details with explicit edit and filter actions. The artifact list is historical ordering, not submission order. Dedicated quotes are excluded.
+Selecting a server or group chat in the left column opens its object view. A server shows its channel navigation beside the left column. The center lists the selected place's artifacts in historical order, not submission order. Dedicated quotes are excluded.
 
 ### Character Graph
 
@@ -278,7 +294,7 @@ Create export jobs in `archivist-exports/`, outside the portable folder. Send th
 
 Use generated stable `crypto.randomUUID()` identifiers for internal records and text for external Discord and Drive IDs. Every archive has independent identity space. Foreign keys inside its database never point into `guhbot.db` or another archive.
 
-A writable parent record has `id`, positive `version`, creation timestamp, creator Discord ID, and update timestamp. Dates of creation and update are zero-offset timestamps. Historical date values are separate. Empty optional text is normalized to null. Required names are 1 to 100 characters, event titles 1 to 200, descriptions 1 to 20,000, and reasons and research notes 1 to 10,000 when supplied. Reject blank required values after trimming. Do not silently truncate stored descriptions to Discord embed limits. Truncate only the visible embed text and offer full details.
+A writable parent record has `id`, positive `version`, creation timestamp, creator Discord ID, and update timestamp. Dates of creation and update are zero-offset timestamps. Historical date values are separate. Empty optional text is normalized to null. Required names are 1 to 100 characters, event titles 1 to 200, descriptions 1 to 20,000, and reasons and research notes 1 to 10,000 when supplied. Reject blank required values after trimming. Server, channel, and event colors are lowercase `#rrggbb` values. The application assigns each from a palette at creation, and contributors may change it. Do not silently truncate stored descriptions to Discord embed limits. Truncate only the visible embed text and offer full details.
 
 The schema below fixes column names, storage types, nullability, defaults, uniqueness, foreign keys, and deletion actions. Application validators additionally enforce real calendar dates, timezone rules, cross-field semantics, minimum relationship counts, and permitted target kinds. These validations are shared by both interfaces. A reader validates schema version and treats invalid relationships as archive errors rather than guessing.
 
@@ -286,7 +302,7 @@ The schema below fixes column names, storage types, nullability, defaults, uniqu
 
 Artifact `selected_date_id` equals the first non-null exact, estimated, or file date. Exact assertions may use `day` or `instant`. Artifact estimates use `day`. File metadata may use any date kind. Event estimates and all uncertainty windows use calendar days. Event exact assertions require their basis. Check start and end ordering in shared validation, including instant order when both bounds are instants.
 
-History rows and relationship rows are owned or linked data edited through their parent operation. Log them using the affected surviving parent record identity. Character merges reassign both current and historical references, including request people and bot owners, before deleting the losing character and removing its own earlier log entries. Conflicting current account ownership requires a reviewed choice.
+History rows and relationship rows are owned or linked data edited through their parent operation. Log them using the affected surviving parent record identity. Character merges reassign both current and historical references, including request people, bot owners, and main accounts, before deleting the losing character and removing its own earlier log entries. Conflicting current account ownership requires a reviewed choice.
 
 For request creation, validate at least one `request_people` row in the transaction before commit. A resolved request must have at least one linked found artifact. Removing the final found-artifact link, including by artifact deletion, reopens a resolved request to Needed. Preserve its original temporal assertion. An event used as `anchor_event_id` cannot be deleted, even if the request is Resolved or Unrecoverable, until that assertion is replaced.
 
@@ -377,6 +393,13 @@ CREATE TABLE account_ownerships (
   end_date_id TEXT REFERENCES date_values(id)
 );
 
+CREATE TABLE character_main_accounts (
+  id TEXT PRIMARY KEY,
+  character_id TEXT NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+  account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE RESTRICT,
+  observed_date_id TEXT REFERENCES date_values(id)
+);
+
 CREATE TABLE account_names (
   id TEXT PRIMARY KEY,
   account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
@@ -405,7 +428,8 @@ CREATE TABLE servers (
   created_by TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   discord_id TEXT UNIQUE,
-  label TEXT NOT NULL CHECK (length(trim(label)) BETWEEN 1 AND 100)
+  label TEXT NOT NULL CHECK (length(trim(label)) BETWEEN 1 AND 100),
+  color TEXT NOT NULL CHECK (color GLOB '#[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]')
 );
 
 CREATE TABLE server_names (
@@ -441,6 +465,7 @@ CREATE TABLE channels (
   parent_channel_id TEXT REFERENCES channels(id) ON DELETE RESTRICT,
   label TEXT NOT NULL,
   icon_media_id TEXT REFERENCES media(id),
+  color TEXT NOT NULL CHECK (color GLOB '#[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]'),
   CHECK ((kind IN ('guild_channel', 'thread') AND server_id IS NOT NULL) OR (kind IN ('direct_message', 'group_chat') AND server_id IS NULL)),
   CHECK ((kind = 'thread' AND parent_channel_id IS NOT NULL) OR (kind <> 'thread' AND parent_channel_id IS NULL))
 );
@@ -482,6 +507,7 @@ CREATE TABLE events (
   end_date_id TEXT REFERENCES date_values(id),
   exact_basis TEXT,
   disputed_reason TEXT,
+  color TEXT NOT NULL CHECK (color GLOB '#[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]'),
   CHECK ((date_kind = 'single' AND end_date_id IS NULL) OR (date_kind <> 'single' AND end_date_id IS NOT NULL)),
   CHECK (certainty <> 'exact' OR length(trim(coalesce(exact_basis, ''))) > 0)
 );
@@ -554,6 +580,12 @@ CREATE TABLE event_servers (
   event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
   server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE RESTRICT,
   PRIMARY KEY (event_id, server_id)
+);
+
+CREATE TABLE event_channels (
+  event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE RESTRICT,
+  PRIMARY KEY (event_id, channel_id)
 );
 
 CREATE TABLE research_requests (
@@ -658,6 +690,10 @@ CREATE INDEX artifact_account_reverse ON artifact_accounts(account_id, artifact_
 CREATE INDEX event_people_reverse ON event_people(character_id, event_id);
 
 CREATE INDEX event_server_reverse ON event_servers(server_id, event_id);
+
+CREATE INDEX event_channel_reverse ON event_channels(channel_id, event_id);
+
+CREATE INDEX main_account_character ON character_main_accounts(character_id);
 
 CREATE INDEX membership_server ON memberships(server_id, account_id);
 
@@ -901,6 +937,8 @@ Complete the entire hosted-app scope through these internal milestones.
 | `M5` Release Validation | Complete export and clean restore, migration compatibility, performance, CI, and operating documentation | Zip opens without bot state or source access, required checks run in CI, performance results name the host, and configured live-source and local-hosting rehearsals pass |
 | `M6` Future Viewer | Excluded from this build | A separate future project may use the published archive contract |
 
+Before building the `M2` Discord intake flow, show the owner the exact command, people selection, reply, and duplicate-review steps. Before building the `M4` views, publish a clickable prototype with fake data for the owner's review. Record the agreed layout, tray, and view decisions in this plan. The prototype is not reused as application code.
+
 ### Required Automated Scenarios
 
 * Preserve original image and video bytes, metadata, one-original cardinality, derived previews, and explicit unknown dates. Preview failure does not discard a good original.
@@ -917,6 +955,7 @@ Complete the entire hosted-app scope through these internal milestones.
 * Verify listener start, repeated start and stop, port conflict, bot shutdown, restart-stopped state, and continuing Discord contribution while the listener is stopped.
 * Verify announcement settings for every contributor in the selected archive, web-originated uploads, notification failure after saved evidence, and no blind resend after an indeterminate external delivery result.
 * Verify one complete zip with log, originals, previews, and retained media; absence of credentials and operational state; clean-location restore; and unsupported schema refusal.
+* Verify lane assignment for servers, group chats, threads, and unassigned records, parallel event-band rows for overlapping ranges, day-bucket artifact counts, automatic server name and icon markers, and historical character pictures from main accounts.
 * Verify empty archives, crowded days, long gaps, reappearing server lanes, multi-server events counted once, search and filter semantics, unknown memberships, and accessible visual states.
 
 Add planned commands `test:archivist:core`, `test:archivist:discord`, `test:archivist:web`, and `test:archivist:e2e`. CI jobs `archivist/core`, `archivist/discord`, and `archivist/web` run the relevant suites, with route and browser coverage in the web job. Mock Discord and Google in CI. A real test server and representative public Drive files supplement those tests. Do not require production credentials in pull-request checks.
@@ -947,13 +986,18 @@ The owner's accepted batches A through F are reconciled here. Later clarificatio
 | Identification cards | Missing-people cards come from an incomplete identification state, not from unreviewed artifacts |
 | Intake volume | One artifact per submission, with thousands expected over time. Keep each Discord intake to as few steps as possible |
 | Confirmed as specified | Any archive member may permanently delete permitted records. Artifact estimates remain single calendar days |
+| Web layout | Three columns from the owner's sketch, with servers and group chats on the left, the current view in the center, all characters on the right, and a per-view tray of actions |
+| Timeline lanes | Servers and group chats get solid, editable lane colors. Dashes mean uncertainty. Events do not recolor lanes |
+| Timeline marks | One green dot per day, shaded by count, opening a gallery. Ranged events form labeled parallel strips in a band. Red arrows mark single-day events. Server name and icon changes get their own arrow color |
+| Main accounts | Characters have a dated main-account history, and their pictures follow it along the timeline |
 
-The earlier `Q01` through `Q19` topic discussion is resolved into the contract sections rather than retained as a competing open-question table. Accepted request and announcement clarifications are incorporated. The archive selection, intake link, identification card, and intake volume rows record owner clarifications from 2026-11-23. If a final review changes a rule, update its contract, schema, interfaces, and acceptance fixture together.
+The earlier `Q01` through `Q19` topic discussion is resolved into the contract sections rather than retained as a competing open-question table. Accepted request and announcement clarifications are incorporated. The rows from archive selection through main accounts record owner clarifications from 2026-11-23. If a final review changes a rule, update its contract, schema, interfaces, and acceptance fixture together.
 
 ### Outstanding Verification Prerequisites
 
 * Provision the deployment Drive API project/key and representative publicly readable image and video files. Do not read or commit private `.env` values during planning.
 * Configure the actual Discord sign-in application and exact localhost callback before the local integration rehearsal. Provide public HTTPS hosting only for a later remote deployment.
 * Generate and validate the actual lockfile, container packaging, migration files, and runnable test commands during implementation. Registry metadata and a schema smoke check do not replace an application build.
+* Review and accept the newly explicit technical contract and schema draft before authorizing the agent to implement it.
 
-**Current state:** The contract is approved and implementation is pending.
+**Current state:** Product decisions are recorded. This consolidated technical contract is ready for final review. No application code, migrations, deployment configuration, packages, or credentials have been changed as part of planning.
