@@ -82,6 +82,12 @@ Archivist is being built in milestones. These commands exist so far.
 | `/archivist timezone show` | None | Shows your timezone, if you set one |
 | `/archivist timezone reset` | None | Clears your timezone, so typed dates use each archive's timezone |
 | `/archivist artifact add <description> [archive] [file] [drive_link] [people] [exact_date] [exact_basis] [estimated_day] [estimate_reason] [identification]` | None | Archives one file or one public Google Drive file link. People are names separated by commas, with suggestions. A time typed without a zone is confirmed before saving. A file already in the archive opens a review of what to change instead. The reply has Edit, Add people, and Delete buttons |
+| `/archivist artifact show <id> [archive]` | None | Shows an artifact with its Edit, Add people, and Delete buttons. Suggests artifacts by description |
+| `/archivist artifact edit <id> [archive]` | None | Opens a form for the description and dates |
+| `/archivist artifact delete <id> [archive]` | None | Asks for confirmation, then deletes permanently. The media file stays in the archive |
+| `/archivist entity create <kind> <name> [archive] [...]` | None | Adds a character, account, server, or channel. Optional fields apply to one kind each, such as `birth_day` for characters or `server` for channels |
+| `/archivist entity show <kind> <id> [archive]` | None | Shows a character, account, server, or channel. Suggests them by name |
+| `/archivist entity delete <kind> <id> [archive]` | None | Deletes permanently once nothing links to it, or says what still does |
 | `/set-artifact-logs-channel [archive] [channel]` | None | Announces every new artifact in the archive in a channel, this one by default. The bot must be able to post embeds and files there |
 | `/remove-artifact-logs-channel [archive]` | None | Stops future announcements. Earlier posts stay |
 

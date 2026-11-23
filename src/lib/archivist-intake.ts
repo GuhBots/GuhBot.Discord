@@ -520,6 +520,16 @@ function textInput(
 /** Opens the edit form, bound to the version shown on the button. */
 export async function openEdit(interaction: ButtonInteraction): Promise<void> {
   const { archiveId, artifactId, version } = parseRecordId(interaction.customId);
+  await showEditForm(interaction, archiveId, artifactId, version);
+}
+
+/** Shows the edit form for an artifact, bound to the version the person saw. */
+export async function showEditForm(
+  interaction: ButtonInteraction | CommandInteraction,
+  archiveId: string,
+  artifactId: string,
+  version: number,
+): Promise<void> {
   const artifact = getArtifact(archivist(), await actorOf(interaction), {
     archiveId,
     id: artifactId,
@@ -674,6 +684,16 @@ export async function submitAddPeople(interaction: ModalSubmitInteraction): Prom
 
 export async function askDelete(interaction: ButtonInteraction): Promise<void> {
   const { archiveId, artifactId, version } = parseRecordId(interaction.customId);
+  await askDeleteFor(interaction, archiveId, artifactId, version);
+}
+
+/** Asks the person to confirm permanently deleting an artifact. */
+export async function askDeleteFor(
+  interaction: ButtonInteraction | CommandInteraction,
+  archiveId: string,
+  artifactId: string,
+  version: number,
+): Promise<void> {
   getArtifact(archivist(), await actorOf(interaction), { archiveId, id: artifactId });
   await interaction.reply({
     ...ephemeral,

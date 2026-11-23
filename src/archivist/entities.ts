@@ -13,6 +13,7 @@ import {
 } from "./fields.js";
 import { commitMutation, type VersionedTable } from "./mutations.js";
 import { nextColor } from "./palette.js";
+import { resolveShortId } from "./people.js";
 import { logEntry, notFoundRecord, openForActor } from "./records.js";
 import { expectedVersionValue, staleVersion } from "./versions.js";
 
@@ -365,7 +366,7 @@ export function deleteEntity(
   const { store } = openForActor(context, actor, input.archiveId);
   const kind = kindValue(input.kind);
   const table = TABLES[kind];
-  const id = typeof input.id === "string" ? input.id : "";
+  const id = resolveShortId(store.db, table, input.id, kind);
   const expectedVersion = expectedVersionValue(input.expectedVersion);
   const row = store.db.prepare(`SELECT version FROM ${table} WHERE id = ?`).get(id) as
     { version: number } | undefined;
@@ -393,3 +394,131 @@ export function deleteEntity(
 }
 
 export { kindValue as entityKindValue };
+
+export interface EntityDetails {
+  kind: EntityKind;
+  id: string;
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  name: string;
+  /** Labeled values to show, in display order. Empty values are left out. */
+  fields: [label: string, value: string][];
+}
+
+/** Whole years from a birth day to `now`, for display. Age is never stored. */
+export function ageOn(birthDay: string, now: Date): number {
+  const [year, month, day] = birthDay.split("-").map(Number) as [number, number, number];
+  let age = now.getUTCFullYear() - year;
+  if (
+    now.getUTCMonth() + 1 < month ||
+    (now.getUTCMonth() + 1 === month && now.getUTCDate() < day)
+  ) {
+    age -= 1;
+  }
+  return age;
+}
+
+/** Reads an entity by full or short ID, with the details people need to recognize it. */
+export function getEntity(
+  context: ArchivistContext,
+  actor: Actor,
+  input: { archiveId: unknown; kind: unknown; id: unknown },
+): EntityDetails {
+  const { store } = openForActor(context, actor, input.archiveId);
+  const kind = kindValue(input.kind);
+  const db = store.db;
+  const id = resolveShortId(db, TABLES[kind], input.id, kind);
+  const base = db
+    .prepare(
+      `SELECT version, created_at AS createdAt, created_by AS createdBy FROM ${TABLES[kind]} WHERE id = ?`,
+    )
+    .get(id) as { version: number; createdAt: string; createdBy: string };
+  const name = (table: string, column: string, value: string | null) =>
+    value
+      ? ((
+          db.prepare(`SELECT ${column} AS v FROM ${table} WHERE id = ?`).get(value) as
+            { v: string } | undefined
+        )?.v ?? null)
+      : null;
+  const fields: [string, string | null][] = [];
+  let label = "";
+  if (kind === "character") {
+    const row = db.prepare("SELECT * FROM characters WHERE id = ?").get(id) as {
+      known_name: string;
+      real_name: string | null;
+      birth_day: string | null;
+      met_in_person: string;
+    };
+    label = row.known_name;
+    const aliases = (
+      db
+        .prepare("SELECT name FROM character_aliases WHERE character_id = ? ORDER BY name")
+        .all(id) as { name: string }[]
+    ).map((alias) => alias.name);
+    const accounts = (
+      db.prepare("SELECT label FROM accounts WHERE character_id = ? ORDER BY label").all(id) as {
+        label: string;
+      }[]
+    ).map((account) => account.label);
+    fields.push(
+      ["Real name", row.real_name],
+      ["Aliases", aliases.join(", ") || null],
+      [
+        "Birth day",
+        row.birth_day ? `${row.birth_day} (age ${ageOn(row.birth_day, context.now())})` : null,
+      ],
+      ["Met in person", row.met_in_person],
+      ["Accounts", accounts.join(", ") || null],
+    );
+  } else if (kind === "account") {
+    const row = db.prepare("SELECT * FROM accounts WHERE id = ?").get(id) as {
+      label: string;
+      kind: string;
+      discord_id: string | null;
+      character_id: string | null;
+    };
+    label = row.label;
+    fields.push(
+      ["Kind", row.kind],
+      ["Discord ID", row.discord_id],
+      [
+        "Character",
+        name("characters", "known_name", row.character_id) ??
+          (row.kind === "human" ? "Not linked yet" : null),
+      ],
+    );
+  } else if (kind === "server") {
+    const row = db.prepare("SELECT * FROM servers WHERE id = ?").get(id) as {
+      label: string;
+      discord_id: string | null;
+      color: string;
+    };
+    label = row.label;
+    fields.push(["Discord ID", row.discord_id], ["Lane color", row.color]);
+  } else {
+    const row = db.prepare("SELECT * FROM channels WHERE id = ?").get(id) as {
+      label: string;
+      kind: string;
+      discord_id: string | null;
+      server_id: string | null;
+      parent_channel_id: string | null;
+      color: string;
+    };
+    label = row.label;
+    fields.push(
+      ["Kind", row.kind.replace("_", " ")],
+      ["Server", name("servers", "label", row.server_id)],
+      ["Parent channel", name("channels", "label", row.parent_channel_id)],
+      ["Discord ID", row.discord_id],
+      ["Lane color", row.kind === "group_chat" ? row.color : null],
+    );
+  }
+  return {
+    kind,
+    id,
+    ...base,
+    name: label,
+    fields: fields.filter((field): field is [string, string] => field[1] !== null),
+  };
+}

@@ -7,6 +7,7 @@ import { ArchivistError } from "./errors.js";
 import { discordId, newId, requiredText, TEXT_LIMITS, timestamp } from "./fields.js";
 import { mediaPaths, placeStagedMedia, type StagedMedia } from "./media.js";
 import { commitMutation, type Expectation } from "./mutations.js";
+import { resolveShortId } from "./people.js";
 import { inputTimeZone } from "./preferences.js";
 import {
   type ArchiveSession,
@@ -494,7 +495,10 @@ export function getArtifact(
   input: { archiveId: unknown; id: unknown },
 ): ArtifactDetails {
   const { store } = openForActor(context, actor, input.archiveId);
-  const artifact = readArtifact(store.db, String(input.id ?? ""));
+  const artifact = readArtifact(
+    store.db,
+    resolveShortId(store.db, "artifacts", input.id, "artifact"),
+  );
   if (!artifact) throw notFoundRecord("artifact");
   return artifact;
 }

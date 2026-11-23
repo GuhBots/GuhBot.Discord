@@ -2,6 +2,7 @@ import { EmbedBuilder } from "discord.js";
 import type { ArtifactDetails, DuplicateDifference } from "../archivist/artifacts.js";
 import { localDateTime } from "../archivist/dates.js";
 import type { StoredDate } from "../archivist/date-store.js";
+import type { EntityDetails } from "../archivist/entities.js";
 
 /**
  * How Archivist records read in Discord. Stored text is never shortened.
@@ -143,4 +144,26 @@ export function differenceOption(
     value: difference.key,
     description: shorten(description, OPTION_TEXT_LIMIT),
   };
+}
+
+const ENTITY_TITLES: Record<EntityDetails["kind"], string> = {
+  character: "Character",
+  account: "Account",
+  server: "Server",
+  channel: "Channel",
+};
+
+/** The embed for a character, account, server, or channel. */
+export function entityEmbed(entity: EntityDetails, archiveName: string): EmbedBuilder {
+  return new EmbedBuilder()
+    .setColor(ARCHIVIST_COLOR)
+    .setTitle(shorten(`${ENTITY_TITLES[entity.kind]}: ${entity.name}`, 256))
+    .setDescription(`${archiveName} - \`${entity.id.slice(0, 8)}\` - version ${entity.version}`)
+    .addFields(
+      entity.fields.map(([name, value]) => ({
+        name,
+        value: shorten(value, FIELD_LIMIT),
+        inline: value.length < 40,
+      })),
+    );
 }

@@ -27,6 +27,7 @@ import { Category } from "@discordx/utilities";
 import { requireArchiveAccess } from "../archivist/access.js";
 import { removeAnnouncementChannel, setAnnouncementChannel } from "../archivist/announcements.js";
 import { listArchives } from "../archivist/archives.js";
+import { getArtifact } from "../archivist/artifacts.js";
 import { openStore } from "../archivist/context.js";
 import { ArchivistError } from "../archivist/errors.js";
 import { suggestPeople } from "../archivist/people.js";
@@ -45,8 +46,18 @@ import {
   suggestArchives,
 } from "../lib/archivist.js";
 import {
+  askDeleteEntity,
+  confirmDeleteEntity,
+  createEntityFromCommand,
+  showEntity,
+  suggestArtifactIds,
+  suggestEntityIds,
+} from "../lib/archivist-entities.js";
+import {
   applyReview,
+  artifactReply,
   askDelete,
+  askDeleteFor,
   cancelReview,
   cancelZone,
   confirmDelete,
@@ -54,6 +65,7 @@ import {
   openAddPeople,
   openEdit,
   selectDifferences,
+  showEditForm,
   startIntake,
   submitAddPeople,
   submitEdit,
@@ -113,6 +125,50 @@ async function suggestPeopleNames(interaction: AutocompleteInteraction): Promise
   await interaction.respond(suggestPeople(db, interaction.options.getFocused()));
 }
 
+const KIND_CHOICES = [
+  { name: "Character", value: "character" },
+  { name: "Account", value: "account" },
+  { name: "Server", value: "server" },
+  { name: "Channel or group chat", value: "channel" },
+];
+
+const kindOption = {
+  name: "kind",
+  description: "What kind of record",
+  type: ApplicationCommandOptionType.String,
+  required: true,
+} as const;
+
+const entityIdOption = {
+  name: "id",
+  description: "Start typing a name, or give its ID",
+  type: ApplicationCommandOptionType.String,
+  required: true,
+  autocomplete: suggestEntityIds,
+} as const;
+
+const artifactIdOption = {
+  name: "id",
+  description: "Start typing its description, or give its ID",
+  type: ApplicationCommandOptionType.String,
+  required: true,
+  autocomplete: suggestArtifactIds,
+} as const;
+
+/** Finds an artifact for a command, by full or short ID, in the chosen or remembered archive. */
+async function commandArtifact(
+  interaction: CommandInteraction,
+  archive: string | undefined,
+  id: string,
+) {
+  const actor = await actorOf(interaction);
+  const selected = resolveArchiveSelection(archivist(), actor, archive);
+  return {
+    archiveId: selected.archiveId,
+    artifact: getArtifact(archivist(), actor, { archiveId: selected.archiveId, id }),
+  };
+}
+
 /** Requires a server text channel the bot can post embeds and files in and the person can see. */
 function checkLogsChannel(interaction: CommandInteraction, channel: GuildBasedChannel | null) {
   if (!channel || !channel.isTextBased() || channel.isThread() || channel.isVoiceBased()) {
@@ -149,6 +205,11 @@ function checkLogsChannel(interaction: CommandInteraction, channel: GuildBasedCh
 @SlashGroup({ name: "archive", description: "Archives you can use", root: "archivist" })
 @SlashGroup({ name: "timezone", description: "Your timezone for typed dates", root: "archivist" })
 @SlashGroup({ name: "artifact", description: "Add and manage artifacts", root: "archivist" })
+@SlashGroup({
+  name: "entity",
+  description: "People, accounts, servers, and channels",
+  root: "archivist",
+})
 export class Archivist {
   @Slash({ name: "list", description: "List the archives you can use", ...GUILD_ONLY })
   @SlashGroup("archive", "archivist")
@@ -449,5 +510,212 @@ export class Archivist {
           : `**${selected.name}** had no announcement channel.`,
       });
     });
+  }
+
+  @Slash({ name: "show", description: "Show an artifact", ...GUILD_ONLY })
+  @SlashGroup("artifact", "archivist")
+  @Guard(Cooldown(3))
+  async artifactShow(
+    @SlashOption(artifactIdOption) id: string,
+    @SlashOption(archiveOption) archive: string | undefined,
+    interaction: CommandInteraction,
+  ): Promise<void> {
+    await runArchivist(interaction, async () => {
+      await interaction.deferReply(ephemeral);
+      const { archiveId, artifact } = await commandArtifact(interaction, archive, id);
+      await interaction.editReply(
+        artifactReply(archivist(), archiveId, artifact, `Artifact \`${artifact.id.slice(0, 8)}\``),
+      );
+    });
+  }
+
+  @Slash({ name: "edit", description: "Edit an artifact's description and dates", ...GUILD_ONLY })
+  @SlashGroup("artifact", "archivist")
+  @Guard(Cooldown(3))
+  async artifactEdit(
+    @SlashOption(artifactIdOption) id: string,
+    @SlashOption(archiveOption) archive: string | undefined,
+    interaction: CommandInteraction,
+  ): Promise<void> {
+    await runArchivist(interaction, async () => {
+      const { archiveId, artifact } = await commandArtifact(interaction, archive, id);
+      await showEditForm(interaction, archiveId, artifact.id, artifact.version);
+    });
+  }
+
+  @Slash({ name: "delete", description: "Permanently delete an artifact", ...GUILD_ONLY })
+  @SlashGroup("artifact", "archivist")
+  @Guard(Cooldown(3))
+  async artifactDelete(
+    @SlashOption(artifactIdOption) id: string,
+    @SlashOption(archiveOption) archive: string | undefined,
+    interaction: CommandInteraction,
+  ): Promise<void> {
+    await runArchivist(interaction, async () => {
+      const { archiveId, artifact } = await commandArtifact(interaction, archive, id);
+      await askDeleteFor(interaction, archiveId, artifact.id, artifact.version);
+    });
+  }
+
+  @Slash({
+    name: "create",
+    description: "Add a character, account, server, or channel",
+    ...GUILD_ONLY,
+  })
+  @SlashGroup("entity", "archivist")
+  @Guard(Cooldown(3))
+  async entityCreate(
+    @SlashChoice(...KIND_CHOICES)
+    @SlashOption(kindOption)
+    kind: string,
+    @SlashOption({
+      name: "name",
+      description: "Known name for a character, or the name of an account, server, or channel",
+      type: ApplicationCommandOptionType.String,
+      required: true,
+      maxLength: 100,
+    })
+    name: string,
+    @SlashOption(archiveOption) archive: string | undefined,
+    @SlashOption({
+      name: "discord_id",
+      description: "Discord ID of the account, server, or channel, if known",
+      type: ApplicationCommandOptionType.String,
+      required: false,
+      maxLength: 20,
+    })
+    discordId: string | undefined,
+    @SlashOption({
+      name: "real_name",
+      description: "Character only: their real name",
+      type: ApplicationCommandOptionType.String,
+      required: false,
+      maxLength: 100,
+    })
+    realName: string | undefined,
+    @SlashOption({
+      name: "birth_day",
+      description: "Character only: birth date as YYYY-MM-DD",
+      type: ApplicationCommandOptionType.String,
+      required: false,
+      maxLength: 10,
+    })
+    birthDay: string | undefined,
+    @SlashChoice(
+      { name: "Unknown", value: "unknown" },
+      { name: "Yes", value: "yes" },
+      { name: "No", value: "no" },
+    )
+    @SlashOption({
+      name: "met_in_person",
+      description: "Character only: whether you know them in person",
+      type: ApplicationCommandOptionType.String,
+      required: false,
+    })
+    metInPerson: string | undefined,
+    @SlashChoice(
+      { name: "Server channel", value: "guild_channel" },
+      { name: "Thread", value: "thread" },
+      { name: "Group chat", value: "group_chat" },
+      { name: "Direct messages", value: "direct_message" },
+    )
+    @SlashOption({
+      name: "channel_kind",
+      description: "Channel only: what kind of channel",
+      type: ApplicationCommandOptionType.String,
+      required: false,
+    })
+    channelKind: string | undefined,
+    @SlashOption({
+      name: "server",
+      description: "Channel only: the server it belongs to",
+      type: ApplicationCommandOptionType.String,
+      required: false,
+      autocomplete: suggestEntityIds,
+    })
+    server: string | undefined,
+    @SlashOption({
+      name: "parent_channel",
+      description: "Thread only: the channel it belongs to",
+      type: ApplicationCommandOptionType.String,
+      required: false,
+      autocomplete: suggestEntityIds,
+    })
+    parentChannel: string | undefined,
+    @SlashChoice({ name: "Person", value: "human" }, { name: "Bot", value: "bot" })
+    @SlashOption({
+      name: "account_kind",
+      description: "Account only: a person's account or a bot",
+      type: ApplicationCommandOptionType.String,
+      required: false,
+    })
+    accountKind: string | undefined,
+    @SlashOption({
+      name: "character",
+      description: "Account only: whose account it is",
+      type: ApplicationCommandOptionType.String,
+      required: false,
+      autocomplete: suggestEntityIds,
+    })
+    character: string | undefined,
+    interaction: CommandInteraction,
+  ): Promise<void> {
+    await runArchivist(interaction, () =>
+      createEntityFromCommand(interaction, {
+        archive,
+        kind,
+        name,
+        discordId,
+        realName,
+        birthDay,
+        metInPerson,
+        server,
+        channelKind,
+        parentChannel,
+        character,
+        accountKind,
+      }),
+    );
+  }
+
+  @Slash({
+    name: "show",
+    description: "Show a character, account, server, or channel",
+    ...GUILD_ONLY,
+  })
+  @SlashGroup("entity", "archivist")
+  @Guard(Cooldown(3))
+  async entityShow(
+    @SlashChoice(...KIND_CHOICES)
+    @SlashOption(kindOption)
+    kind: string,
+    @SlashOption(entityIdOption) id: string,
+    @SlashOption(archiveOption) archive: string | undefined,
+    interaction: CommandInteraction,
+  ): Promise<void> {
+    await runArchivist(interaction, () => showEntity(interaction, { archive, kind, id }));
+  }
+
+  @Slash({
+    name: "delete",
+    description: "Permanently delete a character, account, server, or channel",
+    ...GUILD_ONLY,
+  })
+  @SlashGroup("entity", "archivist")
+  @Guard(Cooldown(3))
+  async entityDelete(
+    @SlashChoice(...KIND_CHOICES)
+    @SlashOption(kindOption)
+    kind: string,
+    @SlashOption(entityIdOption) id: string,
+    @SlashOption(archiveOption) archive: string | undefined,
+    interaction: CommandInteraction,
+  ): Promise<void> {
+    await runArchivist(interaction, () => askDeleteEntity(interaction, { archive, kind, id }));
+  }
+
+  @ButtonComponent({ id: /^ax:edel:/ })
+  async entityDeleteConfirm(interaction: ButtonInteraction): Promise<void> {
+    await runArchivist(interaction, () => confirmDeleteEntity(interaction));
   }
 }

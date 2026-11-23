@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import { ArchivistError } from "./errors.js";
 import { ARCHIVE_SCHEMA_VERSION } from "./migrations/archive-schema.js";
 import { migrateArchiveDatabase, readArchiveSchemaVersion } from "./migrations/runner.js";
+import { registerSearchFunctions } from "./search.js";
 
 export interface OpenArchiveOptions {
   /** Creates the file when it does not exist. Registration and normal use leave this off. */
@@ -33,6 +34,7 @@ export function openArchiveDatabase(
     db.pragma("foreign_keys = ON");
     db.pragma("journal_mode = DELETE");
     db.pragma("synchronous = FULL");
+    registerSearchFunctions(db);
     migrateArchiveDatabase(db);
     return db;
   } catch (error) {
