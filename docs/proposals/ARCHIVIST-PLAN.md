@@ -830,7 +830,7 @@ CREATE TABLE archivist_date_orders (
 
 Every contributor operation selects an archive and checks current access. In Discord, the archive option may be omitted. The command then uses the archive the contributor last selected explicitly in a contributor command that passed its access check. If none is remembered or access to it has been removed, the command requires a selection. Every reply names the archive used. Web routes always name the archive in the path. Use paginated choices where Discord cannot display every record. Defer private replies before network or disk work. Bind confirmation forms and duplicate reviews to the original user, archive, and record version, expiring after 15 minutes. Reject actions from another user or an expired form. One intake creates or reviews one artifact. Bulk forms are excluded.
 
-Owner commands use `/archivist-admin` in `OWNER_GUILD_ID` to preserve the existing owner-command registration boundary. Contributor groups use `/archivist` in enabled Archivist guilds. The two artifact-log commands retain the exact standalone names requested by the owner.
+Owner commands use `/archivist-admin` in `OWNER_GUILD_ID` to preserve the existing owner-command registration boundary. Contributor groups use `/archivist` in enabled Archivist guilds, and `/a` registers the same groups as a short alias. The optional archive option is the last option of every contributor command. The two artifact-log commands retain the exact standalone names requested by the owner.
 
 | Command Or Group | Inputs And Result |
 | --- | --- |
@@ -1031,6 +1031,7 @@ The owner's accepted batches A through F are reconciled here. Later clarificatio
 | Discord intake | Comma-separated people with autocomplete, separate exact and estimate date fields, a private reply with Edit, Add people, Someone unidentified, and Delete, short IDs, and tick-to-apply duplicate review |
 | Typed dates | Common written forms are accepted. Each person chooses year-month-day, month-day-year, or day-month-year for all-number dates, defaulting to year-month-day. Dates display with month names for everyone |
 | Exports | Owner-only, from `/archivist-admin export`. The zip is written on the host and kept until the owner deletes it. No Discord or web download |
+| Command shape | `/a` is a short alias of `/archivist` with the same commands. The archive option comes last in every command, because contributors change it least |
 | Drive without a key | Public Drive links download from Google's public download address without setup. An optional `GOOGLE_DRIVE_API_KEY` switches to the official Drive API |
 | Formats | Images, videos, and audio are accepted: JPEG, PNG, WebP, GIF, MP4, MOV, WebM, MKV, AVI, MP3, M4A, WAV, Ogg, and FLAC |
 | Exact-date basis | Exact dates need no written basis, for artifacts and events. Only estimates need a reason. Archive schema version 2 removes the basis requirement and keeps earlier values |

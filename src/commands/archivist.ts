@@ -208,219 +208,452 @@ function checkLogsChannel(interaction: CommandInteraction, channel: GuildBasedCh
   return channel;
 }
 
+/**
+ * Builds the contributor commands under a root name. The owner asked on
+ * 2026-11-23 for `/a` as a short alias of `/archivist`, so the same commands
+ * are registered under both. Only `/archivist` has a /help category, so /help
+ * lists each command once. Buttons, forms, and the logs-channel commands are
+ * registered once, in `ArchivistComponents`.
+ */
+function contributorCommands(
+  root: Lowercase<string>,
+  description: string,
+  category: ReturnType<typeof Category>,
+) {
+  @Discord()
+  @category
+  @Guild(...config.archivistGuildIds)
+  @SlashGroup({ name: root, description })
+  @SlashGroup({ name: "archive", description: "Archives you can use", root })
+  @SlashGroup({
+    name: "preferences",
+    description: "How your typed dates and times are read",
+    root,
+  })
+  @SlashGroup({ name: "artifact", description: "Add and manage artifacts", root })
+  @SlashGroup({ name: "entity", description: "People, accounts, servers, and channels", root })
+  class ArchivistCommands {
+    @Slash({ name: "list", description: "List the archives you can use", ...GUILD_ONLY })
+    @SlashGroup("archive", root)
+    @Guard(Cooldown(3))
+    async archiveList(interaction: CommandInteraction): Promise<void> {
+      await runArchivist(interaction, async () => {
+        const archives = listArchives(archivist(), await actorOf(interaction));
+        await interaction.reply({
+          ...ephemeral,
+          embeds: [
+            baseEmbed(interaction)
+              .setTitle("🗄️ Your archives")
+              .setDescription(
+                archives.map((archive) => `**${archive.name}**`).join("\n") ||
+                  "You are not on any archive's whitelist yet. Ask the bot owner to add you.",
+              ),
+          ],
+        });
+      });
+    }
+
+    @Slash({
+      name: "show",
+      description: "Show how your typed dates are read",
+      ...GUILD_ONLY,
+    })
+    @SlashGroup("preferences", root)
+    @Guard(Cooldown(3))
+    async preferencesShow(interaction: CommandInteraction): Promise<void> {
+      await runArchivist(interaction, async () => {
+        const actor = await actorOf(interaction);
+        const timezone = getTimeZone(archivist(), actor);
+        const order = getDateOrder(archivist(), actor);
+        await interaction.reply({
+          ...ephemeral,
+          content: [
+            timezone
+              ? `Times you type without a zone are read in **${timezone}**.`
+              : "You have no timezone set, so times you type without a zone are read in each archive's timezone.",
+            `All-number dates are read as **${DATE_ORDER_NAMES[order]}**. Dates with a month name, such as Jul 15 2019, always work.`,
+          ].join("\n"),
+        });
+      });
+    }
+
+    @Slash({
+      name: "timezone",
+      description: "Set the timezone your typed times are read in",
+      ...GUILD_ONLY,
+    })
+    @SlashGroup("preferences", root)
+    @Guard(Cooldown(3))
+    async preferencesTimezone(
+      @SlashOption({
+        name: "timezone",
+        description: "Such as America/Toronto or Europe/London",
+        type: ApplicationCommandOptionType.String,
+        required: true,
+        autocomplete: suggestTimeZones,
+      })
+      timezone: string,
+      interaction: CommandInteraction,
+    ): Promise<void> {
+      await runArchivist(interaction, async () => {
+        const saved = setTimeZone(archivist(), await actorOf(interaction), timezone);
+        await interaction.reply({
+          ...ephemeral,
+          content: `Times you type without a zone are now read in **${saved}**. Dates you already saved keep their meaning.`,
+        });
+      });
+    }
+
+    @Slash({
+      name: "date-order",
+      description: "Set how your all-number dates, such as 03/04/2019, are read",
+      ...GUILD_ONLY,
+    })
+    @SlashGroup("preferences", root)
+    @Guard(Cooldown(3))
+    async preferencesDateOrder(
+      @SlashChoice(
+        { name: "Year, month, day (2019-07-15)", value: "ymd" },
+        { name: "Month, day, year (07/15/2019)", value: "mdy" },
+        { name: "Day, month, year (15/07/2019)", value: "dmy" },
+      )
+      @SlashOption({
+        name: "order",
+        description: "The order you write numbers in a date",
+        type: ApplicationCommandOptionType.String,
+        required: true,
+      })
+      order: string,
+      interaction: CommandInteraction,
+    ): Promise<void> {
+      await runArchivist(interaction, async () => {
+        const saved = setDateOrder(archivist(), await actorOf(interaction), order);
+        await interaction.reply({
+          ...ephemeral,
+          content: `All-number dates you type are now read as **${DATE_ORDER_NAMES[saved]}**. Dates you already saved keep their meaning.`,
+        });
+      });
+    }
+
+    @Slash({
+      name: "reset",
+      description: "Go back to each archive's timezone and year-month-day dates",
+      ...GUILD_ONLY,
+    })
+    @SlashGroup("preferences", root)
+    @Guard(Cooldown(3))
+    async preferencesReset(interaction: CommandInteraction): Promise<void> {
+      await runArchivist(interaction, async () => {
+        resetPreferences(archivist(), await actorOf(interaction));
+        await interaction.reply({
+          ...ephemeral,
+          content:
+            "Your preferences are cleared. Times are read in each archive's timezone, and all-number dates as year, month, day.",
+        });
+      });
+    }
+
+    @Slash({ name: "add", description: "Archive one file or Google Drive link", ...GUILD_ONLY })
+    @SlashGroup("artifact", root)
+    @Guard(Cooldown(3))
+    async artifactAdd(
+      @SlashOption({
+        name: "description",
+        description: "What it shows and why it matters",
+        type: ApplicationCommandOptionType.String,
+        required: true,
+        maxLength: 6000,
+      })
+      description: string,
+      @SlashOption({
+        name: "file",
+        description: "An image, video, or audio file up to 100 MiB",
+        type: ApplicationCommandOptionType.Attachment,
+        required: false,
+      })
+      file: Attachment | undefined,
+      @SlashOption({
+        name: "drive_link",
+        description: "Instead of a file, a link to one public Google Drive file",
+        type: ApplicationCommandOptionType.String,
+        required: false,
+        maxLength: 2000,
+      })
+      driveLink: string | undefined,
+      @SlashOption({
+        name: "people",
+        description: "Names separated by commas, such as Sam, Lee",
+        type: ApplicationCommandOptionType.String,
+        required: false,
+        autocomplete: suggestPeopleNames,
+      })
+      people: string | undefined,
+      @SlashOption({
+        name: "exact_date",
+        description: "When it happened, such as 2019-07-15 or Jul 15 2019 6:30pm",
+        type: ApplicationCommandOptionType.String,
+        required: false,
+        maxLength: 100,
+      })
+      exactDate: string | undefined,
+      @SlashOption({
+        name: "estimated_day",
+        description: "Your best guess at the day, such as Jul 1 2019",
+        type: ApplicationCommandOptionType.String,
+        required: false,
+        maxLength: 100,
+      })
+      estimatedDay: string | undefined,
+      @SlashOption({
+        name: "estimate_reason",
+        description: "Why you think it was that day",
+        type: ApplicationCommandOptionType.String,
+        required: false,
+        maxLength: 1000,
+      })
+      estimateReason: string | undefined,
+      @SlashOption(archiveOption) archive: string | undefined,
+      interaction: CommandInteraction,
+    ): Promise<void> {
+      await runArchivist(interaction, () =>
+        startIntake(interaction, {
+          archive,
+          description,
+          file,
+          driveLink,
+          people,
+          exactDate,
+          estimatedDay,
+          estimateReason,
+        }),
+      );
+    }
+
+    @Slash({ name: "show", description: "Show an artifact", ...GUILD_ONLY })
+    @SlashGroup("artifact", root)
+    @Guard(Cooldown(3))
+    async artifactShow(
+      @SlashOption(artifactIdOption) id: string,
+      @SlashOption(archiveOption) archive: string | undefined,
+      interaction: CommandInteraction,
+    ): Promise<void> {
+      await runArchivist(interaction, async () => {
+        await interaction.deferReply(ephemeral);
+        const { archiveId, artifact } = await commandArtifact(interaction, archive, id);
+        await interaction.editReply(
+          artifactReply(
+            archivist(),
+            archiveId,
+            artifact,
+            `Artifact \`${artifact.id.slice(0, 8)}\``,
+          ),
+        );
+      });
+    }
+
+    @Slash({ name: "edit", description: "Edit an artifact's description and dates", ...GUILD_ONLY })
+    @SlashGroup("artifact", root)
+    @Guard(Cooldown(3))
+    async artifactEdit(
+      @SlashOption(artifactIdOption) id: string,
+      @SlashOption(archiveOption) archive: string | undefined,
+      interaction: CommandInteraction,
+    ): Promise<void> {
+      await runArchivist(interaction, async () => {
+        const { archiveId, artifact } = await commandArtifact(interaction, archive, id);
+        await showEditForm(interaction, archiveId, artifact.id, artifact.version);
+      });
+    }
+
+    @Slash({ name: "delete", description: "Permanently delete an artifact", ...GUILD_ONLY })
+    @SlashGroup("artifact", root)
+    @Guard(Cooldown(3))
+    async artifactDelete(
+      @SlashOption(artifactIdOption) id: string,
+      @SlashOption(archiveOption) archive: string | undefined,
+      interaction: CommandInteraction,
+    ): Promise<void> {
+      await runArchivist(interaction, async () => {
+        const { archiveId, artifact } = await commandArtifact(interaction, archive, id);
+        await askDeleteFor(interaction, archiveId, artifact.id, artifact.version);
+      });
+    }
+
+    @Slash({
+      name: "create",
+      description: "Add a character, account, server, or channel",
+      ...GUILD_ONLY,
+    })
+    @SlashGroup("entity", root)
+    @Guard(Cooldown(3))
+    async entityCreate(
+      @SlashChoice(...KIND_CHOICES)
+      @SlashOption(kindOption)
+      kind: string,
+      @SlashOption({
+        name: "name",
+        description: "Known name for a character, or the name of an account, server, or channel",
+        type: ApplicationCommandOptionType.String,
+        required: true,
+        maxLength: 100,
+      })
+      name: string,
+      @SlashOption({
+        name: "discord_id",
+        description: "Discord ID of the account, server, or channel, if known",
+        type: ApplicationCommandOptionType.String,
+        required: false,
+        maxLength: 20,
+      })
+      discordId: string | undefined,
+      @SlashOption({
+        name: "real_name",
+        description: "Character only: their real name",
+        type: ApplicationCommandOptionType.String,
+        required: false,
+        maxLength: 100,
+      })
+      realName: string | undefined,
+      @SlashOption({
+        name: "birth_day",
+        description: "Character only: birth date, such as Nov 24 2000",
+        type: ApplicationCommandOptionType.String,
+        required: false,
+        maxLength: 100,
+      })
+      birthDay: string | undefined,
+      @SlashChoice(
+        { name: "Unknown", value: "unknown" },
+        { name: "Yes", value: "yes" },
+        { name: "No", value: "no" },
+      )
+      @SlashOption({
+        name: "met_in_person",
+        description: "Character only: whether you know them in person",
+        type: ApplicationCommandOptionType.String,
+        required: false,
+      })
+      metInPerson: string | undefined,
+      @SlashChoice(
+        { name: "Server channel", value: "guild_channel" },
+        { name: "Thread", value: "thread" },
+        { name: "Group chat", value: "group_chat" },
+        { name: "Direct messages", value: "direct_message" },
+      )
+      @SlashOption({
+        name: "channel_kind",
+        description: "Channel only: what kind of channel",
+        type: ApplicationCommandOptionType.String,
+        required: false,
+      })
+      channelKind: string | undefined,
+      @SlashOption({
+        name: "server",
+        description: "Channel only: the server it belongs to",
+        type: ApplicationCommandOptionType.String,
+        required: false,
+        autocomplete: suggestEntityIds,
+      })
+      server: string | undefined,
+      @SlashOption({
+        name: "parent_channel",
+        description: "Thread only: the channel it belongs to",
+        type: ApplicationCommandOptionType.String,
+        required: false,
+        autocomplete: suggestEntityIds,
+      })
+      parentChannel: string | undefined,
+      @SlashChoice({ name: "Person", value: "human" }, { name: "Bot", value: "bot" })
+      @SlashOption({
+        name: "account_kind",
+        description: "Account only: a person's account or a bot",
+        type: ApplicationCommandOptionType.String,
+        required: false,
+      })
+      accountKind: string | undefined,
+      @SlashOption({
+        name: "character",
+        description: "Account only: whose account it is",
+        type: ApplicationCommandOptionType.String,
+        required: false,
+        autocomplete: suggestEntityIds,
+      })
+      character: string | undefined,
+      @SlashOption(archiveOption) archive: string | undefined,
+      interaction: CommandInteraction,
+    ): Promise<void> {
+      await runArchivist(interaction, () =>
+        createEntityFromCommand(interaction, {
+          archive,
+          kind,
+          name,
+          discordId,
+          realName,
+          birthDay,
+          metInPerson,
+          server,
+          channelKind,
+          parentChannel,
+          character,
+          accountKind,
+        }),
+      );
+    }
+
+    @Slash({
+      name: "show",
+      description: "Show a character, account, server, or channel",
+      ...GUILD_ONLY,
+    })
+    @SlashGroup("entity", root)
+    @Guard(Cooldown(3))
+    async entityShow(
+      @SlashChoice(...KIND_CHOICES)
+      @SlashOption(kindOption)
+      kind: string,
+      @SlashOption(entityIdOption) id: string,
+      @SlashOption(archiveOption) archive: string | undefined,
+      interaction: CommandInteraction,
+    ): Promise<void> {
+      await runArchivist(interaction, () => showEntity(interaction, { archive, kind, id }));
+    }
+
+    @Slash({
+      name: "delete",
+      description: "Permanently delete a character, account, server, or channel",
+      ...GUILD_ONLY,
+    })
+    @SlashGroup("entity", root)
+    @Guard(Cooldown(3))
+    async entityDelete(
+      @SlashChoice(...KIND_CHOICES)
+      @SlashOption(kindOption)
+      kind: string,
+      @SlashOption(entityIdOption) id: string,
+      @SlashOption(archiveOption) archive: string | undefined,
+      interaction: CommandInteraction,
+    ): Promise<void> {
+      await runArchivist(interaction, () => askDeleteEntity(interaction, { archive, kind, id }));
+    }
+  }
+  return ArchivistCommands;
+}
+
+/** Leaves a class out of /help. */
+const noCategory: ReturnType<typeof Category> = () => undefined;
+
+export const Archivist = contributorCommands(
+  "archivist",
+  "Archive this community's history",
+  Category("Archivist"),
+);
+export const ArchivistShort = contributorCommands("a", "Short for /archivist", noCategory);
+
+/** Buttons, forms, and the logs-channel commands, registered once for both command names. */
 @Discord()
 @Category("Archivist")
 @Guild(...config.archivistGuildIds)
-@SlashGroup({ name: "archivist", description: "Archive this community's history" })
-@SlashGroup({ name: "archive", description: "Archives you can use", root: "archivist" })
-@SlashGroup({
-  name: "preferences",
-  description: "How your typed dates and times are read",
-  root: "archivist",
-})
-@SlashGroup({ name: "artifact", description: "Add and manage artifacts", root: "archivist" })
-@SlashGroup({
-  name: "entity",
-  description: "People, accounts, servers, and channels",
-  root: "archivist",
-})
-export class Archivist {
-  @Slash({ name: "list", description: "List the archives you can use", ...GUILD_ONLY })
-  @SlashGroup("archive", "archivist")
-  @Guard(Cooldown(3))
-  async archiveList(interaction: CommandInteraction): Promise<void> {
-    await runArchivist(interaction, async () => {
-      const archives = listArchives(archivist(), await actorOf(interaction));
-      await interaction.reply({
-        ...ephemeral,
-        embeds: [
-          baseEmbed(interaction)
-            .setTitle("🗄️ Your archives")
-            .setDescription(
-              archives.map((archive) => `**${archive.name}**`).join("\n") ||
-                "You are not on any archive's whitelist yet. Ask the bot owner to add you.",
-            ),
-        ],
-      });
-    });
-  }
-
-  @Slash({
-    name: "show",
-    description: "Show how your typed dates are read",
-    ...GUILD_ONLY,
-  })
-  @SlashGroup("preferences", "archivist")
-  @Guard(Cooldown(3))
-  async preferencesShow(interaction: CommandInteraction): Promise<void> {
-    await runArchivist(interaction, async () => {
-      const actor = await actorOf(interaction);
-      const timezone = getTimeZone(archivist(), actor);
-      const order = getDateOrder(archivist(), actor);
-      await interaction.reply({
-        ...ephemeral,
-        content: [
-          timezone
-            ? `Times you type without a zone are read in **${timezone}**.`
-            : "You have no timezone set, so times you type without a zone are read in each archive's timezone.",
-          `All-number dates are read as **${DATE_ORDER_NAMES[order]}**. Dates with a month name, such as Jul 15 2019, always work.`,
-        ].join("\n"),
-      });
-    });
-  }
-
-  @Slash({
-    name: "timezone",
-    description: "Set the timezone your typed times are read in",
-    ...GUILD_ONLY,
-  })
-  @SlashGroup("preferences", "archivist")
-  @Guard(Cooldown(3))
-  async preferencesTimezone(
-    @SlashOption({
-      name: "timezone",
-      description: "Such as America/Toronto or Europe/London",
-      type: ApplicationCommandOptionType.String,
-      required: true,
-      autocomplete: suggestTimeZones,
-    })
-    timezone: string,
-    interaction: CommandInteraction,
-  ): Promise<void> {
-    await runArchivist(interaction, async () => {
-      const saved = setTimeZone(archivist(), await actorOf(interaction), timezone);
-      await interaction.reply({
-        ...ephemeral,
-        content: `Times you type without a zone are now read in **${saved}**. Dates you already saved keep their meaning.`,
-      });
-    });
-  }
-
-  @Slash({
-    name: "date-order",
-    description: "Set how your all-number dates, such as 03/04/2019, are read",
-    ...GUILD_ONLY,
-  })
-  @SlashGroup("preferences", "archivist")
-  @Guard(Cooldown(3))
-  async preferencesDateOrder(
-    @SlashChoice(
-      { name: "Year, month, day (2019-07-15)", value: "ymd" },
-      { name: "Month, day, year (07/15/2019)", value: "mdy" },
-      { name: "Day, month, year (15/07/2019)", value: "dmy" },
-    )
-    @SlashOption({
-      name: "order",
-      description: "The order you write numbers in a date",
-      type: ApplicationCommandOptionType.String,
-      required: true,
-    })
-    order: string,
-    interaction: CommandInteraction,
-  ): Promise<void> {
-    await runArchivist(interaction, async () => {
-      const saved = setDateOrder(archivist(), await actorOf(interaction), order);
-      await interaction.reply({
-        ...ephemeral,
-        content: `All-number dates you type are now read as **${DATE_ORDER_NAMES[saved]}**. Dates you already saved keep their meaning.`,
-      });
-    });
-  }
-
-  @Slash({
-    name: "reset",
-    description: "Go back to each archive's timezone and year-month-day dates",
-    ...GUILD_ONLY,
-  })
-  @SlashGroup("preferences", "archivist")
-  @Guard(Cooldown(3))
-  async preferencesReset(interaction: CommandInteraction): Promise<void> {
-    await runArchivist(interaction, async () => {
-      resetPreferences(archivist(), await actorOf(interaction));
-      await interaction.reply({
-        ...ephemeral,
-        content:
-          "Your preferences are cleared. Times are read in each archive's timezone, and all-number dates as year, month, day.",
-      });
-    });
-  }
-
-  @Slash({ name: "add", description: "Archive one file or Google Drive link", ...GUILD_ONLY })
-  @SlashGroup("artifact", "archivist")
-  @Guard(Cooldown(3))
-  async artifactAdd(
-    @SlashOption({
-      name: "description",
-      description: "What it shows and why it matters",
-      type: ApplicationCommandOptionType.String,
-      required: true,
-      maxLength: 6000,
-    })
-    description: string,
-    @SlashOption(archiveOption) archive: string | undefined,
-    @SlashOption({
-      name: "file",
-      description: "An image, video, or audio file up to 100 MiB",
-      type: ApplicationCommandOptionType.Attachment,
-      required: false,
-    })
-    file: Attachment | undefined,
-    @SlashOption({
-      name: "drive_link",
-      description: "Instead of a file, a link to one public Google Drive file",
-      type: ApplicationCommandOptionType.String,
-      required: false,
-      maxLength: 2000,
-    })
-    driveLink: string | undefined,
-    @SlashOption({
-      name: "people",
-      description: "Names separated by commas, such as Sam, Lee",
-      type: ApplicationCommandOptionType.String,
-      required: false,
-      autocomplete: suggestPeopleNames,
-    })
-    people: string | undefined,
-    @SlashOption({
-      name: "exact_date",
-      description: "When it happened, such as 2019-07-15 or Jul 15 2019 6:30pm",
-      type: ApplicationCommandOptionType.String,
-      required: false,
-      maxLength: 100,
-    })
-    exactDate: string | undefined,
-    @SlashOption({
-      name: "estimated_day",
-      description: "Your best guess at the day, such as Jul 1 2019",
-      type: ApplicationCommandOptionType.String,
-      required: false,
-      maxLength: 100,
-    })
-    estimatedDay: string | undefined,
-    @SlashOption({
-      name: "estimate_reason",
-      description: "Why you think it was that day",
-      type: ApplicationCommandOptionType.String,
-      required: false,
-      maxLength: 1000,
-    })
-    estimateReason: string | undefined,
-    interaction: CommandInteraction,
-  ): Promise<void> {
-    await runArchivist(interaction, () =>
-      startIntake(interaction, {
-        archive,
-        description,
-        file,
-        driveLink,
-        people,
-        exactDate,
-        estimatedDay,
-        estimateReason,
-      }),
-    );
-  }
-
+export class ArchivistComponents {
   @ButtonComponent({ id: /^ax:zsave:/ })
   async zoneSave(interaction: ButtonInteraction): Promise<void> {
     await runArchivist(interaction, () => confirmZone(interaction));
@@ -488,7 +721,6 @@ export class Archivist {
   })
   @Guard(Cooldown(3))
   async setLogsChannel(
-    @SlashOption(archiveOption) archive: string | undefined,
     @SlashOption({
       name: "channel",
       description: "Leave empty to use this channel",
@@ -497,6 +729,7 @@ export class Archivist {
       required: false,
     })
     channel: GuildBasedChannel | undefined,
+    @SlashOption(archiveOption) archive: string | undefined,
     interaction: CommandInteraction,
   ): Promise<void> {
     await runArchivist(interaction, async () => {
@@ -544,208 +777,6 @@ export class Archivist {
           : `**${selected.name}** had no announcement channel.`,
       });
     });
-  }
-
-  @Slash({ name: "show", description: "Show an artifact", ...GUILD_ONLY })
-  @SlashGroup("artifact", "archivist")
-  @Guard(Cooldown(3))
-  async artifactShow(
-    @SlashOption(artifactIdOption) id: string,
-    @SlashOption(archiveOption) archive: string | undefined,
-    interaction: CommandInteraction,
-  ): Promise<void> {
-    await runArchivist(interaction, async () => {
-      await interaction.deferReply(ephemeral);
-      const { archiveId, artifact } = await commandArtifact(interaction, archive, id);
-      await interaction.editReply(
-        artifactReply(archivist(), archiveId, artifact, `Artifact \`${artifact.id.slice(0, 8)}\``),
-      );
-    });
-  }
-
-  @Slash({ name: "edit", description: "Edit an artifact's description and dates", ...GUILD_ONLY })
-  @SlashGroup("artifact", "archivist")
-  @Guard(Cooldown(3))
-  async artifactEdit(
-    @SlashOption(artifactIdOption) id: string,
-    @SlashOption(archiveOption) archive: string | undefined,
-    interaction: CommandInteraction,
-  ): Promise<void> {
-    await runArchivist(interaction, async () => {
-      const { archiveId, artifact } = await commandArtifact(interaction, archive, id);
-      await showEditForm(interaction, archiveId, artifact.id, artifact.version);
-    });
-  }
-
-  @Slash({ name: "delete", description: "Permanently delete an artifact", ...GUILD_ONLY })
-  @SlashGroup("artifact", "archivist")
-  @Guard(Cooldown(3))
-  async artifactDelete(
-    @SlashOption(artifactIdOption) id: string,
-    @SlashOption(archiveOption) archive: string | undefined,
-    interaction: CommandInteraction,
-  ): Promise<void> {
-    await runArchivist(interaction, async () => {
-      const { archiveId, artifact } = await commandArtifact(interaction, archive, id);
-      await askDeleteFor(interaction, archiveId, artifact.id, artifact.version);
-    });
-  }
-
-  @Slash({
-    name: "create",
-    description: "Add a character, account, server, or channel",
-    ...GUILD_ONLY,
-  })
-  @SlashGroup("entity", "archivist")
-  @Guard(Cooldown(3))
-  async entityCreate(
-    @SlashChoice(...KIND_CHOICES)
-    @SlashOption(kindOption)
-    kind: string,
-    @SlashOption({
-      name: "name",
-      description: "Known name for a character, or the name of an account, server, or channel",
-      type: ApplicationCommandOptionType.String,
-      required: true,
-      maxLength: 100,
-    })
-    name: string,
-    @SlashOption(archiveOption) archive: string | undefined,
-    @SlashOption({
-      name: "discord_id",
-      description: "Discord ID of the account, server, or channel, if known",
-      type: ApplicationCommandOptionType.String,
-      required: false,
-      maxLength: 20,
-    })
-    discordId: string | undefined,
-    @SlashOption({
-      name: "real_name",
-      description: "Character only: their real name",
-      type: ApplicationCommandOptionType.String,
-      required: false,
-      maxLength: 100,
-    })
-    realName: string | undefined,
-    @SlashOption({
-      name: "birth_day",
-      description: "Character only: birth date, such as Nov 24 2000",
-      type: ApplicationCommandOptionType.String,
-      required: false,
-      maxLength: 100,
-    })
-    birthDay: string | undefined,
-    @SlashChoice(
-      { name: "Unknown", value: "unknown" },
-      { name: "Yes", value: "yes" },
-      { name: "No", value: "no" },
-    )
-    @SlashOption({
-      name: "met_in_person",
-      description: "Character only: whether you know them in person",
-      type: ApplicationCommandOptionType.String,
-      required: false,
-    })
-    metInPerson: string | undefined,
-    @SlashChoice(
-      { name: "Server channel", value: "guild_channel" },
-      { name: "Thread", value: "thread" },
-      { name: "Group chat", value: "group_chat" },
-      { name: "Direct messages", value: "direct_message" },
-    )
-    @SlashOption({
-      name: "channel_kind",
-      description: "Channel only: what kind of channel",
-      type: ApplicationCommandOptionType.String,
-      required: false,
-    })
-    channelKind: string | undefined,
-    @SlashOption({
-      name: "server",
-      description: "Channel only: the server it belongs to",
-      type: ApplicationCommandOptionType.String,
-      required: false,
-      autocomplete: suggestEntityIds,
-    })
-    server: string | undefined,
-    @SlashOption({
-      name: "parent_channel",
-      description: "Thread only: the channel it belongs to",
-      type: ApplicationCommandOptionType.String,
-      required: false,
-      autocomplete: suggestEntityIds,
-    })
-    parentChannel: string | undefined,
-    @SlashChoice({ name: "Person", value: "human" }, { name: "Bot", value: "bot" })
-    @SlashOption({
-      name: "account_kind",
-      description: "Account only: a person's account or a bot",
-      type: ApplicationCommandOptionType.String,
-      required: false,
-    })
-    accountKind: string | undefined,
-    @SlashOption({
-      name: "character",
-      description: "Account only: whose account it is",
-      type: ApplicationCommandOptionType.String,
-      required: false,
-      autocomplete: suggestEntityIds,
-    })
-    character: string | undefined,
-    interaction: CommandInteraction,
-  ): Promise<void> {
-    await runArchivist(interaction, () =>
-      createEntityFromCommand(interaction, {
-        archive,
-        kind,
-        name,
-        discordId,
-        realName,
-        birthDay,
-        metInPerson,
-        server,
-        channelKind,
-        parentChannel,
-        character,
-        accountKind,
-      }),
-    );
-  }
-
-  @Slash({
-    name: "show",
-    description: "Show a character, account, server, or channel",
-    ...GUILD_ONLY,
-  })
-  @SlashGroup("entity", "archivist")
-  @Guard(Cooldown(3))
-  async entityShow(
-    @SlashChoice(...KIND_CHOICES)
-    @SlashOption(kindOption)
-    kind: string,
-    @SlashOption(entityIdOption) id: string,
-    @SlashOption(archiveOption) archive: string | undefined,
-    interaction: CommandInteraction,
-  ): Promise<void> {
-    await runArchivist(interaction, () => showEntity(interaction, { archive, kind, id }));
-  }
-
-  @Slash({
-    name: "delete",
-    description: "Permanently delete a character, account, server, or channel",
-    ...GUILD_ONLY,
-  })
-  @SlashGroup("entity", "archivist")
-  @Guard(Cooldown(3))
-  async entityDelete(
-    @SlashChoice(...KIND_CHOICES)
-    @SlashOption(kindOption)
-    kind: string,
-    @SlashOption(entityIdOption) id: string,
-    @SlashOption(archiveOption) archive: string | undefined,
-    interaction: CommandInteraction,
-  ): Promise<void> {
-    await runArchivist(interaction, () => askDeleteEntity(interaction, { archive, kind, id }));
   }
 
   @ButtonComponent({ id: /^ax:edel:/ })
