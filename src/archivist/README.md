@@ -10,6 +10,8 @@ Archivist is being built in milestones. This directory currently holds the stora
 | --- | --- |
 | `errors.ts` | `ArchivistError` and the error codes both interfaces report, with their HTTP statuses |
 | `fields.ts` | Shared field rules for text limits, colors, Discord IDs, archive name keys, record IDs, and timestamps |
+| `dates.ts` | Date values and timezone rules for days, instants, daylight-saving gaps, and archive-day buckets |
+| `paths.ts` | Archive folder layout, archive ID validation, and containment of stored paths |
 | `archive-database.ts` | Opens an archive's `archive.db`, refuses newer schemas, and applies migrations |
 | `operational-database.ts` | Prepares Archivist's tables in the bot's shared `guhbot.db` |
 | `migrations/` | The archive and operational schemas as ordered migrations, and the code that applies them |
