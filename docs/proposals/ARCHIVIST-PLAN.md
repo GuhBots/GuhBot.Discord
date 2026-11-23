@@ -829,6 +829,14 @@ Owner commands use `/archivist-admin` in `OWNER_GUILD_ID` to preserve the existi
 | `/set-artifact-logs-channel` | Required archive and optional channel, defaulting to current channel. Configure one destination for all new artifacts in that archive |
 | `/remove-artifact-logs-channel` | Required archive. Remove future delivery setting, preserving old messages |
 
+The owner approved this intake flow on 2026-11-23.
+
+* **People.** One `people` field takes names separated by commas, with autocomplete suggesting the next name. Names match a character's known name or alias. A name that matches several characters, or none, is refused with a message naming it. Autocomplete then offers the characters with their short IDs, such as `Alex (3f9a1c2e)`. Contributors add more people from the reply.
+* **Dates.** Separate `exact_date` with `exact_basis`, and `estimated_day` with `estimate_reason`, fields. Each date needs its basis or reason. With neither, the file's own date is used.
+* **Reply.** A private reply names the archive and the artifact's short ID, then shows the description, people, the selected date with its basis, and a preview. It has Edit, Add people, and Delete buttons. Delete asks for confirmation.
+* **Short IDs.** Replies show the first eight characters of a record ID. Every command accepts any unique prefix of at least eight characters, and asks for more when a prefix matches several records.
+* **Duplicate review.** Nothing is saved until the contributor ticks the differences to apply, then confirms. It lists replaced fields with their current and new values, and links to add. Unticked items are left alone, links are only added, and the original file is never replaced.
+
 Show full details and edit forms with controls appropriate to Discord limits. Use a preview and continuation controls for long descriptions rather than dropping required data. All contributor operations have web controls with equivalent validation and outcomes. Owner administration does not require a web administration panel.
 
 ### Web Routes
@@ -991,8 +999,9 @@ The owner's accepted batches A through F are reconciled here. Later clarificatio
 | Timeline lanes | Servers and group chats get solid, editable lane colors. Dashes mean uncertainty. Events do not recolor lanes |
 | Timeline marks | One green dot per day, shaded by count, opening a gallery. Ranged events form labeled parallel strips in a band. Red arrows mark single-day events. Server name and icon changes get their own arrow color |
 | Main accounts | Characters have a dated main-account history, and their pictures follow it along the timeline |
+| Discord intake | Comma-separated people with autocomplete, separate exact and estimate date fields, a private reply with Edit, Add people, and Delete, short IDs, and tick-to-apply duplicate review |
 
-The earlier `Q01` through `Q19` topic discussion is resolved into the contract sections rather than retained as a competing open-question table. Accepted request and announcement clarifications are incorporated. The rows from archive selection through main accounts record owner clarifications from 2026-11-23. If a final review changes a rule, update its contract, schema, interfaces, and acceptance fixture together.
+The earlier `Q01` through `Q19` topic discussion is resolved into the contract sections rather than retained as a competing open-question table. Accepted request and announcement clarifications are incorporated. The rows from archive selection through Discord intake record owner clarifications from 2026-11-23. If a final review changes a rule, update its contract, schema, interfaces, and acceptance fixture together.
 
 ### Outstanding Verification Prerequisites
 
