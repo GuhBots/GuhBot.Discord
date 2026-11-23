@@ -14,6 +14,7 @@ The bot runs in a container on any machine with Docker, such as a Raspberry Pi o
 * **Writing code:** Follow [Coding Style](docs/coding-style.md).
 * **Writing documentation:** Follow [Documentation](docs/documentation.md). The [Documentation Map](docs/README.md) lists the included documents.
 * **AI assistants:** Read [AGENTS.md](AGENTS.md) for repository instructions.
+* **Archivist development:** Read [Claude Working Instructions](CLAUDE.md) for the plan, implementation workflow, and local progress tracking.
 
 ## Repository Layout
 

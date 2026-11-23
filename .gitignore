@@ -4,6 +4,9 @@
 !.env.example
 !.env.*.example
 
+# Local Archivist progress across development sessions
+/archivist-roadmap.local.md
+
 # Operating-system metadata
 .DS_Store
 Thumbs.db
