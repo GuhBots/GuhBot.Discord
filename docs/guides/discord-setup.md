@@ -45,7 +45,7 @@ The `applications.commands` scope lets the bot register slash commands. A server
 
 ## Archivist's Website
 
-Archivist's website runs inside the bot. It is off until the owner runs `/archivist-admin web start`, and it refuses to start until these settings are set. Its pages and Discord sign-in are still being built, so for now it shows a placeholder page.
+Archivist's website runs inside the bot. It is off until the owner runs `/archivist-admin web start`, and it refuses to start until these settings are set. Signing in with Discord works at `ARCHIVIST_BASE_URL` followed by `/auth/discord`. Its pages are still being built, so after signing in it shows a placeholder page.
 
 1. In the [Discord Developer Portal](https://discord.com/developers/applications), open the bot's application and go to **OAuth2**.
 2. Copy the **Client ID** into `DISCORD_CLIENT_ID`.
@@ -61,7 +61,7 @@ Archivist's website runs inside the bot. It is off until the owner runs `/archiv
 | `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` | The test application's | The production application's |
 | `ARCHIVIST_SESSION_SECRET` | Any 32 or more random bytes | A different random secret |
 
-The redirect registered in the portal must be `ARCHIVIST_BASE_URL` followed by `/auth/discord/callback`, exactly.
+The redirect registered in the portal must be `ARCHIVIST_BASE_URL` followed by `/auth/discord/callback`, exactly, including any path in the base address. Plain `http` addresses work only for localhost; anything else needs `https`.
 
 ## How Commands Are Registered
 

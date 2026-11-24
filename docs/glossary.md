@@ -27,6 +27,7 @@ Add or update definitions when terminology changes, and link to them from other 
 | HTTP | Hypertext Transfer Protocol, the protocol web browsers and servers use |
 | HTTPS | Hypertext Transfer Protocol Secure, the encrypted protocol for websites |
 | ID | Identifier |
+| JSON | JavaScript Object Notation, the text format the website and its routes exchange data in |
 | JPEG | Joint Photographic Experts Group, whose standard is the common photo file format |
 | LF | Line feed, the line ending used by Linux and macOS |
 | LTS | Long-term support, a release maintained for several years |
@@ -38,6 +39,7 @@ Add or update definitions when terminology changes, and link to them from other 
 | OS | Operating system |
 | PNG | Portable Network Graphics, an image file format |
 | PR | Pull request |
+| REST | Representational State Transfer, the style of web API where each address names a resource |
 | RIFF | Resource Interchange File Format, the container AVI and WAV files use |
 | SD | Secure Digital, a type of memory card |
 | SSD | Solid-state drive |

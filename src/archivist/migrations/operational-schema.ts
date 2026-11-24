@@ -1,7 +1,7 @@
 import type { Migration } from "./runner.js";
 
 /** The newest operational schema version this build can read and write. */
-export const OPERATIONAL_SCHEMA_VERSION = 2;
+export const OPERATIONAL_SCHEMA_VERSION = 3;
 
 /**
  * Ordered migrations for Archivist's tables in the bot's `guhbot.db`. They only
@@ -105,6 +105,15 @@ export const OPERATIONAL_MIGRATIONS: readonly Migration[] = [
       date_order TEXT NOT NULL CHECK (date_order IN ('ymd', 'mdy', 'dmy')),
       updated_at TEXT NOT NULL
     );
+    `,
+  },
+  {
+    // The website's account menu shows who is signed in. The name and avatar
+    // address come from Discord at sign-in and are not archive data.
+    version: 3,
+    sql: `
+    ALTER TABLE archivist_sessions ADD COLUMN display_name TEXT;
+    ALTER TABLE archivist_sessions ADD COLUMN avatar_url TEXT;
     `,
   },
 ];

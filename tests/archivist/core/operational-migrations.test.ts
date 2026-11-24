@@ -4,6 +4,10 @@ import { test, type TestContext } from "node:test";
 import Database from "better-sqlite3";
 import { ArchivistError } from "../../../src/archivist/errors.js";
 import { nameKey } from "../../../src/archivist/fields.js";
+import {
+  OPERATIONAL_MIGRATIONS,
+  OPERATIONAL_SCHEMA_VERSION,
+} from "../../../src/archivist/migrations/operational-schema.js";
 import { prepareOperationalDatabase } from "../../../src/archivist/operational-database.js";
 import { makeTempDir } from "../helpers/temp-dir.js";
 
@@ -43,14 +47,16 @@ test("Archivist tables are added without changing AFK data", (t) => {
   const db = existingBotDatabase(t);
   const before = afkState(db);
 
-  assert.deepEqual(prepareOperationalDatabase(db), { from: 0, to: 2 });
+  assert.deepEqual(prepareOperationalDatabase(db), { from: 0, to: OPERATIONAL_SCHEMA_VERSION });
 
   assert.deepEqual(afkState(db), before);
   const tables = db
     .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'archivist_%'")
     .all();
   assert.equal(tables.length, 11);
-  assert.deepEqual(db.prepare("SELECT version FROM archivist_schema").get(), { version: 2 });
+  assert.deepEqual(db.prepare("SELECT version FROM archivist_schema").get(), {
+    version: OPERATIONAL_SCHEMA_VERSION,
+  });
   assert.equal(db.pragma("user_version", { simple: true }), 0);
 });
 
@@ -59,8 +65,28 @@ test("preparing an up-to-date bot database changes nothing", (t) => {
   prepareOperationalDatabase(db);
   const before = afkState(db);
 
-  assert.deepEqual(prepareOperationalDatabase(db), { from: 2, to: 2 });
+  assert.deepEqual(prepareOperationalDatabase(db), {
+    from: OPERATIONAL_SCHEMA_VERSION,
+    to: OPERATIONAL_SCHEMA_VERSION,
+  });
   assert.deepEqual(afkState(db), before);
+});
+
+test("version 3 keeps signed-in sessions and adds the account menu's name and picture", (t) => {
+  const db = existingBotDatabase(t);
+  // A bot database at version 2, as the earlier build left it.
+  for (const migration of OPERATIONAL_MIGRATIONS.filter((m) => m.version <= 2))
+    db.exec(migration.sql);
+  db.prepare("INSERT INTO archivist_schema (singleton, version) VALUES (1, 2)").run();
+  db.prepare(
+    "INSERT INTO archivist_sessions (token_hash, discord_user_id, created_ms, expires_ms) VALUES ('h1', '200000000000000002', 1, 2)",
+  ).run();
+
+  assert.deepEqual(prepareOperationalDatabase(db), { from: 2, to: 3 });
+  assert.deepEqual(
+    db.prepare("SELECT token_hash, display_name, avatar_url FROM archivist_sessions").all(),
+    [{ token_hash: "h1", display_name: null, avatar_url: null }],
+  );
 });
 
 test("a newer Archivist schema is refused and AFK data is left alone", (t) => {

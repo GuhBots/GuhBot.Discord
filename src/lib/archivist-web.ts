@@ -8,6 +8,7 @@ import { checkWebSettings } from "../archivist/web/settings.js";
 import { config } from "../config.js";
 import { archivist } from "./archivist.js";
 import { onShutdown } from "./lifecycle.js";
+import { isApplicationOwner } from "./owner.js";
 
 /**
  * The bot's single Archivist web listener. It is created stopped, so a bot
@@ -19,7 +20,7 @@ const FRONTEND_ROOT = fileURLToPath(new URL("../web/", import.meta.url));
 
 let listener: WebListener | undefined;
 /** The logged-in client, for owner checks on web requests. Set when the owner starts the website. */
-let botClient: Client | undefined;
+let botClient: Client<true> | undefined;
 
 function webListener(): WebListener {
   if (!listener) {
@@ -32,9 +33,11 @@ function webListener(): WebListener {
         checkWebSettings(settings);
         return buildWebApp({
           context: archivist(),
+          settings,
+          isOwner: async (userId) => (botClient ? isApplicationOwner(botClient, userId) : false),
           frontendRoot: FRONTEND_ROOT,
           logError: (message, error) => console.error(`Archivist website: ${message}:`, error),
-        });
+        }).app;
       },
     });
     // Registered before the Archivist context's own hook, so requests finish before stores close.
@@ -45,16 +48,11 @@ function webListener(): WebListener {
   return listener;
 }
 
-/** The client the website uses for owner checks, once the owner has started it. */
-export function webClient(): Client | undefined {
-  return botClient;
-}
-
 // Create the listener when this module loads, so its shutdown hook runs first.
 webListener();
 
 /** Starts the website for the owner. A running website is left as it is. */
-export function startWeb(client: Client, actor: Actor): Promise<WebStatus> {
+export function startWeb(client: Client<true>, actor: Actor): Promise<WebStatus> {
   requireOwner(actor, "start the website");
   botClient = client;
   return webListener().start();

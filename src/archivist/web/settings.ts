@@ -10,12 +10,31 @@ export interface WebSettings {
   host: string;
   /** The port to listen on. 0 picks a free port, which tests use. */
   port: number;
-  /** The origin browsers use, which the Discord sign-in callback is registered under. */
+  /**
+   * The address browsers use, which the Discord sign-in callback is registered
+   * under. It may include a path, such as `https://example.com/archivist`.
+   */
   baseUrl: string;
   discordClientId?: string;
   discordClientSecret?: string;
   /** Signs session cookies. At least 32 bytes. */
   sessionSecret?: string;
+}
+
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+/**
+ * The path the website lives under, such as `/archivist` for
+ * `https://example.com/archivist`, or an empty string at the root.
+ */
+export function basePathOf(baseUrl: string): string {
+  return new URL(baseUrl).pathname.replace(/\/+$/, "");
+}
+
+/** The sign-in callback, which must be registered in the Discord application exactly. */
+export function redirectUriOf(baseUrl: string): string {
+  const url = new URL(baseUrl);
+  return `${url.origin}${basePathOf(baseUrl)}/auth/discord/callback`;
 }
 
 /** Signing secrets shorter than this are refused. */
@@ -56,13 +75,22 @@ export function checkWebSettings(settings: WebSettings): void {
   }
   if (
     (url.protocol !== "http:" && url.protocol !== "https:") ||
-    url.pathname !== "/" ||
-    url.search
+    url.search ||
+    url.hash ||
+    url.username
   ) {
     throw new ArchivistError(
       "invalid_input",
-      "ARCHIVIST_BASE_URL must be an http or https origin with no path, such as http://localhost:3000.",
+      "ARCHIVIST_BASE_URL must be an http or https address with no query, such as http://localhost:3000 or https://example.com/archivist.",
       { reason: "invalid_base_url" },
+    );
+  }
+  // Sign-in cookies need HTTPS, except on this machine while testing.
+  if (url.protocol === "http:" && !LOOPBACK_HOSTS.has(url.hostname)) {
+    throw new ArchivistError(
+      "invalid_input",
+      "ARCHIVIST_BASE_URL must use https unless it is localhost. Put the website behind a reverse proxy that provides HTTPS.",
+      { reason: "insecure_base_url" },
     );
   }
   if (!Number.isInteger(settings.port) || settings.port < 0 || settings.port > 65535) {

@@ -104,7 +104,7 @@ An archive member means a Discord user currently whitelisted for that archive. B
 
 Store unique membership pairs `(archive_id, discord_user_id)`. Check current owner or membership authorization on every archive request, including media download requests. Discord sign-in alone grants no archive access. Removal takes effect on the next request, including an existing session. An already-running download may finish. Membership in another archive is irrelevant. Refresh owner status at login and at most every five minutes during active requests.
 
-Use seven-day absolute server-side sessions in bot operational storage and provide logout. Discord sign-in requests only the identity access needed for authentication. Use an unpredictable session cookie, same-origin mutation checks, a protected sign-in state value, and session invalidation on logout. Production cookies require HTTPS. Localhost testing supports the configured local callback without pretending it is a public deployment.
+Use seven-day absolute server-side sessions in bot operational storage and provide logout. Discord sign-in requests only the identity access needed for authentication. Use an unpredictable session cookie, same-origin mutation checks, a protected sign-in state value, and session invalidation on logout. Revoke Discord's access token as soon as the identity is read, so Archivist keeps no Discord credentials for anyone. Store only a hash of each session token. Production cookies require HTTPS. Localhost testing supports the configured local callback without pretending it is a public deployment.
 
 ## Media Intake And Duplicate Review
 
@@ -305,6 +305,12 @@ The owner reviewed the clickable prototype on 2026-11-23 and approved it after t
 ## Web Lifecycle, Exports, And Operations
 
 One listener in the bot process serves all allowed archives, the frontend, and backend routes. Only the owner starts and stops it. No automatic start, idle shutdown, hidden Google callback server, or persistent live connections. Repeated start returns current availability. Repeated stop returns stopped state. Bot restart leaves the listener stopped. Stop closes web access without stopping Discord contributions or discarding saved archive data.
+
+### Service Boundary
+
+`src/archivist/` holds the archive rules and the website, and it does not depend on the Discord bot: no Discord library, no bot module, and no environment variables, which `config.ts` reads and passes in. A core test enforces this. The website's Discord sign-in uses plain HTTPS calls to Discord's OAuth endpoints, not the bot's connection, and owner status reaches it through an injected check. The JSON routes are the service's contract and mirror the shared operations one to one.
+
+In this build the service runs inside the bot process and the owner starts it from Discord. The owner noted on 2026-11-23 that adding and editing artifacts feels better on the website than in Discord, and asked to keep a later move possible: the website becoming the source of truth as its own service, possibly in a separate `GuhBot.Archivist` repository, with the Discord bot calling its API. That move is not part of this build. When it happens, the service gets its own entry point and settings, an owner list or a Discord REST lookup replaces the bot's owner check, the Discord adapters call the JSON routes with a service credential that names the acting Discord user, and the in-bot listener commands are retired. Keep new code on the service side of the boundary so the move stays mechanical.
 
 Test on localhost first. Remote deployment uses a configured public address and external HTTPS reverse proxy. Do not build certificate, tunnel, or router automation. Graceful bot shutdown closes the listener and finishes or aborts archive operations consistently. Port conflict or listener-start failure leaves the bot working and reports a useful error.
 
@@ -857,6 +863,13 @@ CREATE TABLE archivist_date_orders (
 );
 ```
 
+Operational migration version 3 adds the signed-in contributor's Discord name and avatar address to each session, for the website's account menu. They come from Discord at sign-in and are not archive data.
+
+```sql
+ALTER TABLE archivist_sessions ADD COLUMN display_name TEXT;
+ALTER TABLE archivist_sessions ADD COLUMN avatar_url TEXT;
+```
+
 ## Command And Interface Contract
 
 ### Discord Commands
@@ -941,12 +954,12 @@ These settings are planned. Add new variables to `.env.example`, `compose.yaml`,
 | `ARCHIVIST_GUILD_IDS`, `OWNER_GUILD_ID` | Existing command availability boundaries |
 | `ARCHIVIST_HOST` | `127.0.0.1` for local testing. Container deployments explicitly use `0.0.0.0` behind the chosen host exposure |
 | `ARCHIVIST_PORT` | `3000` |
-| `ARCHIVIST_BASE_URL` | `http://localhost:3000` for local testing. Must match the origin used for browser access and the registered Discord callback |
+| `ARCHIVIST_BASE_URL` | `http://localhost:3000` for local testing. The address browsers use, which may include a path such as `https://guhbot.gavintranquilino.com/archivist`. Every page, route, and cookie lives under that path. Plain `http` is allowed only for localhost. Must match the registered Discord callback |
 | `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` | Discord sign-in application credentials, distinct from bot-token use. Required when starting the web listener |
 | `ARCHIVIST_SESSION_SECRET` | Deployment-provided signing secret of at least 32 random bytes, outside archive folders |
 | `GOOGLE_DRIVE_API_KEY` | Optional server-side API project key. When set, public Drive links use the Drive API. When empty, they use Google's public download address |
 
-Use `/auth/discord/callback` under the configured base address as the registered callback. Initial local setup tests this address; remote deployment registers its actual HTTPS callback. Do not silently use the execution host's timezone, guessed public hostname, or editor port-forward address.
+Use `/auth/discord/callback` under the configured base address, including its path, as the registered callback. Initial local setup tests this address; remote deployment registers its actual HTTPS callback. Do not silently use the execution host's timezone, guessed public hostname, or editor port-forward address.
 
 Archive timezone, main server, lane gap, and display colors live in its database. Whitelists, self-service timezone preferences, remembered archive selections, announcement destinations, sessions, and job state live in `guhbot.db`. No setting stores a common Drive folder or requests a Google account connection.
 
@@ -1061,6 +1074,8 @@ The owner's accepted batches A through F are reconciled here. Later clarificatio
 | Exports | Owner-only, from `/archivist-admin export`. The zip is written on the host and kept until the owner deletes it. No Discord or web download |
 | Editing split | Discord is for uploads and quick edits. Dated history editing and character merge are website-only, because editing is easier with the whole record in view |
 | Terminology | Say "character" for the archive's records of real people, never "person" or "people", in the interface, the code, and the schema. Archive schema version 3 renames the stored names. Discord users are contributors |
+| Service boundary | The archive rules and website stay independent of the Discord bot, enforced by a test, so the website can later become the source of truth as its own service with the bot as an API client. The move itself is deferred (owner, 2026-11-23). See [Service Boundary](#service-boundary) |
+| Hosting path | The website may live under a path, such as `guhbot.gavintranquilino.com/archivist`. Plain HTTP only on localhost |
 | Prototype review | Approved on 2026-11-23 after three rounds. The decisions are under [Prototype Review Decisions](#prototype-review-decisions), including the new album view, viewer-local lane order and hiding, the deterministic graph layout, the picture album with GIF avatars, account-menu preferences, and creation dates derived from Discord IDs |
 | Research on the website | The research board, manual research flags, and moving missing-media requests between buckets are website-only. Derived gap cards clear themselves when the data is added. A request resolves when someone links the artifact that has the media, since the archive cannot tell by itself that an upload is the missing media. Deletes that would be refused are refused before the confirmation button appears |
 | Prototype timing | The clickable prototype is built during `M3`, so layout feedback arrives before the `M4` views are built |

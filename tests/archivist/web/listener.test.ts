@@ -40,8 +40,10 @@ function makeListener(
     url: settings.baseUrl,
     build() {
       checkWebSettings(settings);
-      const app = buildWebApp({
+      const { app } = buildWebApp({
         context,
+        settings,
+        isOwner: async () => false,
         frontendRoot: options.frontendRoot ?? makeTempDir(t),
         logError: (_message, error) => errors.push(error),
       });
@@ -77,12 +79,20 @@ test("settings are checked when the website starts, naming what is missing", () 
     () => checkWebSettings({ ...SETTINGS, sessionSecret: "short" }),
     fails("invalid_input", "short_session_secret"),
   );
-  for (const baseUrl of ["localhost:3000", "ftp://example.com", "http://example.com/archive"]) {
+  for (const baseUrl of ["localhost:3000", "ftp://example.com", "https://example.com/?x=1"]) {
     assert.throws(
       () => checkWebSettings({ ...SETTINGS, baseUrl }),
       fails("invalid_input", "invalid_base_url"),
       baseUrl,
     );
+  }
+  // Plain HTTP only on this machine. A path is allowed, for hosting under a prefix.
+  assert.throws(
+    () => checkWebSettings({ ...SETTINGS, baseUrl: "http://example.com" }),
+    fails("invalid_input", "insecure_base_url"),
+  );
+  for (const baseUrl of ["http://127.0.0.1:3000", "https://example.com/archivist"]) {
+    assert.doesNotThrow(() => checkWebSettings({ ...SETTINGS, baseUrl }), baseUrl);
   }
 });
 
@@ -197,7 +207,7 @@ test("errors use the shared shape, and unexpected ones hide their details", asyn
 
   const post = await fetch(base(listening!.port) + "/api/test/refused", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", origin: "http://localhost:3000" },
     body: "{not json",
   });
   assert.equal(post.status, 400);
