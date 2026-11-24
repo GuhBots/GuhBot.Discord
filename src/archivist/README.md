@@ -38,6 +38,7 @@ Archivist is being built in milestones. This directory currently holds storage, 
 | `announcements.ts` | Per-archive announcement channels and delivery state that prevents repeated posts |
 | `queries.ts` | The website's paged lists of artifacts and events, with the shared filters, album sorts, and stable cursors |
 | `entity-views.ts` | Structured characters, accounts, servers, and channels with their history, the side columns' lists, and creation times read from Discord IDs |
+| `views.ts` | Data for the timeline (lanes, stretches, dots, arrows, the event band, markers), calendar and heatmap day counts, and the character graph |
 | `search.ts` | Case-insensitive, Unicode-normalized search for artifacts and entities |
 | `exports.ts` | Owner-only consistent snapshots zipped into `archivist-exports/` on the host, kept until the owner deletes them |
 | `archive-database.ts` | Opens an archive's `archive.db`, refuses newer schemas, and applies migrations |

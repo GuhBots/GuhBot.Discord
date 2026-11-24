@@ -269,7 +269,7 @@ Artifacts appear as one dot per lane and day. At coarser zoom, a dot covers a we
 
 Ranged events appear in the event band as labeled strips in their event color. Overlapping events are placed in parallel rows so none hides another. A duration is a solid strip, and an occurrence window is a dashed strip. Event colors are assigned automatically from the palette and are editable. Events do not recolor lanes.
 
-Single-day events appear as red downward arrows with their names on their lanes. Several single-day events on one lane and day share an arrow with an expandable count. Server name and icon changes appear automatically as arrows in a separate color showing the new name and icon, because they mark the server's eras. Each lane's label shows the name and icon in effect at the visible position. Account name changes, avatar changes, and character main-account changes form an optional marker layer, off by default. Tray toggles control each marker layer. Estimated events and markers are visibly labeled as estimates.
+Single-day events appear as red downward arrows with their names on their lanes. Several single-day events on one lane and day share an arrow with an expandable count. Server name and icon changes appear automatically as arrows in a separate color showing the new name and icon, because they mark the server's eras. A dated name that differs from the one in effect just before is a change; before any dated name, a place goes by its label. A first known icon is not a change. Each lane's label shows the name and icon in effect at the visible position. Account name changes, avatar changes, and character main-account changes form an optional marker layer, off by default. Tray toggles control each marker layer. Estimated events and markers are visibly labeled as estimates.
 
 ### Object Browser
 
@@ -277,7 +277,7 @@ Selecting a server or group chat in the left column opens its object view. A ser
 
 ### Character Graph
 
-Characters are nodes. Toggle separate layers for artifact co-occurrence, event co-occurrence, directed introduction, and overlapping server memberships. Count each shared artifact or event once per pair. Membership weight is the number of servers with known overlapping membership. Exclude unknown intervals from overlap counts. Collapse accounts into their character node. Do not invent a composite relationship-strength score. Show the supporting records for a selected connection.
+Characters are nodes. Toggle separate layers for artifact co-occurrence, event co-occurrence, directed introduction, and overlapping server memberships. Count each shared artifact or event once per pair. Membership weight is the number of servers with known overlapping membership. Exclude unknown intervals from overlap counts: a membership with no join date is left out, and one with no leave date continues. Collapse accounts into their character node. Do not invent a composite relationship-strength score. Show the supporting records for a selected connection.
 
 ### Heatmap
 
@@ -935,14 +935,14 @@ Serve frontend and backend from the same origin. Prefix archive routes with `/ap
 | `GET`, `POST`, `PATCH /requests[/:id]` | Missing-media request list, creation, details, and editing |
 | `POST /requests/:id/status` | Needed, Resolved with found artifacts, or Unrecoverable with reason, and expected version |
 | `GET /backlog`, `POST /backlog/flags`, `PATCH /backlog/:id` | Derived and manual gap review with permitted state changes |
-| `GET /timeline`, `/calendar`, `/graph`, `/heatmap` | Bounded view data using shared filters and date rules |
+| `GET /timeline`, `/calendar`, `/graph`, `/heatmap` | Bounded view data using shared filters and date rules. The timeline takes a window of at most 60 years and a day, week, or month bucket, and returns lanes with activity stretches, shaded dots, arrows, the event band, and change markers. The calendar takes a month and the heatmap a year, returning separate artifact and event counts per day. The requested window replaces the shared date range for these three |
 | `GET /media/:mediaId`, `GET /media/:mediaId/preview` | Authorized original or preview streaming, including retained media, with byte ranges and private, revalidated caching. Never a direct filesystem path |
 | `GET /edit-log` | Authorized log download |
 | `GET`, `PUT`, `DELETE /artifact-logs-channel` | Equivalent contributor configuration after Discord channel access and bot-permission checks, which the bot performs. Without the bot connected, setting it is refused with `503` |
 
 The bracket notation in the table abbreviates separate collection and item routes, not a literal route string. Historical record and archive-setting mutations return the current record and version. Requests take `expectedVersion` on their changes and deletion. Operational membership, preference, and announcement-setting commands apply atomically without historical record versions. Source-specific fields and ordinary editable columns come from the schema and date contract. Relationship updates explicitly list additions and removals. A duplicate-review operation accepts additions only.
 
-Lists accept `limit` from 1 to 100, default 50, and an opaque cursor with stable ordering. Shared filters use repeated IDs by category, optional text query, media types, date bases, the unidentified-characters flag, and inclusive `fromDay` and `toDay`. Board lists default to priority then creation time and stable ID. Relative request constraints filter as open-ended intervals, not artificial occurrence days. A timeline request requires a viewport and zoom. Return clusters and counts rather than every offscreen record.
+Lists accept `limit` from 1 to 100, default 50, and an opaque cursor with stable ordering. Shared filters use repeated IDs by category, optional text query, media types, date bases, the unidentified-characters flag, and inclusive `fromDay` and `toDay`. Artifact lists also take `lane` (a server, a group chat, or `unassigned`) for a timeline dot's gallery, and `withCharacter`, where every listed character must appear, for a graph line's album. Board lists default to priority then creation time and stable ID. Relative request constraints filter as open-ended intervals, not artificial occurrence days. A timeline request requires a viewport and zoom. Return clusters and counts rather than every offscreen record.
 
 Errors use `{code, message, details}`. Use `400` for invalid input, `401` for no session, `404` for missing or inaccessible archives, `403` for denied operations within a visible archive, `409` for stale versions or reference blockers, `413` for oversized media, `415` for unsupported formats, `429` for retryable upstream rate limits, and `503` for an unavailable dependency. Include current version and field differences on version conflicts. Do not expose credentials or internal paths in errors.
 

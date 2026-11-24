@@ -40,6 +40,10 @@ export interface ArtifactFilters {
   query: string;
   fromDay: string | null;
   toDay: string | null;
+  /** Timeline lanes, any of: server IDs, group chat IDs, or `unassigned`. For a dot's gallery. */
+  lanes: string[];
+  /** Characters who must all appear, for the album a graph line opens. */
+  allCharacters: string[];
 }
 
 function invalid(field: string, message: string): ArchivistError {
@@ -73,6 +77,18 @@ function optionalDay(field: string, value: unknown): string | null {
   return value === undefined || value === null || value === "" ? null : calendarDay(field, value);
 }
 
+function lanes(value: unknown): string[] {
+  const list = many(value);
+  if (list.length > MAX_FILTER_VALUES)
+    throw invalid("lane", `Choose at most ${MAX_FILTER_VALUES}.`);
+  for (const item of list) {
+    if (item !== "unassigned" && (typeof item !== "string" || !ID.test(item))) {
+      throw invalid("lane", "Use a server or group chat ID, or unassigned.");
+    }
+  }
+  return [...new Set(list as string[])];
+}
+
 /** Reads the shared filters from query values. Unknown IDs simply match nothing. */
 export function readFilters(input: Record<string, unknown>): ArtifactFilters {
   const query = input.q === undefined ? "" : String(input.q).trim();
@@ -97,6 +113,8 @@ export function readFilters(input: Record<string, unknown>): ArtifactFilters {
     media: choices("media", input.media, MEDIA_KINDS),
     bases: choices("basis", input.basis, BASES),
     unidentified: unidentified === true || unidentified === "true",
+    lanes: lanes(input.lane),
+    allCharacters: ids("withCharacter", input.withCharacter),
     query,
     fromDay,
     toDay,
@@ -133,8 +151,16 @@ const MEDIA_SQL = `CASE
   WHEN m.mime_type LIKE 'video/%' THEN 'video'
   ELSE 'audio' END`;
 
+/** No server, no channel in a server, and no group chat: direct messages and unknown places. */
+export const UNASSIGNED_SQL = `(NOT EXISTS (SELECT 1 FROM artifact_servers x WHERE x.artifact_id = a.id)
+  AND NOT EXISTS (SELECT 1 FROM artifact_channels x JOIN channels c ON c.id = x.channel_id
+    WHERE x.artifact_id = a.id AND (c.server_id IS NOT NULL OR c.kind = 'group_chat')))`;
+
 /** The WHERE clause for the filters, with values passed as JSON arrays. */
-function artifactWhere(filters: ArtifactFilters): { sql: string; params: Record<string, unknown> } {
+export function artifactWhere(filters: ArtifactFilters): {
+  sql: string;
+  params: Record<string, unknown>;
+} {
   const clauses: string[] = [];
   const params: Record<string, unknown> = {};
   const link = (name: keyof ArtifactFilters, table: string, column: string) => {
@@ -170,6 +196,22 @@ function artifactWhere(filters: ArtifactFilters): { sql: string; params: Record<
     clauses.push(`${BASIS_SQL} IN (SELECT value FROM json_each(@bases))`);
   }
   if (filters.unidentified) clauses.push("a.unidentified_characters = 1");
+  if (filters.allCharacters.length) {
+    params.allCharacters = JSON.stringify(filters.allCharacters);
+    params.allCount = filters.allCharacters.length;
+    clauses.push(`(SELECT count(DISTINCT x.character_id) FROM artifact_characters x
+      WHERE x.artifact_id = a.id AND x.character_id IN (SELECT value FROM json_each(@allCharacters))) = @allCount`);
+  }
+  if (filters.lanes.length) {
+    params.lanes = JSON.stringify(filters.lanes.filter((lane) => lane !== "unassigned"));
+    const options = [
+      `EXISTS (SELECT 1 FROM artifact_servers x WHERE x.artifact_id = a.id AND x.server_id IN (SELECT value FROM json_each(@lanes)))`,
+      `EXISTS (SELECT 1 FROM artifact_channels x JOIN channels c ON c.id = x.channel_id WHERE x.artifact_id = a.id
+        AND (c.server_id IN (SELECT value FROM json_each(@lanes)) OR (c.kind = 'group_chat' AND c.id IN (SELECT value FROM json_each(@lanes)))))`,
+    ];
+    if (filters.lanes.includes("unassigned")) options.push(UNASSIGNED_SQL);
+    clauses.push(`(${options.join(" OR ")})`);
+  }
   if (filters.query) {
     params.query = foldText(filters.query);
     clauses.push(`instr(${FOLD_FUNCTION}(a.description), @query) > 0`);
@@ -184,6 +226,10 @@ function artifactWhere(filters: ArtifactFilters): { sql: string; params: Record<
   }
   return { sql: clauses.length ? `WHERE ${clauses.join(" AND ")}` : "", params };
 }
+
+/** Every artifact query starts here, so filters can use the media `m` and selected date `d`. */
+export const ARTIFACT_FROM =
+  "FROM artifacts a JOIN media m ON m.id = a.media_id LEFT JOIN date_values d ON d.id = a.selected_date_id";
 
 /** Sort keys, in order, with their direction. The last key is always the unique ID. */
 const SORT_KEYS: Record<ArtifactSort, { expr: string; desc: boolean }[]> = {
@@ -386,26 +432,14 @@ export function readEventFilters(input: Record<string, unknown>): EventFilters {
   };
 }
 
-export interface EventPage {
-  items: EventDetails[];
-  next: string | null;
-  total: number;
-}
-
 /**
- * Events in order of their start, then ID. A date range keeps events whose
- * span overlaps it, so a duration or occurrence window that crosses the
- * range is included.
+ * The conditions for event filters, over `events e`, its start date `s`, and
+ * its end date `f`. A date range keeps events whose span overlaps it.
  */
-export function listEvents(
-  context: ArchivistContext,
-  actor: Actor,
-  input: { archiveId: unknown; filters: EventFilters; limit?: number; cursor?: unknown },
-): EventPage {
-  const { store } = openForActor(context, actor, input.archiveId);
-  const db = store.db;
-  const limit = input.limit ?? DEFAULT_LIMIT;
-  const { filters } = input;
+export function eventWhere(filters: EventFilters): {
+  clauses: string[];
+  params: Record<string, unknown>;
+} {
   const clauses: string[] = [];
   const params: Record<string, unknown> = {};
   if (filters.characters.length) {
@@ -439,6 +473,29 @@ export function listEvents(
     params.fromDay = filters.fromDay;
     clauses.push("coalesce(f.archive_day, s.archive_day) >= @fromDay");
   }
+  return { clauses, params };
+}
+
+export interface EventPage {
+  items: EventDetails[];
+  next: string | null;
+  total: number;
+}
+
+/**
+ * Events in order of their start, then ID. A date range keeps events whose
+ * span overlaps it, so a duration or occurrence window that crosses the
+ * range is included.
+ */
+export function listEvents(
+  context: ArchivistContext,
+  actor: Actor,
+  input: { archiveId: unknown; filters: EventFilters; limit?: number; cursor?: unknown },
+): EventPage {
+  const { store } = openForActor(context, actor, input.archiveId);
+  const db = store.db;
+  const limit = input.limit ?? DEFAULT_LIMIT;
+  const { clauses, params } = eventWhere(input.filters);
   const from = `FROM events e JOIN date_values s ON s.id = e.start_date_id LEFT JOIN date_values f ON f.id = e.end_date_id`;
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
   const total = (db.prepare(`SELECT count(*) AS n ${from} ${where}`).get(params) as { n: number })

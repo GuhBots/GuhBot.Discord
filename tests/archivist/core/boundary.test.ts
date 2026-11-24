@@ -33,11 +33,14 @@ function sourceFiles(dir: string): string[] {
   });
 }
 
+/** Module names in import and export statements and dynamic imports, not in other text such as SQL. */
 function specifiers(source: string): string[] {
-  const found: string[] = [];
-  for (const match of source.matchAll(/(?:\bfrom|\bimport)\s*\(?\s*["']([^"']+)["']/g))
-    found.push(match[1]!);
-  return found;
+  const patterns = [
+    /^\s*(?:import|export)\b[^;]*?\bfrom\s*["']([^"']+)["']/gms,
+    /^\s*import\s*["']([^"']+)["']/gm,
+    /\bimport\(\s*["']([^"']+)["']\s*\)/g,
+  ];
+  return patterns.flatMap((pattern) => [...source.matchAll(pattern)].map((match) => match[1]!));
 }
 
 test("the archive service does not depend on the Discord bot", () => {

@@ -12,6 +12,7 @@ import { registerChangeRoutes } from "./change-routes.js";
 import { type IntakeOptions, registerIntakeRoutes } from "./intake-routes.js";
 import { registerMediaRoutes } from "./media-routes.js";
 import { registerReadRoutes } from "./read-routes.js";
+import { registerViewRoutes } from "./view-routes.js";
 import type { Fetch } from "./discord-oauth.js";
 import { basePathOf, redirectUriOf, type WebSettings } from "./settings.js";
 
@@ -148,6 +149,7 @@ export function buildWebApp(options: WebAppOptions): WebApp {
       auth.register(scope);
       registerReadRoutes(scope, options.context, auth);
       registerChangeRoutes(scope, options.context, auth);
+      registerViewRoutes(scope, options.context, auth);
       // Serves the built frontend, and gives routes `reply.sendFile` for media either way.
       // `wildcard: false` serves only files that exist, so other pages fall through to the app shell.
       await scope.register(fastifyStatic, {
