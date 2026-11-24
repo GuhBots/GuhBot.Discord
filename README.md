@@ -65,6 +65,7 @@ Run these commands from the repository root inside the [dev container](.devconta
 | `npm run check` | Type check the bot and tests, and check formatting, as continuous integration does |
 | `npm run test:archivist:core` | Run the Archivist core tests described in [Tests](tests/README.md) |
 | `npm run test:archivist:discord` | Run the Archivist Discord adapter tests |
+| `npm run test:archivist:web` | Run the Archivist website tests |
 | `npm run format` | Format the code with Prettier |
 
 The bot keeps AFK statuses in a SQLite database at `data/guhbot.db`. The container image stores it in the `/data` volume instead.

@@ -43,6 +43,26 @@ The `applications.commands` scope lets the bot register slash commands. A server
 | `STATUS_CHANNEL_ID` | Empty, or a test channel | The channel for startup and shutdown messages |
 | `SUPPORT_URL`, `WEBSITE_URL`, `TOPGG_URL`, `DISCORDBOTLIST_URL` | Optional | The links to show. Leave one empty to hide it |
 
+## Archivist's Website
+
+Archivist's website runs inside the bot. It is off until the owner runs `/archivist-admin web start`, and it refuses to start until these settings are set. Its pages and Discord sign-in are still being built, so for now it shows a placeholder page.
+
+1. In the [Discord Developer Portal](https://discord.com/developers/applications), open the bot's application and go to **OAuth2**.
+2. Copy the **Client ID** into `DISCORD_CLIENT_ID`.
+3. Select **Reset Secret**, and copy the secret into `DISCORD_CLIENT_SECRET`. It is shown once. Keep it out of Git and chat.
+4. Under **Redirects**, add `http://localhost:3000/auth/discord/callback` for local testing, and save. A hosted website adds its own address with the same path, such as `https://archive.home.example/auth/discord/callback`.
+5. Generate a session secret with `openssl rand -hex 32` and set it as `ARCHIVIST_SESSION_SECRET`.
+
+| Setting | Development | Production |
+| --- | --- | --- |
+| `ARCHIVIST_HOST` | `127.0.0.1` | `0.0.0.0` in a container, which `compose.yaml` sets |
+| `ARCHIVIST_PORT` | `3000` | The port the reverse proxy forwards to |
+| `ARCHIVIST_BASE_URL` | `http://localhost:3000` | The HTTPS address browsers use |
+| `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` | The test application's | The production application's |
+| `ARCHIVIST_SESSION_SECRET` | Any 32 or more random bytes | A different random secret |
+
+The redirect registered in the portal must be `ARCHIVIST_BASE_URL` followed by `/auth/discord/callback`, exactly.
+
 ## How Commands Are Registered
 
 The code is the only source of the application's commands. Each time the bot logs in, it registers the commands in the code and deletes every other command registered for the application, globally and in every server it is in. When it joins a server, it syncs that server's commands.

@@ -132,6 +132,19 @@ Add a matching `build` section for each service to `compose.override.yaml`. Ever
 
 Run only one copy of a service that logs in to an outside account, such as a chat bot. Two copies with the same token both respond to every event. When moving a service to another machine, stop it on the old machine first.
 
+## Archivist's Website
+
+The bot can serve Archivist's website from the same container. It is off until the owner runs `/archivist-admin web start`, and a restart turns it off again. `compose.yaml` publishes no port, so a port already in use on the host never stops the bot from starting. To reach the website, publish its port in `compose.override.yaml`, on the host's loopback address so only the machine itself and a reverse proxy can reach it:
+
+```yaml
+services:
+  app:
+    ports:
+      - "127.0.0.1:3000:3000"
+```
+
+Set `ARCHIVIST_BASE_URL` to the address browsers use, such as `https://archive.home.example` behind a reverse proxy that provides HTTPS. Set the Discord sign-in settings described in the [Discord setup guide](discord-setup.md#archivists-website). If the port is busy when the owner starts the website, the command says so and the bot keeps running.
+
 ## Data and Backups
 
 The service stores files that must survive updates in the `data` volume, mounted at `/data` in the container. `docker compose down` keeps the volume. `docker compose down -v` deletes it.

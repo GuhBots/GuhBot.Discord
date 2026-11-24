@@ -41,6 +41,7 @@ Archivist is being built in milestones. This directory currently holds storage, 
 | `archive-database.ts` | Opens an archive's `archive.db`, refuses newer schemas, and applies migrations |
 | `operational-database.ts` | Prepares Archivist's tables in the bot's shared `guhbot.db` |
 | `migrations/` | The archive and operational schemas as ordered migrations, and the code that applies them |
+| `web/` | The optional website: its listener, settings, and routes, described in its [README](web/README.md) |
 
 ## Design Notes
 

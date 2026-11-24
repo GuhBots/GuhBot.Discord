@@ -35,6 +35,8 @@ import { recall, remember } from "../lib/archivist-pending.js";
 import { GUILD_ONLY } from "../lib/categories.js";
 import { baseEmbed } from "../lib/embeds.js";
 import { IsOwner } from "../lib/owner.js";
+import { startWeb, stopWeb, webStatus } from "../lib/archivist-web.js";
+import type { WebStatus } from "../archivist/web/listener.js";
 
 /**
  * Owner-only Archivist administration: archives, whitelists, and settings.
@@ -108,6 +110,11 @@ function versionOrCurrent(interaction: CommandInteraction, archiveId: string, ve
   );
 }
 
+/** Where the listener's socket is, which differs from the browser address behind a proxy. */
+function webWhere(status: WebStatus): string {
+  return status.listening ? `It listens on ${status.listening.host}:${status.listening.port}.` : "";
+}
+
 @Discord()
 @Guild(config.ownerGuildId!)
 @Guard(IsOwner)
@@ -121,6 +128,11 @@ function versionOrCurrent(interaction: CommandInteraction, archiveId: string, ve
 @SlashGroup({
   name: "export",
   description: "Zip a whole archive on the bot's host",
+  root: "archivist-admin",
+})
+@SlashGroup({
+  name: "web",
+  description: "Start, stop, or check Archivist's website",
   root: "archivist-admin",
 })
 export class ArchivistAdmin {
@@ -469,6 +481,52 @@ export class ArchivistAdmin {
                 "No exports yet. Make one with `/archivist-admin export create`.",
             ),
         ],
+      });
+    });
+  }
+
+  @Slash({ name: "start", description: "Start the website", ...GUILD_ONLY })
+  @SlashGroup("web", "archivist-admin")
+  async webStart(interaction: CommandInteraction): Promise<void> {
+    await runArchivist(interaction, async () => {
+      await interaction.deferReply(ephemeral);
+      const before = webStatus(await actorOf(interaction)).running;
+      const status = await startWeb(interaction.client, await actorOf(interaction));
+      await interaction.editReply({
+        content: `${before ? "The website was already running" : "The website is running"} at ${status.url}. ${webWhere(status)}`,
+      });
+    });
+  }
+
+  @Slash({
+    name: "stop",
+    description: "Stop the website. Discord commands keep working",
+    ...GUILD_ONLY,
+  })
+  @SlashGroup("web", "archivist-admin")
+  async webStop(interaction: CommandInteraction): Promise<void> {
+    await runArchivist(interaction, async () => {
+      await interaction.deferReply(ephemeral);
+      const before = webStatus(await actorOf(interaction)).running;
+      await stopWeb(await actorOf(interaction));
+      await interaction.editReply({
+        content: before
+          ? "The website is stopped. Discord commands and saved archives are unaffected."
+          : "The website was already stopped.",
+      });
+    });
+  }
+
+  @Slash({ name: "status", description: "Show whether the website is running", ...GUILD_ONLY })
+  @SlashGroup("web", "archivist-admin")
+  async webStatusCommand(interaction: CommandInteraction): Promise<void> {
+    await runArchivist(interaction, async () => {
+      const status = webStatus(await actorOf(interaction));
+      await interaction.reply({
+        ...ephemeral,
+        content: status.running
+          ? `The website is running at ${status.url}, since <t:${Math.floor(status.since!.getTime() / 1000)}:R>. ${webWhere(status)}`
+          : "The website is stopped. Start it with `/archivist-admin web start`.",
       });
     });
   }

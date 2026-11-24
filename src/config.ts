@@ -35,6 +35,17 @@ function idList(name: string): string[] {
   return ids;
 }
 
+/** Reads a port number, and fails on anything else. */
+function portNumber(name: string, fallback: number): number {
+  const value = optional(name);
+  if (value === undefined) return fallback;
+  const port = Number(value);
+  if (!/^\d+$/.test(value) || port < 1 || port > 65535) {
+    throw new Error(`${name} must be a port number from 1 to 65535. Got: ${value}`);
+  }
+  return port;
+}
+
 /** Reads the bot token. Only the entry point calls this, so imports never need it. */
 export function readToken(): string {
   const token = optional("DISCORD_TOKEN");
@@ -65,9 +76,22 @@ export const config = {
   statusChannelId: optional("STATUS_CHANNEL_ID"),
   /**
    * Google API key for reading public Drive files that contributors link to
-   * in Archivist. Drive links are refused when unset. Attachments still work.
+   * in Archivist. When unset, public Drive files download from Google's public
+   * download address instead.
    */
   googleDriveApiKey: optional("GOOGLE_DRIVE_API_KEY"),
+  /**
+   * Archivist's website. It starts only when the owner runs
+   * `/archivist-admin web start`, which checks these settings.
+   */
+  archivistWeb: {
+    host: optional("ARCHIVIST_HOST") ?? "127.0.0.1",
+    port: portNumber("ARCHIVIST_PORT", 3000),
+    baseUrl: optional("ARCHIVIST_BASE_URL") ?? "http://localhost:3000",
+    discordClientId: optional("DISCORD_CLIENT_ID"),
+    discordClientSecret: optional("DISCORD_CLIENT_SECRET"),
+    sessionSecret: optional("ARCHIVIST_SESSION_SECRET"),
+  },
   /** Holds the SQLite database. The container image sets it to the /data volume. */
   dataDir: optional("DATA_DIR") ?? "data",
   /** Links shown by /support, /stats, and /upvote. Each one is hidden when unset. */

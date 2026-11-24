@@ -145,6 +145,9 @@ When the Archivist module is on, the owner server also gets Archivist administra
 | `/archivist-admin whitelist list <archive> [page]` | None | Lists an archive's members |
 | `/archivist-admin export create <archive>` | None | Zips the whole archive folder (database, edit log, originals, previews, and media no longer used by any record) into `archivist-exports/` in the bot's data folder. Replies with the zip's path and updates when it is done. The zip stays until you delete it |
 | `/archivist-admin export list` | None | Lists recent exports, their paths and sizes, and whether each zip is still on the host |
+| `/archivist-admin web start` | None | Starts Archivist's website at `ARCHIVIST_BASE_URL`. Refuses until the website settings are set, and says so if the port is busy. Starting it again reports the running website |
+| `/archivist-admin web stop` | None | Stops the website. Discord commands and saved archives are unaffected. Stopping it again reports that it is stopped |
+| `/archivist-admin web status` | None | Shows whether the website is running, its address, and since when |
 
 Exports are written to `data/archivist-exports/` when the bot runs from source. With Docker Compose they are in the `data` volume at `/data/archivist-exports/`. Copy one out and then remove it from the volume:
 
