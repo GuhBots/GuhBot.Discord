@@ -53,6 +53,8 @@ The Archivist module's commands call the separate Archivist service, GuhBot.Arch
 4. Set `ARCHIVIST_API_URL` to Archivist's address as the bot reaches it, including any path, such as `https://guhbot.example.com/archivist`, or `http://127.0.0.1:3000` when both run on one machine.
 5. Restart the bot and run `/archivist-admin status` in the owner server. It says whether the bot reached Archivist and whether you are one of its owners.
 
+To run the bot and Archivist as two containers on one computer, set `ARCHIVIST_API_URL=http://archivist:3000`, create the shared network once with `docker network create guhbot`, and add `COMPOSE_FILE=compose.yaml:compose.override.yaml:compose.local.yaml` to both repositories' `.env`. [`compose.local.yaml`](../../compose.local.yaml) joins the bot to that network. Start Archivist first.
+
 To change the token, generate a new one, put it in Archivist's `.env` and restart Archivist, then put it here and restart the bot. Archivist's own guide, Connecting the Bot, covers the address choices, the website's sign-in settings, and turning the bot's access off.
 
 The bot sends the token with every Archivist request, along with the Discord user who ran the command. Archivist checks that user's access itself, so the token never makes anyone an owner. Archivist's owners are the Discord users in its `ARCHIVIST_OWNER_IDS`, not this application's owners.

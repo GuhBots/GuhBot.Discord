@@ -35,6 +35,7 @@ The bot runs in a container on any machine with Docker, such as a Raspberry Pi o
 ├── Dockerfile                    Development, build, and runtime images
 ├── compose.yaml                  How servers run the bot
 ├── compose.override.yaml         Local image builds from a clone
+├── compose.local.yaml            Joins the bot to Archivist's container on the same machine
 ├── .env.example                  Settings and secrets the bot needs, with placeholders
 ├── .devcontainer/                Dev container setup and customization
 ├── .github/                      Pull request template and workflows
