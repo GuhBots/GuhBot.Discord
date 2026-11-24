@@ -174,6 +174,32 @@ export function listPlaces(
   );
 }
 
+/** Display names for linked records, so a page can show them without a request per link. */
+export function linkNames(
+  db: Database.Database,
+  links: Partial<
+    Record<"characters" | "accounts" | "servers" | "channels" | "events", readonly string[]>
+  >,
+): Record<string, string> {
+  const sources = {
+    characters: "SELECT id, known_name AS name FROM characters",
+    accounts: "SELECT id, label AS name FROM accounts",
+    servers: "SELECT id, label AS name FROM servers",
+    channels: "SELECT id, label AS name FROM channels",
+    events: "SELECT id, title AS name FROM events",
+  } as const;
+  const names: Record<string, string> = {};
+  for (const [kind, sql] of Object.entries(sources) as [keyof typeof sources, string][]) {
+    const ids = links[kind];
+    if (!ids?.length) continue;
+    const rows = db
+      .prepare(`${sql} WHERE id IN (SELECT value FROM json_each(?))`)
+      .all(JSON.stringify(ids)) as { id: string; name: string }[];
+    for (const row of rows) names[row.id] = row.name;
+  }
+  return names;
+}
+
 /* Full records */
 
 export interface AccountView {

@@ -5,7 +5,7 @@ import { type GapStatus, listGapCards } from "../board.js";
 import type { ArchivistContext } from "../context.js";
 import { calendarDay } from "../dates.js";
 import type { EntityKind } from "../entities.js";
-import { entityView, listCharacters, listPlaces } from "../entity-views.js";
+import { entityView, linkNames, listCharacters, listPlaces } from "../entity-views.js";
 import { ArchivistError } from "../errors.js";
 import { getEvent } from "../events.js";
 import {
@@ -97,9 +97,15 @@ export function registerReadRoutes(
       }),
   );
 
+  // With the names of everything it links to, so its window can show them.
   scope.get<{ Params: ArchiveParams & { id: string } }>(
     "/api/archives/:archiveId/artifacts/:id",
-    async (request) => getArtifact(context, await actorOf(request), request.params),
+    async (request) => {
+      const actor = await actorOf(request);
+      const artifact = getArtifact(context, actor, request.params);
+      const { store } = openForActor(context, actor, request.params.archiveId);
+      return { ...artifact, names: linkNames(store.db, artifact.links) };
+    },
   );
 
   scope.get<{ Params: ArchiveParams; Querystring: Query }>(
@@ -115,7 +121,12 @@ export function registerReadRoutes(
 
   scope.get<{ Params: ArchiveParams & { id: string } }>(
     "/api/archives/:archiveId/events/:id",
-    async (request) => getEvent(context, await actorOf(request), request.params),
+    async (request) => {
+      const actor = await actorOf(request);
+      const event = getEvent(context, actor, request.params);
+      const { store } = openForActor(context, actor, request.params.archiveId);
+      return { ...event, names: linkNames(store.db, event.links) };
+    },
   );
 
   scope.get<{ Params: ArchiveParams & { kind: string }; Querystring: Query }>(

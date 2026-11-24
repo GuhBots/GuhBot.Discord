@@ -76,7 +76,8 @@ WORKDIR /home/dev/src
 COPY --chown=dev:dev package.json package-lock.json ./
 RUN npm ci
 
-# Compile the TypeScript, then keep only what the bot needs at run time.
+# Compile the TypeScript and build the website, then keep only what the bot
+# needs at run time.
 COPY --chown=dev:dev . .
 RUN npm run build \
     && npm prune --omit=dev \

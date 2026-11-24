@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import fastifyCookie from "@fastify/cookie";
 import fastifyMultipart from "@fastify/multipart";
@@ -52,6 +52,19 @@ const SECURITY_HEADERS: Record<string, string> = {
   "referrer-policy": "same-origin",
   "x-frame-options": "DENY",
   "cross-origin-opener-policy": "same-origin",
+  // Pages load only the website's own scripts and styles. Discord's CDN serves signed-in avatars.
+  "content-security-policy": [
+    "default-src 'self'",
+    "img-src 'self' https://cdn.discordapp.com data: blob:",
+    "media-src 'self' blob:",
+    "style-src 'self' 'unsafe-inline'",
+    "script-src 'self'",
+    "connect-src 'self'",
+    "font-src 'self'",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+  ].join("; "),
 };
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
@@ -143,6 +156,14 @@ export function buildWebApp(options: WebAppOptions): WebApp {
   });
 
   const built = existsSync(join(options.frontendRoot, "index.html"));
+  // The built page links its files relative to a <base> tag naming the website's path,
+  // so one build works at the root or under a path such as /archivist.
+  const shell = built
+    ? readFileSync(join(options.frontendRoot, "index.html"), "utf8").replace(
+        "<head>",
+        `<head>\n    <base href="${basePath}/" />`,
+      )
+    : null;
 
   app.register(
     async (scope) => {
@@ -182,7 +203,7 @@ export function buildWebApp(options: WebAppOptions): WebApp {
         // A missing file, such as an old script name, is a plain 404 rather than the page shell.
         if (/\.[a-z0-9]+$/i.test(path)) return reply.status(404).send(notFound());
         // Every other page is part of the single-page frontend, which routes it in the browser.
-        if (built) return reply.type("text/html").sendFile("index.html");
+        if (shell) return reply.type("text/html").header("cache-control", "no-cache").send(shell);
         return reply.type("text/html").send(NOT_BUILT_PAGE);
       });
     },

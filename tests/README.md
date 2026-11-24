@@ -9,6 +9,7 @@ Automated tests, run with the Node.js built-in test runner. `tsconfig.test.json`
 | `archivist/core/` | Archivist storage, migrations, and shared rules, tested against temporary databases and folders |
 | `archivist/discord/` | Discord adapter formatting and pending forms, without connecting to Discord |
 | `archivist/web/` | The website's listener, sign-in, and routes, with Discord replaced by a stand-in |
+| `archivist/e2e/` | A made-up archive and a script that serves it on the built website, for checks in a browser |
 | `archivist/helpers/` | Shared test helpers, such as temporary directories that are removed after each test |
 
 ## Running Tests
