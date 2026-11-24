@@ -4,7 +4,7 @@
 
 ## Purpose And Scope
 
-Preserve the history of a Discord community using original media, historical identities, and events in independent, portable archives. Build the complete hosted Archivist inside this repository, with Discord as the primary contribution interface and equivalent contributor operations in the web app. Include the horizontal timeline, object browser, character graph, research board, and heatmap.
+Preserve the history of a Discord community using original media, historical identities, and events in independent, portable archives. Build the complete hosted Archivist inside this repository, with Discord as the primary contribution interface and equivalent contributor operations in the web app. Include the horizontal timeline, album, object browser, character graph, research board, and heatmap.
 
 The separate standalone viewer is outside this build. Its future reader must be able to interpret an exported archive without GuhBot, its operational database, credentials, or the original media host.
 
@@ -269,7 +269,7 @@ Artifacts appear as one dot per lane and day. At coarser zoom, a dot covers a we
 
 Ranged events appear in the event band as labeled strips in their event color. Overlapping events are placed in parallel rows so none hides another. A duration is a solid strip, and an occurrence window is a dashed strip. Event colors are assigned automatically from the palette and are editable. Events do not recolor lanes.
 
-Single-day events appear as red downward arrows with their names on their lanes. Several single-day events on one lane and day share an arrow with an expandable count. Server name and icon changes appear automatically as arrows in a separate color showing the new name and icon, because they mark the server's eras. Each lane's label shows the name and icon in effect at the visible position. Account name changes and character main-account changes form an optional marker layer, off by default. Tray toggles control each marker layer. Estimated events and markers are visibly labeled as estimates.
+Single-day events appear as red downward arrows with their names on their lanes. Several single-day events on one lane and day share an arrow with an expandable count. Server name and icon changes appear automatically as arrows in a separate color showing the new name and icon, because they mark the server's eras. Each lane's label shows the name and icon in effect at the visible position. Account name changes, avatar changes, and character main-account changes form an optional marker layer, off by default. Tray toggles control each marker layer. Estimated events and markers are visibly labeled as estimates.
 
 ### Object Browser
 
@@ -282,6 +282,25 @@ Characters are nodes. Toggle separate layers for artifact co-occurrence, event c
 ### Heatmap
 
 Count one unit per dated artifact and one per event start or earliest possible occurrence day. Show artifact and event counts separately and identify estimates. Count an event once regardless of duration or lane duplication. Exclude undated artifacts and show their count separately. Clicking a day navigates the timeline using the same filters. Use archive-timezone day buckets for everyone.
+
+### Album
+
+The album shows every visible artifact as square tiles and nothing else, like a photo library. Tiles are grouped under month headings when sorted by date, with undated artifacts in their own section at the end. Contributors sort oldest first, newest first, or most recently added, and choose a small, medium, or large tile size. Shared filters apply. Tiles mark video, audio, unreadable files, and estimated or file-metadata dates. Selecting a tile opens the artifact's full details, with previous and next controls and arrow keys that step through the album in its current order.
+
+### Prototype Review Decisions
+
+The owner reviewed the clickable prototype on 2026-11-23 and approved it after three rounds. These decisions refine the sections above.
+
+* **Top bar.** The product name is GuhBot Archivist. The calendar accepts a typed year, month, or day, such as `2020`, `Jul 2020`, or `Jul 15 2020`. A year opens year zoom on that year, a month opens month zoom, and a day opens day zoom on that day. Impossible dates are refused. The account menu at the top right holds the contributor's timezone and all-number date order, the same preferences Discord sets, and sign-out.
+* **Notifications.** Short confirmations, such as a hidden lane, appear at the top middle of the screen.
+* **Timeline movement.** Dragging pans the timeline. A mouse wheel or a sideways trackpad swipe moves through time. Ctrl with the wheel, or a trackpad pinch, steps between the zoom levels.
+* **Lanes.** Each viewer can reorder lanes by dragging a grip beside the lane name, or with the arrow keys on a focused grip, and hide a lane. Hidden lanes are listed in a Lanes control with a reset. The order and hidden lanes are local to the viewer's browser. They are not archive data and do not change anyone else's view. The main server's lane starts closest to the event band.
+* **Markers.** Arrows have a fixed shape that a short lane cannot distort, and labels sit beside their arrow, shortened before the next arrow so text never covers one. The tray legend explains red event arrows and server-change arrows. The character-change layer shows pictures only: a new avatar shows the new picture, and a name or main-account change shows the character's picture at that time. The details are in the tooltip and on the character page.
+* **Places.** A server's page switches in the tray between a list and channel lanes. Channel lanes use the timeline's shaded dots, one per period, with the period chosen so dots stay apart. Edit Place opens a dialog for the kind, Discord ID, lane color, dated names and icons, and channels. Names and icons show their actual images where known.
+* **Graph.** A deterministic force layout places the nodes. Every pair of characters pushes apart, and each visible connection pulls its pair together in proportion to what the visible layers count for that pair, so groups form by connection. The same data always gives the same picture, with no live simulation. The pull only places nodes; no strength score is shown. Circles grow with their connections, lines are thin, and pointing at a character highlights their connections. The wheel or a pinch zooms around the pointer, dragging pans, and the tray offers zoom out, zoom in, and fit. Selecting a line opens an album of every artifact the two characters share, or the supporting records when they share none.
+* **Character page.** Fact labels such as Real name, Birth date, and Met in person are bold, and an unknown value reads "unknown". Account history shows the actual avatar images. Selecting the character's picture opens an album of every picture they have had, oldest first, with each picture's account and start date, then the fallback picture. Animated GIF avatars play as uploaded. They are served as the original file rather than a still preview.
+* **Heatmap.** The viewer can zoom the heatmap so its cells are large enough to read and select.
+* **Discord IDs.** A Discord ID encodes when its account, server, channel, or message was created. Detail views show that creation date wherever an ID is known, derived without a network request. A contributor may fetch an account's current name and avatar, or a server's current name and icon where the bot can see it, from Discord. A fetch records what Discord returns as an observation dated the day of the fetch. It never backdates a current picture into the past.
 
 ## Web Lifecycle, Exports, And Operations
 
@@ -886,10 +905,10 @@ Serve frontend and backend from the same origin. Prefix archive routes with `/ap
 | --- | --- |
 | `GET /auth/discord`, `GET /auth/discord/callback` | Sign-in start and registered callback with state validation |
 | `POST /auth/logout` | Invalidate session and clear cookie |
-| `GET /api/me`, `PUT /api/me/timezone`, `DELETE /api/me/timezone` | Current identity and self-service timezone |
+| `GET /api/me`, `PUT /api/me/timezone`, `PUT /api/me/date-order`, `DELETE /api/me/preferences` | Current identity and self-service timezone and date order. Delete resets both, as the Discord reset does |
 | `GET /api/archives` | Accessible archive summaries only |
 | `GET /api/archives/:archiveId` | Archive metadata and display settings |
-| `GET /artifacts`, `GET /artifacts/:id` | Paged filtered list or full details |
+| `GET /artifacts`, `GET /artifacts/:id` | Paged filtered list, sorted oldest first, newest first, or most recently added, or full details |
 | `POST /artifacts/intake` | Multipart upload or a public Drive file link and description, with optional metadata. Return new artifact or a review token and differences |
 | `POST /artifacts/reviews/:token/apply` | Selected scalar replacements and relationship additions, with expected version |
 | `PATCH /artifacts/:id`, `DELETE /artifacts/:id` | Validated edit or permanent deletion with expected version |
@@ -980,7 +999,7 @@ Complete the entire hosted-app scope through these internal milestones.
 | `M1` Storage And Operations | Independent archive folders, bot registry and whitelist, date values, metadata preservation, editable logs, version conflicts, and recoverable mutations | Restart persistence, reference blockers, source uniqueness, date precedence, and interrupted-deletion/log-rewrite checks pass without changing AFK data |
 | `M2` Discord Contribution | Complete contributor and owner commands, public Drive intake, attachments, duplicate review, channel announcements, and exports | Test-server rehearsal verifies accepted inputs, different public folders, original bytes and metadata, failed sources, stale reviews, and unchanged announcement history |
 | `M3` Historical Research | Full identities, observations, memberships, character merge, events, missing-media requests, and board transitions | Explicit fixtures cover nullable identities, history lookup, both event range meanings, all request constraints, anchor corrections and deletion blocking, and no assignees |
-| `M4` Hosted App | Owner-controlled lifecycle, Discord login, every contributor operation, all five views, and responsive design | Browser flows prove parity, next-request revocation, keyboard access, mobile forms, historical date labels, and usable stopped-app outcomes |
+| `M4` Hosted App | Owner-controlled lifecycle, Discord login, every contributor operation, all six views, and responsive design | Browser flows prove parity, next-request revocation, keyboard access, mobile forms, historical date labels, and usable stopped-app outcomes |
 | `M5` Release Validation | Complete export and clean restore, migration compatibility, performance, CI, and operating documentation | Zip opens without bot state or source access, required checks run in CI, performance results name the host, and configured live-source and local-hosting rehearsals pass |
 | `M6` Future Viewer | Excluded from this build | A separate future project may use the published archive contract |
 
@@ -1027,7 +1046,7 @@ The owner's accepted batches A through F are reconciled here. Later clarificatio
 | Research backlog | No assignees; missing-media requests require temporal information, a character, and description; Needed, Resolved, and Unrecoverable buckets |
 | Relative requests | Before event start, after event end, follow corrected dates, and block anchored-event deletion |
 | Deletion | Permanent archive record deletion, retained media, removed own edit entries, no deletion log, and unchanged external upload-history messages |
-| Scope | Full hosted app and all five views, with separate standalone viewer later |
+| Scope | Full hosted app and all six views (the album was added in the prototype review), with separate standalone viewer later |
 | Archive selection | Discord commands may omit the archive and reuse the contributor's last explicit selection, stored in `guhbot.db`. Replies always name the archive |
 | Intake links | Intake links only existing records. Contributors create a missing character before linking it |
 | Identification cards | A yes/no unidentified-characters flag, set from a button on the artifact reply rather than an intake field. Missing-characters cards come only from the flag |
@@ -1042,6 +1061,7 @@ The owner's accepted batches A through F are reconciled here. Later clarificatio
 | Exports | Owner-only, from `/archivist-admin export`. The zip is written on the host and kept until the owner deletes it. No Discord or web download |
 | Editing split | Discord is for uploads and quick edits. Dated history editing and character merge are website-only, because editing is easier with the whole record in view |
 | Terminology | Say "character" for the archive's records of real people, never "person" or "people", in the interface, the code, and the schema. Archive schema version 3 renames the stored names. Discord users are contributors |
+| Prototype review | Approved on 2026-11-23 after three rounds. The decisions are under [Prototype Review Decisions](#prototype-review-decisions), including the new album view, viewer-local lane order and hiding, the deterministic graph layout, the picture album with GIF avatars, account-menu preferences, and creation dates derived from Discord IDs |
 | Research on the website | The research board, manual research flags, and moving missing-media requests between buckets are website-only. Derived gap cards clear themselves when the data is added. A request resolves when someone links the artifact that has the media, since the archive cannot tell by itself that an upload is the missing media. Deletes that would be refused are refused before the confirmation button appears |
 | Prototype timing | The clickable prototype is built during `M3`, so layout feedback arrives before the `M4` views are built |
 | Command shape | `/a` is a short alias of `/archivist` with the same commands. The archive option comes last in every command, because contributors change it least |
