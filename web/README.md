@@ -37,4 +37,4 @@ Set the printed `member` or `owner` value as the `archivist_session` cookie for 
 
 ## Per-Viewer Settings
 
-The album's sort and tile size, and the last archive and timeline position, are kept in the browser's storage. They change only that viewer's view and are not archive data.
+The timeline's lane order, hidden lanes, zoom, and marker layers, the album's sort and tile size, and the last archive and timeline position are kept in the browser's storage. They change only that viewer's view and are not archive data.
