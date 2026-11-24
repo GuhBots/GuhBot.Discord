@@ -6,6 +6,7 @@ import Fastify, { type FastifyError, type FastifyInstance } from "fastify";
 import type { ArchivistContext } from "../context.js";
 import { ArchivistError } from "../errors.js";
 import { type Auth, createAuth } from "./auth.js";
+import { registerChangeRoutes } from "./change-routes.js";
 import { registerReadRoutes } from "./read-routes.js";
 import type { Fetch } from "./discord-oauth.js";
 import { basePathOf, redirectUriOf, type WebSettings } from "./settings.js";
@@ -136,6 +137,7 @@ export function buildWebApp(options: WebAppOptions): WebApp {
     async (scope) => {
       auth.register(scope);
       registerReadRoutes(scope, options.context, auth);
+      registerChangeRoutes(scope, options.context, auth);
       if (built) {
         // `wildcard: false` serves only files that exist, so other pages fall through to the app shell.
         await scope.register(fastifyStatic, {

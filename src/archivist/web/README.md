@@ -10,6 +10,7 @@ The website's server side. It runs inside the bot process, and only the bot owne
 | `auth.ts` | Discord sign-in and sign-out, the signed-in contributor (`requireActor`), and `/api/me` with its preferences |
 | `sessions.ts` | Sessions and sign-in states in the bot database, stored as token hashes |
 | `read-routes.ts` | Read routes under `/api/archives`: archives, places, artifacts, events, entities, requests, the board, and search |
+| `change-routes.ts` | Routes that change an archive: entities and their history, merge, artifacts, events, requests and their buckets, the board, and the date preview |
 | `discord-oauth.ts` | Discord's OAuth endpoints over plain HTTPS: the sign-in link, code exchange, identity, and token revocation |
 
 The Discord side, `src/lib/archivist-web.ts`, creates the listener and registers it to close during bot shutdown, before the archive stores close.
