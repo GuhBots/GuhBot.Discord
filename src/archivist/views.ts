@@ -72,6 +72,8 @@ export interface TimelineLane {
   /** A server ID, a group chat ID, or `unassigned`. */
   id: string;
   kind: "server" | "group_chat" | "unassigned";
+  /** The name before any dated name applies. */
+  label: string;
   color: string;
   isMain: boolean;
   /** Dated names and icons, so the label can follow the timeline position without a request. */
@@ -232,6 +234,7 @@ export function timelineView(
     {
       id: "unassigned",
       kind: "unassigned",
+      label: "Unassigned",
       color: "#80848e",
       isMain: false,
       names: [],
@@ -243,6 +246,7 @@ export function timelineView(
     ...chats.map((c) => ({
       id: c.id,
       kind: "group_chat" as const,
+      label: c.label,
       color: c.color,
       isMain: false,
       names: datedList(
@@ -263,6 +267,7 @@ export function timelineView(
       .map((s) => ({
         id: s.id,
         kind: "server" as const,
+        label: s.label,
         color: s.color,
         isMain: s.id === details.mainServerId,
         names: datedList(
