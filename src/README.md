@@ -18,7 +18,8 @@ The bot's TypeScript source. `npm run build` compiles it to `build/`.
 A module is a group of commands and listeners that the `MODULES` setting turns on or off. Each module is one /help category. `ALL_MODULES` in `modules.ts` lists every module with its /help description, the gateway intents it needs, and a `load` function that imports its files. A module that is off never loads, so its commands are never registered and the bot does not request its intents.
 
 * **Always on:** Meta holds /help, so it loads even when `MODULES` leaves it out.
-* **Limited to some servers:** A module with `servers` works only in the servers its setting lists, such as Archivist with `ARCHIVIST_GUILD_IDS`. Its command classes use `@Guild` with the same IDs, so its commands register only there, and /help shows it only there. It stays off while its setting is empty.
+* **Limited to some servers:** A module with `servers` works only in the servers its `ids` function returns, which can change while the bot runs. Archivist's list lives in the bot's database, and owners change it with `/archivist-admin server`, which updates that server's commands at once. Its command classes use `@Guild` with the same function, so its commands register only there, and /help shows it only there. While the list is empty, its commands are registered nowhere.
+* **Needing settings:** A module with `settings` stays off when they are missing and `MODULES` is unset, so a bot without them still starts. When `MODULES` names the module, the bot refuses to start without them.
 
 `modules.ts` stops the bot at startup when `MODULES` names a module that does not exist, so a typo does not silently turn a module off. The bot logs which modules are on when it starts.
 

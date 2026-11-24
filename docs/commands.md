@@ -71,7 +71,7 @@ Each command is shown only to members with the matching permission. The bot also
 
 ## Archivist
 
-Archiving tools for specific servers, described in the [Archivist plan](proposals/ARCHIVIST-PLAN.md). The module is new and has no counterpart in the original bot. It works only in the servers listed in `ARCHIVIST_GUILD_IDS`, and /help shows it only there. Replies are private.
+Archiving tools for specific servers, described in the [Archivist plan](proposals/ARCHIVIST-PLAN.md). The module is new and has no counterpart in the original bot. It works only in the servers Archivist's owners add with `/archivist-admin server add`, and /help shows it only there. Replies are private.
 
 The archives live in the separate Archivist service, GuhBot.Archivist, which also has the website. These commands call its API as the contributor who runs them, and the service decides what each contributor may do: only Archivist's owners and contributors on an archive's whitelist can use that archive. When the service cannot be reached, the commands say so and change nothing. [Discord Setup](guides/discord-setup.md#connecting-to-archivist) explains the two settings that connect them.
 
@@ -147,6 +147,9 @@ When the Archivist module is on, the owner server also gets Archivist administra
 | `/archivist-admin whitelist list <archive> [page]` | None | Lists an archive's members |
 | `/archivist-admin export create <archive>` | None | Zips the whole archive folder (database, edit log, originals, previews, and media no longer used by any record) into `archivist-exports/` on the Archivist service's host. Replies with the zip's path there and updates when it is done. The zip stays until you delete it |
 | `/archivist-admin export list` | None | Lists recent exports, their paths and sizes, and whether each zip is still on the host |
+| `/archivist-admin server add <server>` | None | Turns `/archive` and `/a` on in a server, at once. Suggests the servers the bot is in, or takes an ID. The list lives in the bot's database |
+| `/archivist-admin server remove <server>` | None | Turns them off in a server, at once. Archives, whitelists, and website access are unchanged |
+| `/archivist-admin server list` | None | Lists the servers where they are on, and who added each one |
 | `/archivist-admin status` | None | Says whether the bot reaches Archivist at `ARCHIVIST_API_URL`, and whether you are one of its owners |
 
 Exports are written on the Archivist service's host, never sent through Discord. Its self-hosting guide explains how to copy one off.

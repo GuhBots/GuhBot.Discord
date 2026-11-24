@@ -24,7 +24,6 @@ import {
   SlashOption,
 } from "discordx";
 import { Category } from "@discordx/utilities";
-import { config } from "../config.js";
 import {
   actorOf,
   autocompleteArchive,
@@ -35,6 +34,7 @@ import {
 } from "../lib/archivist.js";
 import { archivePath, archivistApi } from "../lib/archivist-api.js";
 import { ArchivistError } from "../lib/archivist-errors.js";
+import { archivistServerIds, InArchivistServer } from "../lib/archivist-servers.js";
 import type { ArchiveSummary, DateOrder, Me } from "../lib/archivist-types.js";
 import {
   askDeleteEntity,
@@ -89,9 +89,9 @@ import { baseEmbed } from "../lib/embeds.js";
 
 /**
  * Contributor commands for the archives a member is whitelisted for, as
- * clients of the Archivist service. The module loads only when
- * ARCHIVIST_GUILD_IDS lists a server, and its commands register only there.
- * The service checks every contributor's access on each request.
+ * clients of the Archivist service. They register only in the servers
+ * Archivist's owners add with /archivist-admin server, and refuse to run
+ * anywhere else. The service checks every contributor's access on each request.
  */
 
 const ephemeral = { flags: MessageFlags.Ephemeral } as const;
@@ -261,7 +261,8 @@ function contributorCommands(
 ) {
   @Discord()
   @category
-  @Guild(...config.archivistGuildIds)
+  @Guild(archivistServerIds)
+  @Guard(InArchivistServer)
   @SlashGroup({ name: root, description })
   @SlashGroup({ name: "archive", description: "Archives you can use", root })
   @SlashGroup({
@@ -1022,7 +1023,8 @@ export const ArchivistShort = contributorCommands("a", "Short for /archive", noC
 /** Buttons, forms, and the logs-channel commands, registered once for both command names. */
 @Discord()
 @Category("Archivist")
-@Guild(...config.archivistGuildIds)
+@Guild(archivistServerIds)
+@Guard(InArchivistServer)
 export class ArchivistComponents {
   @ButtonComponent({ id: /^ax:eedit:/ })
   async entityEditOpen(interaction: ButtonInteraction): Promise<void> {

@@ -9,13 +9,22 @@ import {
   MessageFlags,
   type User,
 } from "discord.js";
-import { ButtonComponent, Discord, Guild, Slash, SlashGroup, SlashOption } from "discordx";
+import {
+  ButtonComponent,
+  type Client,
+  Discord,
+  Guild,
+  Slash,
+  SlashGroup,
+  SlashOption,
+} from "discordx";
 import { config } from "../config.js";
 import { actorOf, MAX_SUGGESTIONS, runArchivist, suggestArchives } from "../lib/archivist.js";
 import { archivePath, archivistApi } from "../lib/archivist-api.js";
 import { dayText } from "../lib/archivist-dates.js";
 import { ArchivistError } from "../lib/archivist-errors.js";
 import { recall, remember } from "../lib/archivist-pending.js";
+import { archivistServers } from "../lib/archivist-servers.js";
 import type {
   ArchiveDetails,
   ArchiveSummary,
@@ -24,14 +33,17 @@ import type {
   Member,
 } from "../lib/archivist-types.js";
 import { GUILD_ONLY } from "../lib/categories.js";
+import { syncGuildCommands } from "../lib/command-sync.js";
 import { baseEmbed } from "../lib/embeds.js";
 
 /**
  * Archivist administration: archives, whitelists, and exports, as a client of
- * the Archivist service. Registered only in OWNER_GUILD_ID, like the other
- * owner commands. The service decides who is an owner from its own
- * ARCHIVIST_OWNER_IDS, so these commands have no guard of their own: the
- * service refuses anyone else, and the reply says so.
+ * the Archivist service, and the servers where the contributor commands work.
+ * Registered only in OWNER_GUILD_ID, like the other owner commands. The
+ * service decides who is an owner from its own ARCHIVIST_OWNER_IDS, so these
+ * commands have no guard of their own: the service refuses anyone else, and
+ * the reply says so. The server commands change only the bot's database, so
+ * they ask the service first.
  */
 
 const MEMBERS_PER_PAGE = 40;
@@ -104,6 +116,71 @@ function exportLine(job: ExportJob): string {
   }
 }
 
+const SNOWFLAKE = /^\d{17,20}$/;
+
+/** Stops a server command unless the service counts the user as one of its owners. */
+async function requireOwner(userId: string): Promise<void> {
+  const me = await archivistApi().get<Me>(userId, "/api/me");
+  if (!me.isOwner) {
+    throw new ArchivistError(
+      "forbidden",
+      "Only Archivist's owners can choose its servers. Owners are set by ARCHIVIST_OWNER_IDS on the Archivist service.",
+    );
+  }
+}
+
+/** A server's name and ID, or only the ID when the bot is not in it. */
+function serverLabel(
+  client: { guilds: { cache: Map<string, { name: string }> } },
+  guildId: string,
+) {
+  const guild = client.guilds.cache.get(guildId);
+  return guild ? `${guild.name} (${guildId})` : `Unknown server (${guildId})`;
+}
+
+/** Suggests servers the bot is in that are not on the list yet. */
+async function suggestNewServers(interaction: AutocompleteInteraction): Promise<void> {
+  const typed = interaction.options.getFocused().toLowerCase();
+  const listed = new Set(archivistServers().ids());
+  const choices = [...interaction.client.guilds.cache.values()]
+    .filter((guild) => !listed.has(guild.id))
+    .filter((guild) => guild.name.toLowerCase().includes(typed) || guild.id.includes(typed))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .slice(0, MAX_SUGGESTIONS)
+    .map((guild) => ({ name: `${guild.name} (${guild.id})`.slice(0, 100), value: guild.id }));
+  await interaction.respond(choices);
+}
+
+/** Suggests servers on the list. */
+async function suggestListedServers(interaction: AutocompleteInteraction): Promise<void> {
+  const typed = interaction.options.getFocused().toLowerCase();
+  const choices = archivistServers()
+    .ids()
+    .map((guildId) => ({
+      name: serverLabel(interaction.client, guildId).slice(0, 100),
+      value: guildId,
+    }))
+    .filter((choice) => choice.name.toLowerCase().includes(typed))
+    .slice(0, MAX_SUGGESTIONS);
+  await interaction.respond(choices);
+}
+
+/**
+ * Registers or removes the contributor commands in a server right away. When
+ * the bot is not in the server, it does this when it joins.
+ */
+async function applyServerChange(client: Client, guildId: string): Promise<string> {
+  const guild = client.guilds.cache.get(guildId);
+  if (!guild) return "The bot is not in that server, so Discord will update it when the bot joins.";
+  try {
+    await syncGuildCommands(client, guild);
+    return "Discord shows the change there now.";
+  } catch (error) {
+    console.error(`Could not sync commands in ${guildId}:`, error);
+    return "Discord refused the command update there. Check that the bot was invited with the applications.commands scope, then restart the bot.";
+  }
+}
+
 /** Resolves an omitted version to the archive's current one. Only owners run these commands. */
 async function versionOrCurrent(userId: string, archiveId: string, version?: number) {
   return version ?? (await getArchive(userId, archiveId)).version;
@@ -134,6 +211,11 @@ async function waitForExport(userId: string, job: ExportJob, until: number): Pro
 @SlashGroup({
   name: "export",
   description: "Zip a whole archive on the Archivist service's host",
+  root: "archivist-admin",
+})
+@SlashGroup({
+  name: "server",
+  description: "Choose the servers where the Archivist commands work",
   root: "archivist-admin",
 })
 export class ArchivistAdmin {
@@ -498,6 +580,113 @@ export class ArchivistAdmin {
             .setDescription(
               exports.map(exportLine).join("\n") ||
                 "No exports yet. Make one with `/archivist-admin export create`.",
+            ),
+        ],
+      });
+    });
+  }
+
+  @Slash({ name: "add", description: "Turn the Archivist commands on in a server", ...GUILD_ONLY })
+  @SlashGroup("server", "archivist-admin")
+  async serverAdd(
+    @SlashOption({
+      name: "server",
+      description: "The server, or its ID",
+      type: ApplicationCommandOptionType.String,
+      required: true,
+      autocomplete: suggestNewServers,
+    })
+    guildId: string,
+    interaction: CommandInteraction,
+    client: Client,
+  ): Promise<void> {
+    await runArchivist(interaction, async () => {
+      await interaction.deferReply(ephemeral);
+      guildId = guildId.trim();
+      if (!SNOWFLAKE.test(guildId)) {
+        throw new ArchivistError(
+          "invalid_input",
+          "Choose a server from the list, or paste its ID.",
+        );
+      }
+      await requireOwner(interaction.user.id);
+      const added = archivistServers().add(guildId, interaction.user.id);
+      const label = serverLabel(client, guildId);
+      if (!added) {
+        await interaction.editReply({
+          content: `The Archivist commands were already on in ${label}.`,
+        });
+        return;
+      }
+      const result = await applyServerChange(client, guildId);
+      await interaction.editReply({
+        content: `The Archivist commands are now on in ${label}. ${result} Contributors there still need to be on an archive's whitelist.`,
+      });
+    });
+  }
+
+  @Slash({
+    name: "remove",
+    description: "Turn the Archivist commands off in a server",
+    ...GUILD_ONLY,
+  })
+  @SlashGroup("server", "archivist-admin")
+  async serverRemove(
+    @SlashOption({
+      name: "server",
+      description: "The server",
+      type: ApplicationCommandOptionType.String,
+      required: true,
+      autocomplete: suggestListedServers,
+    })
+    guildId: string,
+    interaction: CommandInteraction,
+    client: Client,
+  ): Promise<void> {
+    await runArchivist(interaction, async () => {
+      await interaction.deferReply(ephemeral);
+      guildId = guildId.trim();
+      await requireOwner(interaction.user.id);
+      const label = serverLabel(client, guildId);
+      if (!archivistServers().remove(guildId)) {
+        await interaction.editReply({ content: `The Archivist commands were not on in ${label}.` });
+        return;
+      }
+      const result = await applyServerChange(client, guildId);
+      await interaction.editReply({
+        content:
+          `The Archivist commands are now off in ${label}. ${result} ` +
+          "Archives, whitelists, and logs channels are unchanged, and members keep their website access.",
+      });
+    });
+  }
+
+  @Slash({
+    name: "list",
+    description: "List the servers where the Archivist commands work",
+    ...GUILD_ONLY,
+  })
+  @SlashGroup("server", "archivist-admin")
+  async serverList(interaction: CommandInteraction, client: Client): Promise<void> {
+    await runArchivist(interaction, async () => {
+      await interaction.deferReply(ephemeral);
+      await requireOwner(interaction.user.id);
+      const lines = archivistServers()
+        .list()
+        .map((server) => {
+          const added = `<t:${Math.floor(Date.parse(server.addedAt) / 1000)}:d>`;
+          const by = server.addedBy ? `by <@${server.addedBy}>` : "from ARCHIVIST_GUILD_IDS";
+          return `**${serverLabel(client, server.guildId)}**, added ${added} ${by}`;
+        });
+      await interaction.editReply({
+        allowedMentions: { parse: [] },
+        embeds: [
+          baseEmbed(interaction)
+            .setTitle("🗂️ Archivist servers")
+            .setDescription(
+              lines.length
+                ? lines.join("\n").slice(0, 4000)
+                : "None yet. Add one with `/archivist-admin server add`.",
             ),
         ],
       });

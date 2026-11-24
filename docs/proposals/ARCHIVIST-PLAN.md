@@ -64,7 +64,7 @@ The sibling `GuhBot.Archivist` repository on `feat/service` now holds the servic
 | `GuhBot.Discord/src/lib/` Archivist adapters | API transport, interaction identity, Discord presentation, channel validation, and announcement delivery |
 | Tests in each repository | Service behavior and authorization in Archivist, command translation and API-failure handling in Discord, and a joint cutover rehearsal |
 
-Contributor commands remain restricted to `ARCHIVIST_GUILD_IDS`. Owner commands remain restricted to `OWNER_GUILD_ID`. These restrictions control Discord command availability. They never replace the service's whitelist checks or automatically grant website access. Historical servers in an archive need not be guilds the bot currently belongs to. The confirmed access and command decisions are recorded under [Migration Decisions](#migration-decisions).
+Contributor commands remain restricted to the enabled Archivist servers, which service owners manage with `/archivist-admin server` and the bot stores in its own database. Owner commands remain restricted to `OWNER_GUILD_ID`. These restrictions control Discord command availability. They never replace the service's whitelist checks or automatically grant website access. Historical servers in an archive need not be guilds the bot currently belongs to. The confirmed access and command decisions are recorded under [Migration Decisions](#migration-decisions).
 
 These paths describe the target allocation. Component READMEs must distinguish imported code, verified behavior, and work that is still planned.
 
@@ -398,6 +398,7 @@ The owner confirmed these choices on 2026-11-24. They supersede the earlier in-b
 | Data ownership | `GuhBot.Archivist` is the single archive writer and stores the existing portable schema. The bot holds no archive data or fallback copy |
 | Contribution interface | The web interface is primary. Existing Discord contribution operations remain available through the API |
 | Integration credential | Use a separately generated bot service credential in server-side environment configuration, with an authenticated acting Discord user for contributor requests |
+| Command servers | The servers with contributor commands live in the bot's `guhbot.db`, not in a setting. Service owners add, remove, and list them with `/archivist-admin server`, and each change updates that server's commands without a restart. `ARCHIVIST_GUILD_IDS` only seeds the list once. Per-archive member whitelists stay in the service, because the website checks them at sign-in without the bot |
 
 No product decision remains open from the three questions asked in this planning pass. Implementation must still reconcile and test the target repository's unfinished work against this contract. The standalone local viewer remains outside this request. Work observed in the sibling repository does not by itself add it to the accepted scope.
 
@@ -991,6 +992,7 @@ Owner commands retain `/archivist-admin` in `OWNER_GUILD_ID`, but Archivist admi
 | `/archivist-admin whitelist remove` | Archive and Discord user. Remove idempotently, effective on next request |
 | `/archivist-admin whitelist list` | Archive. List every entry with pagination and an empty state |
 | `/archivist-admin export create`, `list` | Archive for create. Take a consistent snapshot, write the zip on the host, and report its path, size, or failure. List recent exports with their state and whether the zip is still on disk |
+| `/archivist-admin server add`, `remove`, `list` | A server, chosen from the bot's servers or by ID, for add and remove. Check service ownership through the API, then change the bot's server list idempotently and resync that server's commands at once. A server the bot is not in gets its commands when the bot joins. List shows each server and who added it. Removal leaves archives, whitelists, logs channels, and website access unchanged |
 | `/archivist-admin status` | Reports whether the bot reaches the service and whether the caller is a service owner. It controls nothing. `web start` and `stop` are retired |
 | `/archive archive list` | List only accessible archives, or all for the owner |
 | `/archive artifact add` | Archive, description, and exactly one attachment or Drive file link. Optional dates and links to existing records. Return saved record or duplicate review |
@@ -1077,7 +1079,8 @@ The table below allocates settings after the split. Existing settings currently 
 | Setting | Owner | Target Purpose |
 | --- | --- | --- |
 | `DATA_DIR` | Each service, separately | Archivist stores `operational.db`, archive folders, staging, and exports. Discord stores its unrelated bot state. Never share one writable volume |
-| `ARCHIVIST_GUILD_IDS`, `OWNER_GUILD_ID` | Discord | Existing command availability boundaries |
+| `OWNER_GUILD_ID` | Discord | The server with owner commands, including `/archivist-admin` |
+| `ARCHIVIST_GUILD_IDS` | Discord | Optional servers copied once into the bot's server list when it is created. `/archivist-admin server` manages the list afterward |
 | `DISCORD_TOKEN` | Discord | Gateway and message delivery. Never needed for browser sign-in or sent to Archivist |
 | `ARCHIVIST_HOST`, `ARCHIVIST_PORT` | Archivist | Listener bind address and port, default `127.0.0.1` and `3000`. Containers explicitly bind `0.0.0.0` behind the configured exposure |
 | `ARCHIVIST_BASE_URL` | Archivist | Browser address, including an optional path prefix and exact Discord callback base. Default `http://localhost:3000` for development |
@@ -1227,4 +1230,4 @@ The earlier `Q01` through `Q19` topic discussion is resolved into the contract s
 * Supply representative public image, video, and audio files for the remaining Drive rehearsal, and optionally a Drive API key.
 * Verify the service container, clean restore, capacity target, and joint bot deployment. Run the relevant Compose rehearsal with the explicitly configured test bot when those implementation changes are ready.
 
-**Current state (2026-11-24):** `S1` to `S3` are implemented with automated evidence. The service runs on its own with admission, owner IDs, the bot credential, the announcement queue, and its container, and the bot's Archivist commands call it, with `/archive` and `/a` in place of `/archivist`. The in-bot website and archive code are removed. Not yet done: the live joint rehearsal with the owner's Discord account and browser, the `S4` data-transfer rehearsal on copies of the owner's data, the `S5` cutover with transfer of this plan to the service repository, and `S6`. No real data was changed.
+**Current state (2026-11-24):** `S1` to `S3` are implemented with automated evidence. The service runs on its own with admission, owner IDs, the bot credential, the announcement queue, and its container, and the bot's Archivist commands call it, with `/archive` and `/a` in place of `/archivist`. The in-bot website and archive code are removed. The service is merged into `GuhBot.Archivist`'s `main`. The owner ran the two services as separate containers and confirmed that they work together. The `S4` import was rehearsed on copies of the owner's data. The servers with contributor commands now live in the bot's database and are managed with `/archivist-admin server`. Not yet done: the `S5` cutover with transfer of this plan to the service repository, and `S6`. No real data was changed.

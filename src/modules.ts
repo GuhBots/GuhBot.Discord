@@ -1,5 +1,6 @@
 import { GatewayIntentBits } from "discord.js";
 import { config } from "./config.js";
+import { archivistServerIds } from "./lib/archivist-servers.js";
 
 /**
  * A group of commands and listeners that can be turned on or off as a unit.
@@ -16,11 +17,17 @@ export interface BotModule {
   /** Loads even when MODULES leaves it out, because the bot needs it. */
   alwaysOn?: boolean;
   /**
-   * Limits the module to some servers. Its commands must register only in
-   * `ids` with `@Guild`, and /help shows it only there. The module is off
-   * when `ids` is empty, and `setting` names the setting that fills it.
+   * Limits the module to the servers `ids` returns, which can change while the
+   * bot runs. Its command classes must use `@Guild` with the same function, so
+   * its commands register only there, and /help shows it only there.
    */
-  servers?: { ids: readonly string[]; setting: string };
+  servers?: { ids(): readonly string[] };
+  /**
+   * Settings the module cannot run without. When MODULES is unset, a module
+   * missing them stays off. When MODULES names it, its `load` stops the start
+   * with a message naming them.
+   */
+  settings?: { names: readonly string[]; present: boolean };
   /** Imports the module's files, which registers their commands and listeners with discordx. */
   load(): Promise<void>;
 }
@@ -65,12 +72,17 @@ export const ALL_MODULES: readonly BotModule[] = [
   {
     name: "Archivist",
     description: "Archiving tools for this server",
-    servers: { ids: config.archivistGuildIds, setting: "ARCHIVIST_GUILD_IDS" },
+    servers: { ids: () => archivistServerIds() },
+    settings: {
+      names: ["ARCHIVIST_API_URL", "ARCHIVIST_SERVICE_TOKEN"],
+      present: Boolean(config.archivistApi.url && config.archivistApi.token),
+    },
     load: async () => {
       // The commands call the separate Archivist service, so its address and
       // token must be set. This stops the start with a message naming them.
       const { archivistApi } = await import("./lib/archivist-api.js");
       archivistApi();
+      reportArchivistServers();
       await import("./commands/archivist.js");
       // Posts the upload announcements Archivist queues, such as for website uploads.
       await import("./events/archivist-announcements.js");
@@ -111,19 +123,35 @@ function isRequested(module: BotModule): boolean {
   return module.alwaysOn || !config.modules || config.modules.includes(moduleKey(module));
 }
 
-/** Requested modules limited to servers, but with no servers set. They stay off. */
-export const MODULES_WITHOUT_SERVERS: readonly BotModule[] = ALL_MODULES.filter(
-  (module) => isRequested(module) && module.servers?.ids.length === 0,
-);
+/**
+ * Modules on by default because MODULES is unset, but missing their settings.
+ * They stay off, so a bot without them still starts.
+ */
+export const MODULES_WITHOUT_SETTINGS: readonly BotModule[] = config.modules
+  ? []
+  : ALL_MODULES.filter((module) => module.settings && !module.settings.present);
 
 /** The modules this run of the bot loads. */
 export const ENABLED_MODULES: readonly BotModule[] = ALL_MODULES.filter(
-  (module) => isRequested(module) && !MODULES_WITHOUT_SERVERS.includes(module),
+  (module) => isRequested(module) && !MODULES_WITHOUT_SETTINGS.includes(module),
 );
 
 /** Whether a loaded module works in a server. */
 export function isAvailableIn(module: BotModule, guildId: string | null): boolean {
-  return !module.servers || (guildId !== null && module.servers.ids.includes(guildId));
+  return !module.servers || (guildId !== null && module.servers.ids().includes(guildId));
+}
+
+/** Logs where the Archivist commands work, and how to change it. */
+function reportArchivistServers(): void {
+  const count = archivistServerIds().length;
+  const manage = config.ownerGuildId
+    ? "Add servers with /archivist-admin server add."
+    : "Set OWNER_GUILD_ID to manage them with /archivist-admin server.";
+  console.log(
+    count
+      ? `Archivist: commands are on in ${count} server(s).`
+      : `Archivist: commands are on in no servers yet. ${manage}`,
+  );
 }
 
 /** The gateway intents the enabled modules need. */
@@ -141,7 +169,9 @@ export async function loadModules(): Promise<void> {
     await module.load();
   }
   console.log(`Modules: ${ENABLED_MODULES.map((module) => module.name).join(", ")}`);
-  for (const module of MODULES_WITHOUT_SERVERS) {
-    console.log(`Modules: ${module.name} is off until ${module.servers!.setting} lists a server`);
+  for (const module of MODULES_WITHOUT_SETTINGS) {
+    console.log(
+      `Modules: ${module.name} is off until ${module.settings!.names.join(" and ")} are set`,
+    );
   }
 }

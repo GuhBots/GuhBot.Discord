@@ -38,7 +38,7 @@ The `applications.commands` scope lets the bot register slash commands. A server
 | `DEV_GUILD_ID` | Your test server's ID | Empty |
 | `OWNER_GUILD_ID` | Your test server's ID, to try owner commands | The server where you run owner commands |
 | `MODULES` | Empty, or only the modules you are testing | Empty for every module, or the modules to turn on |
-| `ARCHIVIST_GUILD_IDS` | Your test server's ID, to try the Archivist module | The servers that use the Archivist module |
+| `ARCHIVIST_GUILD_IDS` | Empty. Add servers with `/archivist-admin server add` | Empty, or the servers to copy into the bot's database the first time. See [Connecting to Archivist](#connecting-to-archivist) |
 | `ARCHIVIST_API_URL`, `ARCHIVIST_SERVICE_TOKEN` | Your local Archivist service, such as `http://127.0.0.1:3000`, and its token | The production Archivist service and its token. See [Connecting to Archivist](#connecting-to-archivist) |
 | `STATUS_CHANNEL_ID` | Empty, or a test channel | The channel for startup and shutdown messages |
 | `SUPPORT_URL`, `WEBSITE_URL`, `TOPGG_URL`, `DISCORDBOTLIST_URL` | Optional | The links to show. Leave one empty to hide it |
@@ -52,6 +52,11 @@ The Archivist module's commands call the separate Archivist service, GuhBot.Arch
 3. Put the same value in this bot's `.env` as `ARCHIVIST_SERVICE_TOKEN`.
 4. Set `ARCHIVIST_API_URL` to Archivist's address as the bot reaches it, including any path, such as `https://guhbot.example.com/archivist`, or `http://127.0.0.1:3000` when both run on one machine.
 5. Restart the bot and run `/archivist-admin status` in the owner server. It says whether the bot reached Archivist and whether you are one of its owners.
+6. Run `/archivist-admin server add` in the owner server for each server where contributors should have `/archive` and `/a`. The commands appear there at once.
+
+The server list lives in the bot's database, `guhbot.db` in `DATA_DIR`, so it survives restarts and needs no setting. Only Archivist's owners can change it, with `/archivist-admin server add`, `remove`, and `list`. It decides only where Discord offers the commands. A contributor also needs to be on an archive's whitelist, which `/archivist-admin whitelist add` manages and the Archivist service stores, because the website checks it at sign-in even when the bot is offline. When the bot first creates the list, it copies any servers in `ARCHIVIST_GUILD_IDS`, and ignores that setting afterward.
+
+To turn every Archivist command off, including `/archivist-admin` and upload announcements, remove `archivist` from `MODULES` and restart the bot. Without `ARCHIVIST_API_URL` and `ARCHIVIST_SERVICE_TOKEN`, the module also stays off when `MODULES` is empty.
 
 To run the bot and Archivist as two containers on one computer, set `ARCHIVIST_API_URL=http://archivist:3000`, create the shared network once with `docker network create guhbot`, and add `COMPOSE_FILE=compose.yaml:compose.override.yaml:compose.local.yaml` to both repositories' `.env`. [`compose.local.yaml`](../../compose.local.yaml) joins the bot to that network. Start Archivist first.
 
@@ -66,7 +71,7 @@ The code is the only source of the application's commands. Each time the bot log
 * **With `DEV_GUILD_ID`:** Commands are registered in that server only and update at once. No commands are registered globally. Use this while developing.
 * **Without it:** Commands are registered globally, in every server. Discord can take up to an hour to show changes everywhere.
 * **Owner commands:** These are registered only in `OWNER_GUILD_ID`, in either mode.
-* **Modules limited to some servers:** Their commands are registered only in the servers their setting lists, such as `ARCHIVIST_GUILD_IDS`, in either mode.
+* **Modules limited to some servers:** Their commands are registered only in their servers, in either mode. Archivist's are the servers added with `/archivist-admin server add`, and adding or removing one updates its commands at once.
 * **Modules that are off:** Their commands are not registered, so turning a module off and restarting the bot removes its commands.
 
 The sync keeps the application's Activity entry point command, named `launch`, because Discord does not let a bot remove it this way. Servers that invited the bot without the `applications.commands` scope cannot hold server commands, so the bot skips them and reports how many there are.

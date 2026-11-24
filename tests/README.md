@@ -6,7 +6,7 @@ Automated tests, run with the Node.js built-in test runner. `tsconfig.test.json`
 
 | Path | Contents |
 | --- | --- |
-| `archivist/discord/` | The Archivist commands' client: the API transport, uploads, announcement posting and polling, formatting, and pending forms, with Discord and the Archivist service replaced by stand-ins |
+| `archivist/discord/` | The Archivist commands' client: the API transport, uploads, announcement posting and polling, formatting, pending forms, and the server list with its guard and command registration, with Discord and the Archivist service replaced by stand-ins |
 
 ## Running Tests
 
