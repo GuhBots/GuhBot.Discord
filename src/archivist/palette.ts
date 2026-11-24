@@ -2,20 +2,18 @@ import type Database from "better-sqlite3";
 
 /**
  * Colors assigned to new servers, channels, and events. Each reads clearly on
- * the dark main surface (#313338). Contributors can change a record's color
- * afterward.
+ * the dark main surface (#313338). Greens are left out because artifact dots
+ * are green, and yellow because server-change arrows are (owner, 2026-11-23).
+ * Contributors can change a record's color afterward.
  */
 export const PALETTE = [
   "#5865f2",
-  "#57f287",
-  "#fee75c",
   "#eb459e",
   "#00a8fc",
   "#f0b232",
   "#a970ff",
   "#2dc7c4",
   "#ff7a45",
-  "#9bd35a",
   "#c9cdfb",
   "#e67e22",
 ] as const;
