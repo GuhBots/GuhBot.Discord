@@ -22,7 +22,7 @@ The canonical specification is `docs/proposals/ARCHIVIST-PLAN.md`. Do not use co
 
 When the owner requests implementation, that request authorizes the normal development work described here. The plan's preparation-stage wording does not require another confirmation for every milestone. A request to edit instructions or refine the plan alone does not start the application build.
 
-Follow the plan through milestones `M0` to `M5`. The standalone viewer in `M6` remains outside this build. Discord is the primary contribution interface, and equivalent web operations must use the same application rules. Preserve the archive portability, permission boundaries, media preservation, date rules, and deletion behavior specified by the plan.
+Follow the updated plan through service migration stages `S0` to `S6` and application milestones `M0` to `M5`. The standalone viewer in `M6` remains outside this request. The web interface is primary. `GuhBot.Archivist` owns the website, API, databases, media, and rules. `GuhBot.Discord` retains `/archive`, `/a`, and logs-channel commands as authenticated API clients. Preserve per-archive Discord whitelists, mandatory Discord browser sign-in, explicit service owner IDs, archive portability, media preservation, date rules, and deletion behavior.
 
 Resolve ordinary implementation choices using the plan, repository conventions, existing code, and verified upstream documentation. Record material technical decisions and their reasons. Ask a focused clarification only when missing or conflicting information changes product behavior, data meaning, permissions, or scope and cannot be resolved from those sources. Explain the affected behavior and propose a concrete choice. Continue independent work while awaiting the answer.
 
@@ -30,7 +30,7 @@ Do not reopen settled product decisions merely because a different implementatio
 
 ## Branch And Commits
 
-Work exclusively on `feat/archivist`, the existing Archivist branch. This is the branch-specific exception to starting a new branch for each piece of work in Contributing. Do not create another implementation branch or change the default branch. If a session starts on another branch, inspect its changes and switch only when doing so preserves all work. Ask for help if switching would overwrite or misattribute changes.
+In `GuhBot.Discord`, work exclusively on `feat/archivist`, the existing Archivist branch. This is the branch-specific exception to starting a new branch for each piece of work in Contributing. Read the sibling service repository's own instructions before changing it. Inspect and preserve its uncommitted migration work rather than overwriting it with the older bot copy. Keep the plan canonical here until its deliberate transfer and link replacement. Do not create another implementation branch or change the default branch. If a session starts on another branch, inspect its changes and switch only when doing so preserves all work. Ask for help if switching would overwrite or misattribute changes.
 
 Local commits on `feat/archivist` are authorized. Commit coherent, verified increments with succinct messages describing the resulting change. Inspect the staged diff and stage explicit paths or hunks. Preserve unrelated and pre-existing work. The canonical plan and related documentation may be committed as part of the Archivist work, superseding the plan's earlier temporary instruction to keep it untracked.
 
@@ -40,7 +40,7 @@ Do not force push, rewrite shared history, discard work, merge into the default 
 
 1. Reconcile the roadmap with the current source, Git history, and verification evidence. Resume the first incomplete dependency rather than starting again.
 2. Choose a manageable increment that advances a plan milestone. Identify the required behavior, affected existing behavior, and acceptance evidence before editing.
-3. Implement the complete behavior through shared application operations and the necessary adapters. Avoid placeholder success responses, disconnected interface controls, and duplicate business rules.
+3. Implement behavior in service-owned application operations and the necessary API adapters. Do not continue extending the bot's local archive implementation as the target architecture. Avoid placeholder success responses, disconnected interface controls, and duplicate business rules.
 4. Add meaningful test coverage where the change needs it. Run the relevant checks and inspect the result. Fix failures caused by the change before expanding the scope.
 5. Review the diff for regressions, unwanted files, secrets, incomplete behavior, and documentation accuracy. Commit a coherent increment when appropriate.
 6. Update the roadmap with the actual result, verification evidence, and next action. Continue with the next increment without asking whether to proceed.

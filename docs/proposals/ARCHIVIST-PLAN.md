@@ -1,14 +1,16 @@
 # Archivist Plan
 
-**Status:** Approved. Implementation is pending. This is the canonical plan for the complete Archivist build.
+**Status:** The standalone service direction is approved by the owner. Migration is in progress. This is the canonical product and migration plan. The implementation status below separates existing features from planned work.
+
+**Updated:** 2026-11-24. The owner's service-split request supersedes the earlier decision to finish the app inside the bot before moving it. The browser is now the primary contribution interface. The current archive schema and its data remain valid.
 
 ## Purpose And Scope
 
-Preserve the history of a Discord community using original media, historical identities, and events in independent, portable archives. Build the complete hosted Archivist inside this repository, with Discord as the primary contribution interface and equivalent contributor operations in the web app. Include the horizontal timeline, album, object browser, character graph, research board, and heatmap.
+Preserve the history of a Discord community using original media, historical identities, and events in independent, portable archives. Build Archivist as a standalone website and API service in `GuhBot.Archivist`. The service owns the archive databases, original media, and application rules. The web interface is the primary place to contribute and research. `GuhBot.Discord` retains guild-restricted commands and announcement delivery as an authenticated API client. Include the horizontal timeline, album, object browser, character graph, research board, and heatmap.
 
 The separate standalone viewer is outside this build. Its future reader must be able to interpret an exported archive without GuhBot, its operational database, credentials, or the original media host.
 
-Keep this file at `docs/proposals/ARCHIVIST-PLAN.md` and do not create a competing plan. [Claude Working Instructions](../../CLAUDE.md) describe the development workflow for this build.
+Keep this file at `GuhBot.Discord/docs/proposals/ARCHIVIST-PLAN.md` while migration is being coordinated. Do not maintain a competing copy in the service repository. Transfer the canonical document and its supporting assets to `GuhBot.Archivist` as a deliberate migration step, then replace this copy with a link and Discord integration guidance. [Claude Working Instructions](../../CLAUDE.md) describe the development workflow in this repository.
 
 ### Contract And Agent Rules
 
@@ -16,7 +18,7 @@ Keep this file at `docs/proposals/ARCHIVIST-PLAN.md` and do not create a competi
 * Accepted product rules are requirements. The field, interface, and operational details below make them concrete for final review. Do not silently change them during implementation.
 * Complete implementation milestones autonomously once the complete build is authorized. Milestones are internal steps, not permission gates for each ordinary edit.
 * Report a genuine incompatibility or external blocker with the affected requirement and a concrete alternative. Do not reopen a settled preference because another implementation is easier.
-* Keep archive behavior behind shared application operations. Discord and web adapters must enforce the same validation, authorization, dates, duplicate review, logging, and deletion rules.
+* Keep archive behavior behind application operations owned by the service. Browser requests and authenticated bot requests use the same validation, authorization, dates, duplicate review, logging, and deletion rules. The bot must not retain a second implementation or open archive databases after cutover.
 * Keep unrelated bot behavior and AFK data intact. Use a feature branch and the repository's normal review workflow.
 * Mark milestones complete only after their acceptance checks pass. Report checks that could not run and why.
 
@@ -24,43 +26,47 @@ Keep this file at `docs/proposals/ARCHIVIST-PLAN.md` and do not create a competi
 
 | ID | Accepted Requirement |
 | --- | --- |
-| `R01` | One original file per artifact, required description, optional character and date overrides, and source-based duplicate reuse with reviewed changes |
+| `R01` | One original file per artifact, required description, optional character and date overrides, and source-based duplicate reuse with reviewed changes, primarily through the web interface |
 | `R02` | Characters separate from accounts, independent identities inside each archive, and artifacts linked to multiple characters and events |
 | `R03` | Exact occurrence, estimated occurrence, then embedded original file metadata as date precedence |
-| `R04` | Owner-created named archives with explicit archive selection, a remembered last selection in Discord, and independent local folders |
-| `R05` | Optional web listener started and stopped only by the bot owner |
-| `R06` | Discord sign-in and per-archive whitelist access, with automatic owner access |
+| `R04` | Owner-created named archives hosted by the service, explicit archive selection, a remembered last selection in Discord, and independent portable folders |
+| `R05` | Independently deployed website and API service whose lifecycle does not depend on the Discord bot |
+| `R06` | Mandatory Discord sign-in for browser access and service-enforced Discord account whitelists, with explicit service owner access |
 | `R07` | Events require title, description, and date information, but may lack evidence |
 | `R08` | Complete-folder zip export including media, previews, retained files, and edit logs |
-| `R09` | All five hosted research and browsing views |
+| `R09` | All six hosted research and browsing views |
 | `R10` | Discord-inspired flat dark design, a Nerd Font, no gradients, and no shadows |
 | `R11` | Automated Archivist checks in CI and representative manual integration checks |
-| `R12` | Owner-only whitelist management in `guhbot.db` and access removal on the next request |
+| `R12` | Owner-only whitelist management in the service operational database and access removal on the next request through either client |
 | `R13` | Public Google Drive original-file links from contributors' own folders, without folder registration or Google user login |
 | `R14` | Permanent record deletion, reference blockers, retained media, no trash, and no deletion log |
 | `R15` | Lightweight per-archive edit logs with before and after values, removing a deleted record's own entries |
-| `R16` | Every contributor operation on the web, with uploads and quick edits also in Discord. Detailed history editing and character merge are web-only |
-| `R17` | Personal timezone and date-order preferences in `guhbot.db`, without shifting date-only values or rewriting history |
+| `R16` | Every contributor operation on the web, with retained Discord operations implemented as authenticated API wrappers. Detailed history editing and character merge are web-only |
+| `R17` | Personal timezone and date-order preferences in the service operational database, shared by browser and bot, without shifting date-only values or rewriting history |
 | `R18` | Missing-media requests require temporal information, a character, and a description, with no assignees |
-| `R19` | Contributor-configured per-archive upload announcements that remain unchanged after edits or deletion |
+| `R19` | Contributor-configured per-archive upload announcements, queued by the service and delivered by the bot, that remain unchanged after publication |
 
-## Existing Repository And Build Structure
+## Existing Implementation And Target Repositories
 
-[Archivist](../../src/commands/archivist.ts) currently replies with `WIP`. [Module loading](../../src/modules.ts) already restricts its commands to `ARCHIVIST_GUILD_IDS`. [The SQLite helper](../../src/lib/database.ts) currently stores AFK state. There is no Archivist application, schema, migration system, or automated application test suite yet.
+The current bot implementation at `1f83f66` has archive storage and migrations, core research operations, Discord commands, sign-in and JSON routes, and a working portion of the React website. It is no longer a placeholder. The owner has confirmed that sign-in and the current website work well.
 
-Preserve these boundaries. Contributor commands register only in the existing enabled Archivist guilds. Owner administration registers only in `OWNER_GUILD_ID`, with the existing application-owner guard. Application team members count as owners under that existing rule. Historical servers in an archive need not be guilds the bot currently belongs to.
+The website already has its shell, timeline, album, artifact and event forms, calendar, Places, and Heatmap. Graph, Board, and the character page remain incomplete. The existing schema is not being redesigned as part of this split.
 
-| Planned Location | Responsibility |
+A sibling `GuhBot.Archivist` repository exists on `feat/service`. Commit `317ffe2` imported the core and website routes from the bot's earlier `d4b46a8` checkpoint into `apps/server`. Uncommitted work there includes a service entry point, service authentication, owner administration routes, an announcement queue, and an operational-state importer. These files are work in progress, not verified evidence that migration is complete. Reconcile them with later bot-side changes through `1f83f66`, including the frontend and entity picture uploads, before applying patches.
+
+| Repository And Area | Target Responsibility |
 | --- | --- |
-| `src/commands/archivist.ts` | Contributor Discord interactions, including the two standalone channel commands |
-| `src/commands/archivist-admin.ts` | Owner-only archive, whitelist, and web lifecycle administration, guarded like the commands in `src/commands/owner.ts` and loaded only with the Archivist module |
-| `src/archivist/` | Shared operations, stores, validation, dates, media intake, exports, and optional web server |
-| `src/archivist/migrations/` | Ordered archive migrations and operational additions to the bot database |
-| `web/` | React, Vite, and Tailwind frontend, built into `build/web/` |
-| `tests/archivist/` | Core, adapter, route, browser, and fixture coverage |
-| `assets/fonts/` | Bundled font files and their license notices |
+| `GuhBot.Archivist/apps/server` | Archive rules, database access, media staging and preservation, migrations, exports, Discord sign-in, browser routes, and authenticated bot routes |
+| `GuhBot.Archivist/apps/web` | The existing React, Vite, and Tailwind website, moved with its approved behavior and styling |
+| `GuhBot.Archivist` service configuration and deployment | The service process, its own persistent data volume, OAuth credentials, service owner IDs, and bot credential |
+| `GuhBot.Discord/src/commands/archivist.ts` | Retained contributor interactions and the standalone logs-channel commands, translating Discord inputs and API results |
+| `GuhBot.Discord/src/commands/archivist-admin.ts` | Owner administration through the service API, without process control over the website |
+| `GuhBot.Discord/src/lib/` Archivist adapters | API transport, interaction identity, Discord presentation, channel validation, and announcement delivery |
+| Tests in each repository | Service behavior and authorization in Archivist, command translation and API-failure handling in Discord, and a joint cutover rehearsal |
 
-These are planned directories. Add their required READMEs and parent navigation when implementing them. Do not describe them elsewhere as existing tooling before they exist.
+Contributor commands remain restricted to `ARCHIVIST_GUILD_IDS`. Owner commands remain restricted to `OWNER_GUILD_ID`. These restrictions control Discord command availability. They never replace the service's whitelist checks or automatically grant website access. Historical servers in an archive need not be guilds the bot currently belongs to. The confirmed access and command decisions are recorded under [Migration Decisions](#migration-decisions).
+
+These paths describe the target allocation. Component READMEs must distinguish imported code, verified behavior, and work that is still planned.
 
 ## Storage, Identity, And Permissions
 
@@ -68,7 +74,7 @@ These are planned directories. Add their required READMEs and parent navigation 
 
 ```text
 <DATA_DIR>/
-  guhbot.db
+  operational.db
   archives/
     <archive-id>/
       archive.db
@@ -82,13 +88,13 @@ These are planned directories. Add their required READMEs and parent navigation 
 
 Use generated stable archive IDs as directory names. Archive display names contain 1 to 100 non-blank characters and are unique ignoring case within the installation. Uniqueness uses a stored key that folds Unicode case and compatibility forms, because SQLite's `NOCASE` folds only ASCII. Registering an archive whose name is already taken is rejected, and the owner supplies a new display name. Renaming never moves a folder. All stored media paths are relative to that archive folder. Reject paths that escape it. No archive depends on another archive's records or media.
 
-The portable folder contains historical data and its schema version, original and derived media, and the edit log. Operational registry, whitelists, sessions, personal timezone preferences, remembered archive selections, API keys, pending interactions, delivery tracking, and temporary jobs stay outside it. The operational database extends the current `guhbot.db` without changing AFK records.
+The portable folder contains historical data and its schema version, original and derived media, and the edit log. Operational registry, whitelists, sessions, personal timezone preferences, remembered archive selections, service credentials, pending interactions, delivery tracking, and temporary jobs stay outside it. After cutover, `operational.db` belongs exclusively to the Archivist service. The bot keeps its unrelated state, including AFK data, in its own `guhbot.db` and never mounts the service data volume. Existing archive folders retain their IDs, relative media paths, and schema version. [Migration Sequence](#migration-sequence) covers copying the existing operational rows.
 
 Owner registration of an existing archive checks its ID, schema version, file paths, and media references. It does not import an old whitelist. Unregistration removes its operational access and lookup configuration but preserves the folder. Do not add a recursive whole-folder erase command. Independent archive copies may diverge. Cross-copy synchronization and archive merging are excluded.
 
 ### Permission Matrix
 
-An archive member means a Discord user currently whitelisted for that archive. Bot owners do not need whitelist entries.
+An archive member means a Discord user currently whitelisted for that archive. Service owners have explicit administrative access. A valid bot credential identifies a trusted integration, not an archive member. Actor operations still require the Discord user who invoked the command and the service's current authorization checks. Service owners are Discord user IDs configured in `ARCHIVIST_OWNER_IDS`, independent of the bot application owner or team. Browser admission requires a service owner or membership of at least one archive. Do not add a separate website-wide allowlist.
 
 | Operation | Owner | Archive Member | Other User |
 | --- | --- | --- | --- |
@@ -100,11 +106,13 @@ An archive member means a Discord user currently whitelisted for that archive. B
 | Set personal timezone | Yes | Yes, for self | No |
 | Create, rename, register, unregister, and change archive display settings | Yes | No | No |
 | Add, remove, or list whitelist members | Yes | No | No |
-| Start or stop the optional web app | Yes | No | No |
+| Deploy, start, or stop the service using host administration | Host operator | No | No |
 
-Store unique membership pairs `(archive_id, discord_user_id)`. Check current owner or membership authorization on every archive request, including media download requests. Discord sign-in alone grants no archive access. Removal takes effect on the next request, including an existing session. An already-running download may finish. Membership in another archive is irrelevant. Refresh owner status at login and at most every five minutes during active requests.
+Store unique membership pairs `(archive_id, discord_user_id)`. Check current owner or membership authorization on every archive request, including media download requests. Discord sign-in alone grants no archive access. Removal takes effect on the next request, including an existing session. An already-running download may finish. Membership in another archive is irrelevant. Derive owner status on the service. Never accept a bot-supplied `isOwner` flag. Owner configuration changes take effect when the service reloads or restarts and are applied to existing sessions as well as new ones. Require at least one configured service owner for a hosted deployment so a fresh installation can create archives and whitelist accounts. Listing an ID as an owner still requires that user to sign in with Discord in the browser.
 
-Use seven-day absolute server-side sessions in bot operational storage and provide logout. Discord sign-in requests only the identity access needed for authentication. Use an unpredictable session cookie, same-origin mutation checks, a protected sign-in state value, and session invalidation on logout. Revoke Discord's access token as soon as the identity is read, so Archivist keeps no Discord credentials for anyone. Store only a hash of each session token. Production cookies require HTTPS. Localhost testing supports the configured local callback without pretending it is a public deployment.
+Use seven-day absolute server-side sessions in service operational storage and provide logout. Browser identity comes only from Discord sign-in. Creating or whitelisting an account does not add a password or bypass that sign-in. Admission requires a service owner or a current per-archive whitelist entry before an application session is issued. An unlisted Discord account receives an access-denied screen without an application session, archive names, or media. Losing all access must deny the next application request and clear or invalidate the session, while an already-running media transfer may finish. Discord sign-in requests only the identity access needed for authentication through the `identify` scope. Use an unpredictable session cookie, same-origin mutation checks, a protected sign-in state value, and session invalidation on logout. Revoke Discord's access token as soon as the identity is read, so Archivist keeps no Discord credentials for anyone. Store only a hash of each session token. Production cookies require HTTPS. Localhost testing supports the configured local callback without pretending it is a public deployment.
+
+The public sign-in shell, its static assets, and the OAuth handshake may load before admission. Application data and media remain protected. A contributor's application identity is their Discord user ID. It is distinct from the historical character and Discord-account records inside archives. Whitelisting an ID never creates a historical character automatically.
 
 ## Media Intake And Duplicate Review
 
@@ -128,7 +136,7 @@ Attempt public access only. Preserve the resource key and supply it where requir
 
 Save original source link, provider, and stable file ID. Do not trust arbitrary redirects or contributor-supplied download hosts. Read accepted embedded capture and creation tags from the downloaded file. Drive `createdTime`, upload time, modified time, and download response dates never supply the default artifact date. The [Drive metadata reference](https://developers.google.com/workspace/drive/api/reference/rest/v3/files) distinguishes file dates and image metadata. It cannot recreate metadata removed before upload.
 
-A live rehearsal with known files, with and without an API key, remains an external verification prerequisite, not an unanswered product choice. Test image and video originals from two unrelated public folders, including resource-key links, while the web listener is stopped. Verify downloaded bytes and embedded metadata against the supplied originals.
+A live rehearsal with known files, with and without an API key, remains an external verification prerequisite, not an unanswered product choice. Test image and video originals from two unrelated public folders, including resource-key links, without the Discord bot running. Verify downloaded bytes and embedded metadata against the supplied originals.
 
 ### Source Identity And Review
 
@@ -165,9 +173,9 @@ Linking an artifact never silently supplies or changes an event date. An event w
 
 ### Personal And Archive Timezones
 
-The owner sets the archive timezone, initially `America/Toronto`. Contributors set their own named timezone in `guhbot.db`. A manual date and time without an explicit zone uses the contributor preference, falling back to the archive zone, and shows its interpretation before save. An explicit zone or offset wins. Normalize instants for storage while preserving original input and interpretation zone.
+The owner sets the archive timezone, initially `America/Toronto`. Contributors set their own named timezone in service operational storage. A manual date and time without an explicit zone uses the contributor preference, falling back to the archive zone, and shows its interpretation before save. An explicit zone or offset wins. Normalize instants for storage while preserving original input and interpretation zone.
 
-Contributors may type dates in common forms: year-month-day numbers, a month name in any position (`Jul 15 2019`, `15 July 2019`, `july, 2019, 15`), or eight digits, with an optional 24-hour or 12-hour time and an optional zone after the time. A date needs its day and a four-digit year. A four-digit year first always means year-month-day. All-number dates with the year last follow the contributor's date order in `guhbot.db`, year-month-day by default. With that default, such a date is accepted only when one reading is a real date or both readings agree, and is otherwise refused with a request to write the month as a word. Every interface shows dates with the month's abbreviated name, such as `Jul 15, 2019`, so no reader misreads the order. Stored values keep the original text.
+Contributors may type dates in common forms: year-month-day numbers, a month name in any position (`Jul 15 2019`, `15 July 2019`, `july, 2019, 15`), or eight digits, with an optional 24-hour or 12-hour time and an optional zone after the time. A date needs its day and a four-digit year. A four-digit year first always means year-month-day. All-number dates with the year last follow the contributor's date order in service operational storage, year-month-day by default. With that default, such a date is accepted only when one reading is a real date or both readings agree, and is otherwise refused with a request to write the month as a word. Every interface shows dates with the month's abbreviated name, such as `Jul 15, 2019`, so no reader misreads the order. Stored values keep the original text.
 
 Date-only exact values, approximate days, and date-only ranges never shift between zones. Imported unknown timezones remain unknown. A preference change never rewrites historical values. Details may show local timestamp equivalents, while timeline days, day filters, server activity, and heatmap buckets use the archive timezone. Reject invalid timezone names and ask for an explicit offset or corrected time for ambiguous or nonexistent daylight-saving times.
 
@@ -237,7 +245,7 @@ Serialize archive mutations. Coordinate database changes and file writes through
 
 Reply privately to a Discord submitter with the saved artifact ID, selected date basis, and embed preview. If an archive has a configured destination, also post there for every newly created artifact, including web submissions. Include archive name, artifact ID, description, identified characters, selected date and basis, contributor, and an image preview or appropriate file/video representation. Unidentified characters and unknown dates remain clearly labeled.
 
-Contributors configure one destination per archive using exactly `/set-artifact-logs-channel` and `/remove-artifact-logs-channel`. The setting applies to everyone's new artifacts for that archive. Changing or removing it affects future posts only. The web app offers equivalent contributor controls. Keep destination and delivery state in `guhbot.db`.
+Contributors configure one destination per archive using exactly `/set-artifact-logs-channel` and `/remove-artifact-logs-channel`. The setting applies to everyone's new artifacts for that archive. Changing or removing it affects future posts only. The web app offers equivalent contributor controls. Keep destination and delivery state in the service operational database. The bot validates Discord channel visibility and send permissions. The service owns the resulting setting and queue, as described under [Discord Announcements Across Services](#discord-announcements-across-services).
 
 Do not post a new announcement for failed intake, duplicate reuse, or an ordinary edit. Never update or remove earlier announcements after edits or deletion. Successful archival does not depend on announcement delivery. Report notification failure separately as saved-but-not-announced and avoid creating a duplicate artifact when retrying notification. The destination must be a sendable guild text channel where the bot can send embeds and required previews. The contributor must be able to view the chosen channel.
 
@@ -302,27 +310,102 @@ The owner reviewed the clickable prototype on 2026-11-23 and approved it after t
 * **Heatmap.** The viewer can zoom the heatmap so its cells are large enough to read and select.
 * **Discord IDs.** A Discord ID encodes when its account, server, channel, or message was created. Detail views show that creation date wherever an ID is known, derived without a network request. A contributor may fetch an account's current name and avatar, or a server's current name and icon where the bot can see it, from Discord. A fetch records what Discord returns as an observation dated the day of the fetch. It never backdates a current picture into the past.
 
-## Web Lifecycle, Exports, And Operations
+## Standalone Service, Bot API, And Operations
 
-One listener in the bot process serves all allowed archives, the frontend, and backend routes. Only the owner starts and stops it. No automatic start, idle shutdown, hidden Google callback server, or persistent live connections. Repeated start returns current availability. Repeated stop returns stopped state. Bot restart leaves the listener stopped. Stop closes web access without stopping Discord contributions or discarding saved archive data.
+Archivist runs as its own process and container with its own data volume. Starting the service starts the website and API. The host operator controls its lifecycle through normal service deployment. A bot restart neither starts nor stops the website. The website remains usable when the bot is offline. Service downtime makes Archivist commands unavailable with a useful private error and leaves unrelated bot modules running.
+
+Test on localhost first. Remote deployments use a configured public address and an external HTTPS reverse proxy. A separately configured bot API address may use the same origin or private service networking. Do not build certificate, tunnel, or router automation. Service shutdown finishes or aborts operations consistently, closes the listener, and closes its databases. Remove `/archivist-admin web start` and `stop` at cutover. A retained status command may report API reachability but cannot control the service process.
 
 ### Service Boundary
 
-`src/archivist/` holds the archive rules and the website, and it does not depend on the Discord bot: no Discord library, no bot module, and no environment variables, which `config.ts` reads and passes in. A core test enforces this. The website's Discord sign-in uses plain HTTPS calls to Discord's OAuth endpoints, not the bot's connection, and owner status reaches it through an injected check. The JSON routes are the service's contract and mirror the shared operations one to one.
+The website and API own the application rules, databases, original media, staging, duplicate reviews, edit logs, whitelists, preferences, exports, and announcement records. The Discord bot calls that API. It keeps interaction handling and Discord delivery, with no local archive database, copied whitelist, or fallback writer.
 
-In this build the service runs inside the bot process and the owner starts it from Discord. The owner noted on 2026-11-23 that adding and editing artifacts feels better on the website than in Discord, and asked to keep a later move possible: the website becoming the source of truth as its own service, possibly in a separate `GuhBot.Archivist` repository, with the Discord bot calling its API. That move is not part of this build. When it happens, the service gets its own entry point and settings, an owner list or a Discord REST lookup replaces the bot's owner check, the Discord adapters call the JSON routes with a service credential that names the acting Discord user, and the in-bot listener commands are retired. Keep new code on the service side of the boundary so the move stays mechanical.
+The core in `src/archivist/` was deliberately kept independent of the Discord bot. Preserve that boundary when relocating it into `apps/server`. Environment reads belong to the service entry point and configuration module. The service uses Discord's OAuth endpoints directly for sign-in and does not need the bot's gateway connection or bot token to authenticate browser users. [Discord's OAuth documentation](https://docs.discord.com/developers/topics/oauth2) describes the authorization-code flow.
 
-Test on localhost first. Remote deployment uses a configured public address and external HTTPS reverse proxy. Do not build certificate, tunnel, or router automation. Graceful bot shutdown closes the listener and finishes or aborts archive operations consistently. Port conflict or listener-start failure leaves the bot working and reports a useful error.
+The browser uses the service's same-origin JSON routes and session cookies. The bot calls the same underlying operations using a service credential and the invoking Discord user. Do not expose internal database handles, file paths, or media-storage access to the bot. Types or a generated API client may describe the transport contract, but must not reintroduce database or application-rule dependencies into Discord.
 
-Only the owner exports, from `/archivist-admin export create`. Create a consistent snapshot under the archive write lock, release it before zip compression, and zip the complete portable folder. Include its database, log, originals, previews, and retained unreferenced media. Exclude operational state, temporary recovery files, secrets, sessions, and other archives. Do not simply copy a live SQLite main file while ignoring pending writes.
+### Bot Authentication And Acting Users
 
-Write each zip directly into `archivist-exports/` on the host, outside the portable folder, under a temporary name that becomes the final `.zip` name only when complete. Nothing is sent through Discord or the web app, because archives may reach hundreds of gigabytes. The owner copies the zip off the host and deletes it when done. Archivist never deletes a finished zip. A restart during compression marks the job failed and removes its partial file. Restoring/registering an exported archive for hosting is owner-only and never grants old whitelist access.
+The following is the proposed initial transport contract. Its implementation must be checked against the work already underway in `GuhBot.Archivist`.
+
+* Generate a separate service credential with at least 32 cryptographically random bytes. An operator can generate one locally with `openssl rand -hex 32`. This is not the Discord bot token, OAuth client secret, or browser session secret. Never print a real credential in chat, request logs, error messages, or committed files.
+* Configure the credential as `ARCHIVIST_SERVICE_TOKEN` in the service environment and the bot environment. This first version supports one trusted bot integration. The service compares fixed-size digests in constant time. A future key-management interface is not required for this migration.
+* Send it only in `Authorization: Bearer <credential>`, never in an address, browser bundle, cookie, or artifact. Use HTTPS outside localhost. A private network is not a substitute for credential authentication. Disable redirects on authenticated bot calls so credentials cannot be forwarded to another destination. Header transport and protection of bearer credentials follow the [bearer-token specification](https://www.rfc-editor.org/rfc/rfc6750).
+* Every operation performed for a contributor also sends `X-Archivist-User` with the Discord user ID taken from the verified Discord interaction. The service accepts this assertion only after authenticating the bot credential. It resolves current owner and whitelist access itself. Actor IDs in a browser header or JSON body cannot impersonate another user.
+* Treat the bot credential as permission to act for users. It is a trusted integration secret with significant authority. It does not make every command an owner operation. Administrative routes require an acting user who the service recognizes as an owner.
+* Actorless integration routes are narrow and explicit, such as claiming and reporting announcements. They require the service credential and cannot perform arbitrary archive mutations or set owner status.
+* Missing or invalid credentials fail closed. An invalid bearer token must not fall back to a browser session. Requests mixing credentials must use an explicit, tested rule. The proposed rule rejects bearer credentials combined with a browser session cookie.
+* Browser mutations retain same-origin checks. Only an authenticated bot request uses the machine-client path without an Origin header. An actor header alone never bypasses browser protections. Service authentication does not issue a browser session.
+* Keep the raw credential in deployment secret configuration rather than archive or operational records. Redact authentication headers. Rotate it by generating a new value, updating both deployments, and restarting or reloading the service. The old value stops working when the service adopts the replacement. Disabling bot authentication must leave browser access working. Rotation does not require resetting browser sessions.
+
+This separates integration authentication from per-user authorization. Apply access checks at every endpoint, as the [REST security guidance](https://cheatsheetseries.owasp.org/cheatsheets/REST_Security_Cheat_Sheet.html) recommends. Do not add user API keys, anonymous archive access, or a second password login as part of this split.
+
+### Bot Request And Media Contract
+
+Retained Discord commands translate interaction inputs into API requests and translate structured responses back into private replies, embeds, autocomplete choices, and confirmation forms. The service remains authoritative for date interpretation, archive selection, versions, references, source identity, and duplicate-review tokens.
+
+For Discord attachments, the bot forwards the original bytes through an authenticated upload with the original attachment ID and source metadata. Source assertions reserved for Discord intake require the service credential. A browser cannot claim to be a Discord attachment. The service still checks real format and size, preserves bytes, and commits the artifact. Drive links are resolved and downloaded by the service with its own optional Drive API key. The bot does not fetch, extract metadata, or create media paths as a second implementation.
+
+Use explicit request deadlines, bounded error replies, and the existing error shape. Safe reads may be retried within limits. Never blindly retry a mutation after a timeout, because the service may have committed it. Artifact source identity and duplicate review provide a reconciliation path for intake. Other ambiguous writes must be re-read for review unless a tested idempotency contract has been added. A failure does not trigger local database fallback. A bot outage may expire interaction forms, while saved artifacts and browser sessions remain intact.
+
+The service owns duplicate-review state. The bot keeps only the interaction controls and service-issued token, bound to the same acting user, archive, and expected version. Data entry and review expiry rules remain unchanged.
+
+### Discord Announcements Across Services
+
+A newly created artifact queues an upload announcement in service-owned operational state if a logs channel is configured. The bot polls a bounded authenticated queue, claims work with a lease, posts to Discord, and reports the result using the claim identity. No public bot callback listener or permanent browser connection is required.
+
+Queue creation must recover consistently with artifact creation. If the bot is offline, the artifact remains saved and the queue survives service restarts. Existing published messages remain unchanged after edits or deletion. Duplicate intake and ordinary edits do not queue another announcement. Never send a queued post for an artifact deleted before delivery. Preserve the submission values for delayed upload-history messages rather than replacing them with later edits.
+
+Unclaimed queued work can wait for reconnection. A claimed delivery whose outcome is unknown becomes indeterminate and must not be blindly resent, including after lease expiry, lost acknowledgment, or migration. Distinguish queued, sent, failed, and indeterminate outcomes in responses. A successful archival response must not wait indefinitely for the bot or imply that a queued announcement was delivered.
+
+Logs-channel commands remain in Discord. The bot checks that the contributor can view the destination and that it can send the required messages, then submits the validated setting as that contributor. The service checks archive authorization and stores the setting. Web configuration may be retained only when it can obtain the same fresh Discord checks through the integration. It must return an actionable unavailable result when validation cannot be completed, while normal archive operations continue. A browser-supplied channel ID or a historical cached result is insufficient proof of Discord permission.
+
+### Exports And Portable Archives
+
+Only a service owner exports. The retained Discord administration command may request a job through the API. Create a consistent snapshot under the archive write lock, release it before compression, and zip the complete portable folder. Include its database, log, originals, previews, and retained unreferenced media. Exclude operational state, transient recovery files, credentials, sessions, and other archives.
+
+Write each zip into `archivist-exports/` on the service host, outside the portable archive folder. Rename its temporary file only when complete. The API returns job state and owner-visible export information. The bot must not suggest that the file exists on its own host or upload the archive to Discord. The owner copies it from the service host and deletes it when done. A restart during compression fails the job and removes its partial file. Restoring/registering an exported archive remains owner-only and grants no old whitelist access.
+
+### Migration Sequence
+
+These are implementation stages, not claims that work has already passed.
+
+| Stage | Work | Required Evidence |
+| --- | --- | --- |
+| `S0` Reconcile And Decide | Inventory both branches and in-progress changes. Apply the confirmed owner identity, website admission, and command naming decisions. Keep this document canonical until its deliberate transfer | Record source commits and confirmed decisions without overwriting concurrent work |
+| `S1` Port Current Features | Reconcile the earlier server import with bot changes through `1f83f66`. Move the existing frontend and its assets into the service workspace. Preserve the archive schema | Existing core and web tests and browser flows pass in the service repository. No Graph, Board, or character-page completion is claimed by moving files |
+| `S2` Establish The Service | Finish entry point, persistent operational storage, owner bootstrap, Discord sign-in, admission checks, and service credential authentication | Website starts independently. Sign-in, session revocation, actor impersonation refusal, key rejection, and owner/member tests pass without a running bot |
+| `S3` Connect The Bot | Replace archive imports and database calls with an API adapter. Preserve guild registration, commands, private replies, versions, and source identity. Add logs-channel validation and the polling worker | Bot contract tests and joint fixture checks prove commands, uploads, duplicate reviews, announcements, and outage behavior over HTTP |
+| `S4` Rehearse Data Transfer | Work on consistent copies of archive folders and the bot operational database. Import only Archivist operational rows. Validate conflicts and recover interrupted work | IDs, record and link counts, file hashes, edit logs, settings, whitelists, preferences, and integrity checks match. AFK and unrelated bot rows remain unchanged |
+| `S5` Cut Over Once | Quiesce Archivist writes and exports, finish recovery, take a final backup and copy, validate it, then enable only the service writer and API-backed bot | Both clients see the same records. No bot archive mounts, in-process listener, or fallback writer remains. Transfer canonical docs and update deployment instructions |
+| `S6` Complete And Validate | Finish the remaining website features and the original release checks in the service repository | `M4` and `M5` acceptance evidence passes against the split deployment, including capacity and restore tests |
+
+The source operational database is opened read-only during import. Copy archive registry rows, per-archive whitelists, timezone and date-order preferences, remembered selections, logs-channel destinations, announcement history, and export history. Do not copy AFK rows, Discord bot secrets, sign-in states, or browser sessions. Require a fresh Discord sign-in on the service. Regenerate service and session secrets rather than transferring them through archive files. Existing finished exports remain on their original host unless deliberately copied, and imported status must report missing files honestly.
+
+Keep archive databases at their existing schema versions and preserve every archive and record ID. New queue or integration state uses additive operational migrations. Do not reset or rebuild historical data to obtain a clean deployment. Conflicting registry names, missing folders, unsupported versions, invalid paths, and mismatched data stop the affected cutover for review. Re-running import must not overwrite different destination rows silently.
+
+Never allow both deployments to accept archive writes during the transfer. Before new service writes, a failed rehearsal can return to the untouched bot deployment. After service writes begin, rollback requires quiescing writes and reconciling the current service data. Restarting an old bot database copy would lose changes. Keep both repository revisions and the validated backup until joint verification is complete.
+
+### Migration Decisions
+
+The owner confirmed these choices on 2026-11-24. They supersede the earlier in-bot hosting direction.
+
+| Decision | Confirmed Behavior |
+| --- | --- |
+| Website admission | Keep per-archive whitelists. Only service owners or members of at least one archive may enter the application. Removing the final membership denies the next request |
+| Service owner source | Configure explicit Discord user IDs in `ARCHIVIST_OWNER_IDS`, independent of the bot application owner or team |
+| Contributor commands | Use `/archive` and `/a`, retaining the existing contributor operations as API wrappers. Replace `/archivist` registration at cutover and keep the archive option last |
+| Data ownership | `GuhBot.Archivist` is the single archive writer and stores the existing portable schema. The bot holds no archive data or fallback copy |
+| Contribution interface | The web interface is primary. Existing Discord contribution operations remain available through the API |
+| Integration credential | Use a separately generated bot service credential in server-side environment configuration, with an authenticated acting Discord user for contributor requests |
+
+No product decision remains open from the three questions asked in this planning pass. Implementation must still reconcile and test the target repository's unfinished work against this contract. The standalone local viewer remains outside this request. Work observed in the sibling repository does not by itself add it to the accepted scope.
 
 ## Exact Data Contract
 
 ### Shared Field Rules
 
-Use generated stable `crypto.randomUUID()` identifiers for internal records and text for external Discord and Drive IDs. Every archive has independent identity space. Foreign keys inside its database never point into `guhbot.db` or another archive.
+Use generated stable `crypto.randomUUID()` identifiers for internal records and text for external Discord and Drive IDs. Every archive has independent identity space. Foreign keys inside its database never point into the operational database or another archive.
 
 A writable parent record has `id`, positive `version`, creation timestamp, creator Discord ID, and update timestamp. Dates of creation and update are zero-offset timestamps. Historical date values are separate. Empty optional text is normalized to null. Required names are 1 to 100 characters, event titles 1 to 200, descriptions 1 to 20,000, and reasons and research notes 1 to 10,000 when supplied. Reject blank required values after trimming. Server, channel, and event colors are lowercase `#rrggbb` values. The application assigns each from a palette at creation, and contributors may change it. Do not silently truncate stored descriptions to Discord embed limits. Truncate only the visible embed text and offer full details.
 
@@ -763,7 +846,7 @@ ALTER TABLE artifacts RENAME COLUMN unidentified_people TO unidentified_characte
 
 ### Operational Schema Draft
 
-Apply this additive migration in `guhbot.db`. Preserve the existing AFK table and its values. Use `archivist_schema` for this feature's operational migration version instead of claiming ownership of the whole database's version. Pending form data and staged upload tokens expire after 15 minutes and may live in memory. A bot restart invalidates those pending actions, not saved archive data or unexpired server-side login sessions.
+The following is the existing operational schema originally added to `GuhBot.Discord`'s `guhbot.db`. Keep its table identities during the move into service-owned `operational.db`. The importer copies only Archivist rows and leaves the source database and its AFK data unchanged. New service-specific state, including announcement claims, uses additive operational migrations. The existing `archivist_schema` version record continues independently of each archive database's version. Pending service review and staged upload tokens expire after 15 minutes and may live in memory. A service restart invalidates those pending actions, not saved archive data or persisted browser sessions. Bot interaction controls may also expire when the bot restarts.
 
 ```sql
 PRAGMA foreign_keys = ON;
@@ -876,7 +959,7 @@ ALTER TABLE archivist_sessions ADD COLUMN avatar_url TEXT;
 
 Every contributor operation selects an archive and checks current access. In Discord, the archive option may be omitted. The command then uses the archive the contributor last selected explicitly in a contributor command that passed its access check. If none is remembered or access to it has been removed, the command requires a selection. Every reply names the archive used. Web routes always name the archive in the path. Use paginated choices where Discord cannot display every record. Defer private replies before network or disk work. Bind confirmation forms and duplicate reviews to the original user, archive, and record version, expiring after 15 minutes. Reject actions from another user or an expired form. One intake creates or reviews one artifact. Bulk forms are excluded.
 
-Owner commands use `/archivist-admin` in `OWNER_GUILD_ID` to preserve the existing owner-command registration boundary. Contributor groups use `/archivist` in enabled Archivist guilds, and `/a` registers the same groups as a short alias. The optional archive option is the last option of every contributor command. The two artifact-log commands retain the exact standalone names requested by the owner.
+Owner commands retain `/archivist-admin` in `OWNER_GUILD_ID`, but Archivist administration uses the service owner IDs rather than the bot application owner/team guard. Unrelated bot owner commands keep their existing guard. Check service ownership for each administrative API request. Contributor groups become `/archive` and `/a` in enabled Archivist guilds. Replace the former `/archivist` registration at cutover. The optional archive option stays last. The two artifact-log commands retain their exact standalone names. Every retained operation becomes an API wrapper, with no local database path.
 
 | Command Or Group | Inputs And Result |
 | --- | --- |
@@ -889,14 +972,14 @@ Owner commands use `/archivist-admin` in `OWNER_GUILD_ID` to preserve the existi
 | `/archivist-admin whitelist remove` | Archive and Discord user. Remove idempotently, effective on next request |
 | `/archivist-admin whitelist list` | Archive. List every entry with pagination and an empty state |
 | `/archivist-admin export create`, `list` | Archive for create. Take a consistent snapshot, write the zip on the host, and report its path, size, or failure. List recent exports with their state and whether the zip is still on disk |
-| `/archivist-admin web start`, `stop`, `status` | Global listener control and availability |
-| `/archivist archive list` | List only accessible archives, or all for the owner |
-| `/archivist artifact add` | Archive, description, and exactly one attachment or Drive file link. Optional dates and links to existing records. Return saved record or duplicate review |
-| `/archivist artifact show`, `edit`, `delete` | Archive and artifact ID. Edit requires current version. Delete follows confirmation and cleanup rules |
-| `/archivist entity create`, `show`, `edit`, `delete` | Archive, entity kind, and ID where relevant. Kind is character, account, server, or channel. A bot is an account kind. Edit changes a record's own fields, such as names, Discord ID, linked character, place, and lane color. Delete reports what still links to the record before showing the confirmation. Dated history and character merge are edited on the website |
-| `/archivist event create`, `show`, `edit`, `delete` | Archive, event fields or ID, and current version for mutation. Enforce date and anchor blockers. Check delete blockers before showing the confirmation |
-| `/archivist request create`, `show`, `edit` | Archive and missing-media request fields or ID. Creation requires description, characters, and temporal constraint |
-| `/archivist preferences show`, `timezone`, `date-order`, `reset` | Self-service named timezone and all-number date order. Reset clears both, falling back to the selected archive timezone and year-month-day |
+| `/archivist-admin web start`, `stop`, `status` | Retire `start` and `stop` at service cutover. A status wrapper may report API reachability without controlling its lifecycle |
+| `/archive archive list` | List only accessible archives, or all for the owner |
+| `/archive artifact add` | Archive, description, and exactly one attachment or Drive file link. Optional dates and links to existing records. Return saved record or duplicate review |
+| `/archive artifact show`, `edit`, `delete` | Archive and artifact ID. Edit requires current version. Delete follows confirmation and cleanup rules |
+| `/archive entity create`, `show`, `edit`, `delete` | Archive, entity kind, and ID where relevant. Kind is character, account, server, or channel. A bot is an account kind. Edit changes a record's own fields, such as names, Discord ID, linked character, place, and lane color. Delete reports what still links to the record before showing the confirmation. Dated history and character merge are edited on the website |
+| `/archive event create`, `show`, `edit`, `delete` | Archive, event fields or ID, and current version for mutation. Enforce date and anchor blockers. Check delete blockers before showing the confirmation |
+| `/archive request create`, `show`, `edit` | Archive and missing-media request fields or ID. Creation requires description, characters, and temporal constraint |
+| `/archive preferences show`, `timezone`, `date-order`, `reset` | Self-service named timezone and all-number date order. Reset clears both, falling back to the selected archive timezone and year-month-day |
 | `/set-artifact-logs-channel` | Required archive and optional channel, defaulting to current channel. Configure one destination for all new artifacts in that archive |
 | `/remove-artifact-logs-channel` | Required archive. Remove future delivery setting, preserving old messages |
 
@@ -912,7 +995,7 @@ Show full details and edit forms with controls appropriate to Discord limits. Us
 
 ### Web Routes
 
-Serve frontend and backend from the same origin. Prefix archive routes with `/api/archives/:archiveId`. Validate access before loading records or touching media. Do not accept the actor identity, internal paths, calculated date basis, creator, version increments, or log contents as client-controlled fields.
+Serve frontend and backend from the service origin. Prefix archive routes with `/api/archives/:archiveId`. Validate access before loading records or touching media. Browser requests derive the actor from their session. Authenticated bot requests may assert only the invoking Discord user through the service transport contract above. Do not accept browser-controlled actor identity, internal paths, calculated date basis, creator, version increments, or log contents. Service authentication never bypasses archive authorization.
 
 | Route | Contract |
 | --- | --- |
@@ -939,9 +1022,28 @@ Serve frontend and backend from the same origin. Prefix archive routes with `/ap
 | `GET /timeline`, `/calendar`, `/graph`, `/heatmap` | Bounded view data using shared filters and date rules. The timeline takes a window of at most 60 years and a day, week, or month bucket, and returns lanes with activity stretches, shaded dots, arrows, the event band, and change markers. The calendar takes a month and the heatmap a year, returning separate artifact and event counts per day. The requested window replaces the shared date range for these three |
 | `GET /media/:mediaId`, `GET /media/:mediaId/preview` | Authorized original or preview streaming, including retained media, with byte ranges and private, revalidated caching. Never a direct filesystem path |
 | `GET /edit-log` | Authorized log download |
-| `GET`, `PUT`, `DELETE /artifact-logs-channel` | Equivalent contributor configuration after Discord channel access and bot-permission checks, which the bot performs. Without the bot connected, setting it is refused with `503` |
+| `GET`, `PUT`, `DELETE /artifact-logs-channel` | Service-owned setting. Changes require the acting contributor and fresh Discord channel access and bot-permission checks. Browser configuration is unavailable with `503` if those checks cannot be completed |
 
 The bracket notation in the table abbreviates separate collection and item routes, not a literal route string. Historical record and archive-setting mutations return the current record and version. Requests take `expectedVersion` on their changes and deletion. Operational membership, preference, and announcement-setting commands apply atomically without historical record versions. Source-specific fields and ordinary editable columns come from the schema and date contract. Relationship updates explicitly list additions and removals. A duplicate-review operation accepts additions only.
+
+### Service API Extensions
+
+The service also needs the following contracts to replace direct calls made by the existing bot. Their implementations in the sibling repository are still being reconciled and tested. Paths are relative to the configured service base path. Routes marked Owner require a browser owner session or a valid service credential naming a service owner. Service-only routes cannot be used with a browser session.
+
+| Route Or Capability | Authorization And Result |
+| --- | --- |
+| `POST /api/archives`, `POST /api/archives/register` | Owner. Create an archive or register a validated folder under the service archive root |
+| `PUT /api/archives/:archiveId/name`, `PATCH /api/archives/:archiveId/settings`, `DELETE /api/archives/:archiveId` | Owner. Rename, configure, or unregister with existing version and preservation rules. Unregister never erases the folder |
+| `GET /api/archives/:archiveId/members`, `PUT`, `DELETE /api/archives/:archiveId/members/:userId` | Owner. List, grant, or revoke the service whitelist. The path user is the membership subject, never the requesting actor |
+| `POST /api/archives/:archiveId/exports`, `GET /api/exports`, `GET /api/exports/:jobId` | Owner. Start or inspect host-side exports without returning archive bytes |
+| `POST /api/me/archive-selection` | Acting user. Validate and remember an explicit archive, or resolve the still-authorized remembered one |
+| Archive-scoped lookup, autocomplete, summary, and delete-blocker routes | Acting user with archive access. Resolve existing names and unique short IDs on the service. List blockers before the bot displays destructive confirmation. Recheck blockers when deleting |
+| Authenticated Discord artifact intake | Service credential and acting user. Forward bytes and verified Discord source metadata to the shared intake operation. Preserve source identity across API failures and duplicate review |
+| `POST /api/service/announcements/claim` | Service-only. Claim a bounded batch of queued posts with lease identities. A service restart must not duplicate claims |
+| `GET /api/service/announcements/:archiveId/:artifactId/preview` | Service-only. Retrieve only the media needed for an authenticated claimed delivery, without exposing a public media address |
+| `POST /api/service/announcements/:archiveId/:artifactId/result` | Service-only. Report sent, failed, or indeterminate with the current claim identity. Refuse stale or fabricated claims and make repeated identical reports harmless |
+
+Freeze and document the exact upload and lookup request shapes before replacing their bot callers. Contract tests must run against the actual service routes, including base paths, media streams, errors, limits, expected versions, and duplicate tokens. Merely agreeing on TypeScript types does not prove the transport works.
 
 Lists accept `limit` from 1 to 100, default 50, and an opaque cursor with stable ordering. Shared filters use repeated IDs by category, optional text query, media types, date bases, the unidentified-characters flag, and inclusive `fromDay` and `toDay`. Artifact lists also take `lane` (a server, a group chat, or `unassigned`) for a timeline dot's gallery, and `withCharacter`, where every listed character must appear, for a graph line's album. Board lists default to priority then creation time and stable ID. Relative request constraints filter as open-ended intervals, not artificial occurrence days. A timeline request requires a viewport and zoom. Return clusters and counts rather than every offscreen record.
 
@@ -951,26 +1053,29 @@ Stage downloads before acquiring the archive mutation lock. Limit each source re
 
 ## Configuration Contract
 
-These settings are planned. Add new variables to `.env.example`, `compose.yaml`, and relevant guides only when implemented. Read them through `config.ts`.
+The table below allocates settings after the split. Existing settings currently live with the bot. Some service settings exist only in uncommitted migration work. Update each repository's `.env.example`, `compose.yaml`, and guides when its implementation lands. Environment reads stay in the relevant configuration module. Do not describe planned key generation or administration commands as already available.
 
-| Setting | Default And Purpose |
-| --- | --- |
-| `DATA_DIR` | Existing repository setting. Contains bot state and managed archive roots |
-| `ARCHIVIST_GUILD_IDS`, `OWNER_GUILD_ID` | Existing command availability boundaries |
-| `ARCHIVIST_HOST` | `127.0.0.1` for local testing. Container deployments explicitly use `0.0.0.0` behind the chosen host exposure |
-| `ARCHIVIST_PORT` | `3000` |
-| `ARCHIVIST_BASE_URL` | `http://localhost:3000` for local testing. The address browsers use, which may include a path such as `https://guhbot.gavintranquilino.com/archivist`. Every page, route, and cookie lives under that path. Plain `http` is allowed only for localhost. Must match the registered Discord callback |
-| `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` | Discord sign-in application credentials, distinct from bot-token use. Required when starting the web listener |
-| `ARCHIVIST_SESSION_SECRET` | Deployment-provided signing secret of at least 32 random bytes, outside archive folders |
-| `GOOGLE_DRIVE_API_KEY` | Optional server-side API project key. When set, public Drive links use the Drive API. When empty, they use Google's public download address |
+| Setting | Owner | Target Purpose |
+| --- | --- | --- |
+| `DATA_DIR` | Each service, separately | Archivist stores `operational.db`, archive folders, staging, and exports. Discord stores its unrelated bot state. Never share one writable volume |
+| `ARCHIVIST_GUILD_IDS`, `OWNER_GUILD_ID` | Discord | Existing command availability boundaries |
+| `DISCORD_TOKEN` | Discord | Gateway and message delivery. Never needed for browser sign-in or sent to Archivist |
+| `ARCHIVIST_HOST`, `ARCHIVIST_PORT` | Archivist | Listener bind address and port, default `127.0.0.1` and `3000`. Containers explicitly bind `0.0.0.0` behind the configured exposure |
+| `ARCHIVIST_BASE_URL` | Archivist | Browser address, including an optional path prefix and exact Discord callback base. Default `http://localhost:3000` for development |
+| `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` | Archivist | Discord browser sign-in application credentials, independent of the bot token |
+| `ARCHIVIST_SESSION_SECRET` | Archivist | At least 32 random bytes for browser sessions, separate from the service token |
+| `ARCHIVIST_OWNER_IDS` | Archivist | Required explicit service owner Discord IDs, independent of the bot application owner or team |
+| `ARCHIVIST_API_URL` | Discord | Absolute service API base address, including its path prefix. May equal the public website base address. Required to enable the API-backed Archivist module |
+| `ARCHIVIST_SERVICE_TOKEN` | Both, server-side only | Shared bot integration credential generated from at least 32 random bytes. Omission disables bot API access on the service without disabling browser access |
+| `GOOGLE_DRIVE_API_KEY` | Archivist | Optional public Drive API access. With no key, use the existing public download path |
 
 Use `/auth/discord/callback` under the configured base address, including its path, as the registered callback. Initial local setup tests this address; remote deployment registers its actual HTTPS callback. Do not silently use the execution host's timezone, guessed public hostname, or editor port-forward address.
 
-Archive timezone, main server, lane gap, and display colors live in its database. Whitelists, self-service timezone preferences, remembered archive selections, announcement destinations, sessions, and job state live in `guhbot.db`. No setting stores a common Drive folder or requests a Google account connection.
+Archive timezone, main server, lane gap, and display colors stay in its database. Whitelists, self-service timezone preferences, remembered archive selections, announcement destinations, sessions, and job state move to service-owned `operational.db`. No setting stores a common Drive folder or requests a Google account connection.
 
 ## Dependency And Design Selections
 
-The following exact direct versions were checked against public npm package metadata during planning. They have not been installed or integration-tested in this repository. The implementation must generate a lockfile with these direct pins, verify the selected runtime, and report a concrete incompatibility rather than silently changing the contract.
+The following direct pins were selected during planning and are installed in the bot repository's current lockfile. The existing bot-side build and core, Discord, and web test suites have passed at the recorded checkpoints. Migration must preserve the applicable pins and verify the separate service runtime and lockfile. Moving source files does not establish container or integration compatibility in the target repository.
 
 | Addition | Exact Version | Reason |
 | --- | --- | --- |
@@ -988,9 +1093,9 @@ The following exact direct versions were checked against public npm package meta
 | `@types/react`, `@types/react-dom` | `19.3.0` each | Frontend type checking |
 | `@types/archiver` | `8.0.0` | Export writer type checking |
 
-Retain the repository's existing TypeScript, discordx, Discord.js, SQLite, and Sharp dependencies. Do not update them incidentally. Use built-in Node tests for backend and adapter coverage. Fastify plugins declare support for Fastify `5.x`; Vite and React peer requirements were checked from package metadata. Resolve optional compiler extras only if actually used, not to add an unrequested React compiler configuration.
+Preserve the applicable existing dependency versions. Keep discordx and Discord.js with the bot. SQLite, Sharp, metadata extraction, Fastify, and the website build belong to Archivist after cutover. Remove obsolete bot dependencies only after their final callers move. Do not update unrelated dependencies incidentally. Use built-in Node tests for backend and adapter coverage. Fastify plugins declare support for Fastify `5.x`; Vite and React peer requirements were checked from package metadata. Resolve optional compiler extras only if actually used, not to add an unrequested React compiler configuration.
 
-Direct additions use the `MIT` license except Playwright's `Apache-2.0`. Review and preserve upstream notices for bundled tools and fonts. Package metadata was read only, and no package scripts were run. Relevant primary references are [Vite](https://vite.dev/guide/), [Tailwind integration](https://tailwindcss.com/docs/installation/using-vite), [Fastify](https://fastify.dev/docs/latest/), [Node tests](https://nodejs.org/api/test.html), and [the npm registry](https://registry.npmjs.org/). Keep runtime metadata tools and their prerequisites in the built image. No request-time tool download or install.
+Direct additions use the `MIT` license except Playwright's `Apache-2.0`. Review and preserve upstream notices for bundled tools and fonts. Initial planning read package metadata only. Later implementation installed packages and ran the documented builds and tests. Those historical results do not verify the split deployment. Relevant primary references are [Vite](https://vite.dev/guide/), [Tailwind integration](https://tailwindcss.com/docs/installation/using-vite), [Fastify](https://fastify.dev/docs/latest/), [Node tests](https://nodejs.org/api/test.html), and [the npm registry](https://registry.npmjs.org/). Keep runtime metadata tools and their prerequisites in the built image. No request-time tool download or install.
 
 Use JetBrainsMono Nerd Font Regular from [Nerd Fonts v3.5.1](https://github.com/ryanoasis/nerd-fonts/releases/tag/v3.5.1), bundled as its original font file with notices and a monospace fallback. Use accessible text labels alongside glyph-only controls.
 
@@ -1014,14 +1119,14 @@ Complete the entire hosted-app scope through these internal milestones.
 | Milestone | Deliverable | Acceptance Evidence |
 | --- | --- | --- |
 | `M0` Contract And Tooling | Final reviewed contract, exact migrations, validation and interface definitions, dependency lock, and fixture harness | Schema and operational migration checks pass. Runtime and package compatibility are verified. No unresolved product placeholders |
-| `M1` Storage And Operations | Independent archive folders, bot registry and whitelist, date values, metadata preservation, editable logs, version conflicts, and recoverable mutations | Restart persistence, reference blockers, source uniqueness, date precedence, and interrupted-deletion/log-rewrite checks pass without changing AFK data |
-| `M2` Discord Contribution | Complete contributor and owner commands, public Drive intake, attachments, duplicate review, channel announcements, and exports | Test-server rehearsal verifies accepted inputs, different public folders, original bytes and metadata, failed sources, stale reviews, and unchanged announcement history |
+| `M1` Storage And Operations | Independent archive folders, service registry and whitelist, date values, metadata preservation, editable logs, version conflicts, and recoverable mutations | Restart persistence, reference blockers, source uniqueness, date precedence, and interrupted-deletion/log-rewrite checks pass without changing AFK data |
+| `M2` Discord Contribution | Retained contributor and owner commands as service API clients, public Drive intake, attachments, duplicate review, channel announcements, and exports | Test-server rehearsal verifies accepted inputs, different public folders, original bytes and metadata, failed sources, stale reviews, and unchanged announcement history |
 | `M3` Historical Research | Full identities, observations, memberships, character merge, events, missing-media requests, and board transitions | Explicit fixtures cover nullable identities, history lookup, both event range meanings, all request constraints, anchor corrections and deletion blocking, and no assignees |
-| `M4` Hosted App | Owner-controlled lifecycle, Discord login, every contributor operation, all six views, and responsive design | Browser flows prove parity, next-request revocation, keyboard access, mobile forms, historical date labels, and usable stopped-app outcomes |
+| `M4` Hosted App | Independently hosted service, Discord login, every contributor operation in the primary web interface, all six views, and responsive design | Browser flows prove next-request revocation, keyboard access, mobile forms, historical labels, and continued use while the bot is offline. Retained Discord operations use the API |
 | `M5` Release Validation | Complete export and clean restore, migration compatibility, performance, CI, and operating documentation | Zip opens without bot state or source access, required checks run in CI, performance results name the host, and configured live-source and local-hosting rehearsals pass |
 | `M6` Future Viewer | Excluded from this build | A separate future project may use the published archive contract |
 
-Before building the `M2` Discord intake flow, show the owner the exact command, character selection, reply, and duplicate-review steps. Before building the `M4` views, publish a clickable prototype with fake data for the owner's review. The owner asked on 2026-11-23 to see it during `M3`. Record the agreed layout, tray, and view decisions in this plan. The prototype is not reused as application code.
+The owner already reviewed the `M2` Discord intake command, character selection, reply, and duplicate-review steps. Preserve those accepted behaviors when replacing local calls with API calls. The owner approved the clickable prototype before the `M4` views were built. Its decisions are recorded above. Migration preserves that design rather than restarting the prototype review. The prototype is not reused as application code. Stages `S0` through `S6` add service-split acceptance without resetting the original milestone history. `M0` through `M3` have implementation evidence in the original repository, `M4` is partial, and `M5` remains incomplete.
 
 ### Required Automated Scenarios
 
@@ -1036,13 +1141,16 @@ Before building the `M2` Discord intake flow, show the owner the exact command, 
 * Verify linked-identity deletion blockers, surviving evidence, media retention, log-entry removal for deleted records, unchanged other logs, and unchanged upload-history messages.
 * Verify temporary-file and journal recovery after failures at each database, media, log, and operational-state boundary. No half-applied mutation may be exported.
 * Verify owner versus member privileges, archive isolation, denied direct API and media access, invalid sessions, same-origin mutation checks, and revocation during an open session.
-* Verify listener start, repeated start and stop, port conflict, bot shutdown, restart-stopped state, and continuing Discord contribution while the listener is stopped.
+* Verify independent service startup, graceful shutdown, restart, port conflict, and bot restart without website interruption. Confirm that website access and contributions work with the bot stopped, and that unrelated bot commands work with Archivist unavailable.
+* Verify missing, invalid, rotated, and disabled service credentials, actor headers without credentials, cookie/bearer ambiguity, non-owner administrative requests, whitelist revocation through bot and browser, and no client-controlled owner status.
+* Verify consistent transfer of archive files and Archivist operational rows, unsupported-schema and conflict refusal, session reset, source read-only behavior, no AFK changes, and the absence of concurrent old and new writers.
+* Verify bounded announcement claims, offline queues, queued versus delivered responses, report authentication, lease expiry, ambiguous delivery without resend, and delayed upload snapshots. Browser uploads must remain successful while the bot is offline.
 * Verify announcement settings for every contributor in the selected archive, web-originated uploads, notification failure after saved evidence, and no blind resend after an indeterminate external delivery result.
 * Verify one complete zip with log, originals, previews, and retained media; absence of credentials and operational state; clean-location restore; and unsupported schema refusal.
 * Verify lane assignment for servers, group chats, threads, and unassigned records, parallel event-band rows for overlapping ranges, day-bucket artifact counts, automatic server name and icon markers, and historical character pictures from main accounts.
 * Verify empty archives, crowded days, long gaps, reappearing server lanes, multi-server events counted once, search and filter semantics, unknown memberships, and accessible visual states.
 
-Add planned commands `test:archivist:core`, `test:archivist:discord`, `test:archivist:web`, and `test:archivist:e2e`. CI jobs `archivist/core`, `archivist/discord`, and `archivist/web` run the relevant suites, with route and browser coverage in the web job. Mock Discord and Google in CI. A real test server and representative public Drive files supplement those tests. Do not require production credentials in pull-request checks.
+The bot repository already provides `test:archivist:core`, `test:archivist:discord`, and `test:archivist:web`. A persistent `test:archivist:e2e` command remains to be implemented. After migration, service tests and their CI jobs live with Archivist, and bot adapter tests stay with Discord. The sibling service currently has `test:core` and `test:web` scripts, which still need migration-specific validation. Introduce and document runnable browser coverage in the service web job before claiming `M4` acceptance. Mock Discord and Google in CI. A real test server and representative public Drive files supplement those tests. Do not require production credentials in pull-request checks.
 
 Retain and run `npm run check`, `npm run build`, and `python3 tools/scripts/run_checks.py`. Extend the build to compile backend and frontend and package the frontend, fonts, metadata tools, and migrations in the container image. Update only actual commands and tooling in repository guides when implemented. Run project checks in the dev container when available and report environment limitations.
 
@@ -1060,12 +1168,12 @@ The owner's accepted batches A through F are reconciled here. Later clarificatio
 | --- | --- |
 | Portable storage | One folder per archive with SQLite, media, and edit log; complete zip exports |
 | Source evolution | Google Photos and a common shared folder were considered, then replaced by contributors' public Drive file links. No Google user login or source registration |
-| Contribution | Discord primary, equivalent web operations, owner-only infrastructure administration, and contributor announcement settings |
+| Contribution | Web primary. Retained Discord commands wrap the authenticated service API. Owner-only administration and contributor announcement settings remain |
 | Research backlog | No assignees; missing-media requests require temporal information, a character, and description; Needed, Resolved, and Unrecoverable buckets |
 | Relative requests | Before event start, after event end, follow corrected dates, and block anchored-event deletion |
 | Deletion | Permanent archive record deletion, retained media, removed own edit entries, no deletion log, and unchanged external upload-history messages |
 | Scope | Full hosted app and all six views (the album was added in the prototype review), with separate standalone viewer later |
-| Archive selection | Discord commands may omit the archive and reuse the contributor's last explicit selection, stored in `guhbot.db`. Replies always name the archive |
+| Archive selection | Discord commands may omit the archive and reuse the contributor's last explicit selection, stored by the service. Replies always name the archive |
 | Intake links | Intake links only existing records. Contributors create a missing character before linking it |
 | Identification cards | A yes/no unidentified-characters flag, set from a button on the artifact reply rather than an intake field. Missing-characters cards come only from the flag |
 | Intake volume | One artifact per submission, with thousands expected over time. Keep each Discord intake to as few steps as possible |
@@ -1076,15 +1184,18 @@ The owner's accepted batches A through F are reconciled here. Later clarificatio
 | Main accounts | Characters have a dated main-account history, and their pictures follow it along the timeline |
 | Discord intake | Comma-separated characters with autocomplete, separate exact and estimate date fields, a private reply with Edit, Add characters/events, Someone unidentified, and Delete, short IDs, and tick-to-apply duplicate review |
 | Typed dates | Common written forms are accepted. Each contributor chooses year-month-day, month-day-year, or day-month-year for all-number dates, defaulting to year-month-day. Dates display with month names for everyone |
-| Exports | Owner-only, from `/archivist-admin export`. The zip is written on the host and kept until the owner deletes it. No Discord or web download |
+| Exports | Owner-only through the service, including the retained Discord API wrapper. Zips remain on the service host until the owner deletes them. No Discord or web archive download |
 | Editing split | Discord is for uploads and quick edits. Dated history editing and character merge are website-only, because editing is easier with the whole record in view |
 | Terminology | Say "character" for the archive's records of real people, never "person" or "people", in the interface, the code, and the schema. Archive schema version 3 renames the stored names. Discord users are contributors |
-| Service boundary | The archive rules and website stay independent of the Discord bot, enforced by a test, so the website can later become the source of truth as its own service with the bot as an API client. The move itself is deferred (owner, 2026-11-23). See [Service Boundary](#service-boundary) |
+| Service boundary | The owner now requests the split. `GuhBot.Archivist` owns the website, API, databases, media, and rules. `GuhBot.Discord` becomes a guild-restricted API client. This supersedes the earlier deferral. See [Service Boundary](#service-boundary) |
+| Browser access | Discord sign-in is mandatory. Preserve per-archive whitelists and require at least one membership or configured service ownership for application admission |
+| Service ownership | Explicit `ARCHIVIST_OWNER_IDS`, independent of the bot application owner or team. Bootstrap through host configuration |
+| Bot authentication | Separate generated service credential in environment configuration plus the invoking Discord user. Service rechecks access on each operation |
 | Hosting path | The website may live under a path, such as `guhbot.gavintranquilino.com/archivist`. Plain HTTP only on localhost |
 | Prototype review | Approved on 2026-11-23 after three rounds. The decisions are under [Prototype Review Decisions](#prototype-review-decisions), including the new album view, viewer-local lane order and hiding, the deterministic graph layout, the picture album with GIF avatars, account-menu preferences, and creation dates derived from Discord IDs |
 | Research on the website | The research board, manual research flags, and moving missing-media requests between buckets are website-only. Derived gap cards clear themselves when the data is added. A request resolves when someone links the artifact that has the media, since the archive cannot tell by itself that an upload is the missing media. Deletes that would be refused are refused before the confirmation button appears |
 | Prototype timing | The clickable prototype is built during `M3`, so layout feedback arrives before the `M4` views are built |
-| Command shape | `/a` is a short alias of `/archivist` with the same commands. The archive option comes last in every command, because contributors change it least |
+| Command shape | Use `/archive` and `/a` after cutover. Retain the contributor operations, restrict them to enabled guilds, and keep the archive option last |
 | Drive without a key | Public Drive links download from Google's public download address without setup. An optional `GOOGLE_DRIVE_API_KEY` switches to the official Drive API |
 | Formats | Images, videos, and audio are accepted: JPEG, PNG, WebP, GIF, MP4, MOV, WebM, MKV, AVI, MP3, M4A, WAV, Ogg, and FLAC |
 | Exact-date basis | Exact dates need no written basis, for artifacts and events. Only estimates need a reason. Archive schema version 2 removes the basis requirement and keeps earlier values |
@@ -1093,9 +1204,10 @@ The earlier `Q01` through `Q19` topic discussion is resolved into the contract s
 
 ### Outstanding Verification Prerequisites
 
-* Provide representative publicly readable image, video, and audio files for the Drive rehearsal, and optionally a Drive API key. Do not read or commit private `.env` values during planning.
-* Configure the actual Discord sign-in application and exact localhost callback before the local integration rehearsal. Provide public HTTPS hosting only for a later remote deployment.
-* Generate and validate the actual lockfile, container packaging, migration files, and runnable test commands during implementation. Registry metadata and a schema smoke check do not replace an application build.
-* Review and accept the newly explicit technical contract and schema draft before authorizing the agent to implement it.
+* Implement the confirmed [Migration Decisions](#migration-decisions) with tests for admission, service ownership, and the renamed commands.
+* Reconcile and test the uncommitted service work and port the existing website without overwriting concurrent changes. No key-generation command, completed migration, or split deployment is claimed by this plan update.
+* Rehearse key configuration and rotation with synthetic credentials, Discord sign-in on the service callback, current whitelist revocation, and the API-backed bot before real data cutover. Live sign-in already passed in the in-bot deployment, not yet in the new service.
+* Supply representative public image, video, and audio files for the remaining Drive rehearsal, and optionally a Drive API key.
+* Verify the service container, clean restore, capacity target, and joint bot deployment. Run the relevant Compose rehearsal with the explicitly configured test bot when those implementation changes are ready.
 
-**Current state:** Product decisions are recorded. This consolidated technical contract is ready for final review. No application code, migrations, deployment configuration, packages, or credentials have been changed as part of planning.
+**Current state:** The existing app and schema work inside the bot, and the owner accepts the website as the primary interface. The standalone service repository has an earlier core import and in-progress migration work. The bot still opens local archive databases and starts an in-process website. This update records the target architecture and migration checks. It does not claim a completed service split, change real data, or implement API wrappers.
