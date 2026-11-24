@@ -1,10 +1,13 @@
 import { EmbedBuilder } from "discord.js";
-import type { ArtifactDetails, DuplicateDifference } from "../archivist/artifacts.js";
-import { dayText, localDateTime, localText } from "../archivist/dates.js";
-import type { StoredDate } from "../archivist/date-store.js";
-import type { EntityDetails } from "../archivist/entities.js";
-import type { EventDetails } from "../archivist/events.js";
-import type { RequestDetails } from "../archivist/requests.js";
+import { dayText, localDateTime, localText } from "./archivist-dates.js";
+import type {
+  ArtifactDetails,
+  DuplicateDifference,
+  EntityDetails,
+  EventDetails,
+  RequestDetails,
+  StoredDate,
+} from "./archivist-types.js";
 
 /**
  * How Archivist records read in Discord. Stored text is never shortened.

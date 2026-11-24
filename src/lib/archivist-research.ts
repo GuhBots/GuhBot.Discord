@@ -5,67 +5,39 @@ import {
   type ButtonInteraction,
   ButtonStyle,
   type CommandInteraction,
-  type InteractionReplyOptions,
+  type InteractionEditReplyOptions,
   MessageFlags,
   ModalBuilder,
   type ModalSubmitInteraction,
   TextInputBuilder,
   TextInputStyle,
 } from "discord.js";
-import { registeredArchive } from "../archivist/access.js";
-import { archiveDetails } from "../archivist/archives.js";
-import { type ArchivistContext, openStore } from "../archivist/context.js";
-import {
-  assertEventDeletable,
-  createEvent,
-  deleteEvent,
-  type EventDateKind,
-  type EventDetails,
-  getEvent,
-  updateEvent,
-} from "../archivist/events.js";
-import { ArchivistError } from "../archivist/errors.js";
-import { characterNames, resolveCharacters, resolveShortId } from "../archivist/lookup.js";
-import { resolveArchiveSelection } from "../archivist/preferences.js";
-import {
-  type ConstraintInput,
-  createRequest,
-  getRequest,
-  type RequestDetails,
-  updateRequest,
-} from "../archivist/requests.js";
-import { searchEvents, searchRequests } from "../archivist/search.js";
-import { actorOf, archivist } from "./archivist.js";
-import { typedArchive } from "./archivist-entities.js";
+import { type Actor, actorOf, getArchiveDetails, selectArchive } from "./archivist.js";
+import { archivePath, archivistApi } from "./archivist-api.js";
+import { searchRecords } from "./archivist-entities.js";
+import { ArchivistError } from "./archivist-errors.js";
 import { eventEmbed, requestEmbed, shorten } from "./archivist-format.js";
+import { lookupCharacters, lookupNames } from "./archivist-intake.js";
+import type {
+  ArchiveSummary,
+  EntityDetails,
+  EventDateKind,
+  EventDetails,
+  RequestDetails,
+  SearchHit,
+} from "./archivist-types.js";
 
 /**
- * Discord handlers for events and missing-media requests. Discord is for
- * quick additions, so the research board, moving requests between buckets,
- * dated history, and character merge are on the website only, by the
- * owner's decisions of 2026-11-23.
+ * Discord handlers for events and missing-media requests, as a client of the
+ * Archivist service. Discord is for quick additions, so the research board,
+ * moving requests between buckets, dated history, and character merge are on
+ * the website only, by the owner's decisions of 2026-11-23.
  */
 
 const ephemeral = { flags: MessageFlags.Ephemeral } as const;
 
-function archiveName(context: ArchivistContext, archiveId: string): string {
-  return registeredArchive(context, archiveId)?.name ?? "the archive";
-}
-
-function names(
-  context: ArchivistContext,
-  archiveId: string,
-  table: "servers" | "channels" | "events",
-  ids: string[],
-) {
-  const column = table === "events" ? "title" : "label";
-  const statement = openStore(context, archiveId).db.prepare(
-    `SELECT ${column} AS name FROM ${table} WHERE id = ?`,
-  );
-  return ids.map(
-    (id) => (statement.get(id) as { name: string } | undefined)?.name ?? id.slice(0, 8),
-  );
-}
+/** An event with the names of everything it links to, as its read route returns it. */
+type NamedEvent = EventDetails & { names?: Record<string, string> };
 
 /** A form field's value, or undefined when the form left that field out. */
 function optionalField(interaction: ModalSubmitInteraction, id: string): string | undefined {
@@ -81,6 +53,25 @@ function rows(...items: (ActionRowBuilder<TextInputBuilder> | null)[]) {
   return items.filter((item): item is ActionRowBuilder<TextInputBuilder> => item !== null);
 }
 
+async function buttonArchive(actor: Actor, archiveId: string): Promise<ArchiveSummary> {
+  const details = await getArchiveDetails(actor, archiveId);
+  return { archiveId: details.archiveId, name: details.name };
+}
+
+/** Resolves a server or channel typed by full or short ID. */
+async function placeId(
+  actor: Actor,
+  archiveId: string,
+  kind: "server" | "channel",
+  value: string,
+): Promise<string> {
+  const summary = await archivistApi().get<EntityDetails>(
+    actor.userId,
+    archivePath(archiveId, "entities", kind, value.trim(), "summary"),
+  );
+  return summary.id;
+}
+
 /* Events */
 
 const KIND_CODES: Record<EventDateKind, string> = {
@@ -94,34 +85,42 @@ const KIND_FROM_CODE: Record<string, EventDateKind> = {
   w: "occurrence_window",
 };
 
-function eventReply(
-  context: ArchivistContext,
-  archiveId: string,
-  event: EventDetails,
+function getEvent(actor: Actor, archiveId: string, id: string): Promise<NamedEvent> {
+  return archivistApi().get<NamedEvent>(actor.userId, archivePath(archiveId, "events", id));
+}
+
+async function eventReply(
+  actor: Actor,
+  archive: ArchiveSummary,
+  eventId: string,
   headline: string,
-): InteractionReplyOptions {
-  const db = openStore(context, archiveId).db;
+): Promise<InteractionEditReplyOptions> {
+  const [event, details] = await Promise.all([
+    getEvent(actor, archive.archiveId, eventId),
+    getArchiveDetails(actor, archive.archiveId),
+  ]);
+  const name = (id: string) => event.names?.[id] ?? id.slice(0, 8);
   return {
     content: headline,
     embeds: [
       eventEmbed(event, {
-        archiveName: archiveName(context, archiveId),
-        archiveTimeZone: archiveDetails(openStore(context, archiveId)).timezone,
-        characterNames: characterNames(db, event.links.characters),
+        archiveName: archive.name,
+        archiveTimeZone: details.timezone,
+        characterNames: event.links.characters.map(name),
         placeNames: [
-          ...names(context, archiveId, "servers", event.links.servers),
-          ...names(context, archiveId, "channels", event.links.channels).map((name) => `#${name}`),
+          ...event.links.servers.map(name),
+          ...event.links.channels.map((id) => `#${name(id)}`),
         ],
       }),
     ],
     components: [
       new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
-          .setCustomId(`ax:evedit:${archiveId}:${event.id}:${event.version}`)
+          .setCustomId(`ax:evedit:${archive.archiveId}:${event.id}:${event.version}`)
           .setLabel("Edit")
           .setStyle(ButtonStyle.Primary),
         new ButtonBuilder()
-          .setCustomId(`ax:evdel:${archiveId}:${event.id}:${event.version}`)
+          .setCustomId(`ax:evdel:${archive.archiveId}:${event.id}:${event.version}`)
           .setLabel("Delete")
           .setStyle(ButtonStyle.Danger),
       ),
@@ -148,48 +147,51 @@ export async function createEventFromCommand(
   interaction: CommandInteraction,
   options: EventOptions,
 ): Promise<void> {
-  const context = archivist();
+  await interaction.deferReply(ephemeral);
   const actor = await actorOf(interaction);
-  const archive = resolveArchiveSelection(context, actor, options.archive);
-  const db = openStore(context, archive.archiveId).db;
-  const event = createEvent(context, actor, {
-    archiveId: archive.archiveId,
-    title: options.title,
-    description: options.description,
-    dateKind: options.kind,
-    certainty: options.certainty ?? "exact",
-    start: options.start,
-    end: options.end,
-    color: options.color,
-    links: {
-      characters: resolveCharacters(db, options.characters),
-      servers: options.server ? [resolveShortId(db, "servers", options.server, "server")] : [],
-      channels: options.channel ? [resolveShortId(db, "channels", options.channel, "channel")] : [],
+  const archive = await selectArchive(actor, options.archive);
+  const archiveId = archive.archiveId;
+  const event = await archivistApi().post<EventDetails>(
+    actor.userId,
+    archivePath(archiveId, "events"),
+    {
+      title: options.title,
+      description: options.description,
+      dateKind: options.kind,
+      certainty: options.certainty ?? "exact",
+      start: options.start,
+      end: options.end,
+      color: options.color,
+      links: {
+        characters: await lookupCharacters(actor, archiveId, options.characters),
+        servers: options.server ? [await placeId(actor, archiveId, "server", options.server)] : [],
+        channels: options.channel
+          ? [await placeId(actor, archiveId, "channel", options.channel)]
+          : [],
+      },
     },
-  });
-  await interaction.reply({
-    ...ephemeral,
-    ...eventReply(
-      context,
-      archive.archiveId,
-      event,
+  );
+  await interaction.editReply(
+    await eventReply(
+      actor,
+      archive,
+      event.id,
       `Saved to **${archive.name}** - event \`${event.id.slice(0, 8)}\``,
     ),
-  });
+  );
 }
 
 export async function showEventCommand(
   interaction: CommandInteraction,
   options: { archive?: string; id: string },
 ): Promise<void> {
-  const context = archivist();
+  await interaction.deferReply(ephemeral);
   const actor = await actorOf(interaction);
-  const archive = resolveArchiveSelection(context, actor, options.archive);
-  const event = getEvent(context, actor, { archiveId: archive.archiveId, id: options.id });
-  await interaction.reply({
-    ...ephemeral,
-    ...eventReply(context, archive.archiveId, event, `Event \`${event.id.slice(0, 8)}\``),
-  });
+  const archive = await selectArchive(actor, options.archive);
+  const event = await getEvent(actor, archive.archiveId, options.id);
+  await interaction.editReply(
+    await eventReply(actor, archive, event.id, `Event \`${event.id.slice(0, 8)}\``),
+  );
 }
 
 function eventInput(
@@ -218,11 +220,11 @@ export async function showEventForm(
   interaction: CommandInteraction | ButtonInteraction,
   archiveId: string,
   eventId: string,
-  version: number,
+  version?: number,
   kind?: string,
   certainty?: string,
 ): Promise<void> {
-  const event = getEvent(archivist(), await actorOf(interaction), { archiveId, id: eventId });
+  const event = await getEvent(await actorOf(interaction), archiveId, eventId);
   const dateKind = (kind as EventDateKind | undefined) ?? event.dateKind;
   if (!KIND_CODES[dateKind])
     throw new ArchivistError("invalid_input", "Choose a date kind from the list.", {
@@ -230,7 +232,9 @@ export async function showEventForm(
     });
   const sure = (certainty ?? event.certainty) === "estimated" ? "e" : "x";
   const modal = new ModalBuilder()
-    .setCustomId(`ax:evform:${archiveId}:${event.id}:${version}:${KIND_CODES[dateKind]}${sure}`)
+    .setCustomId(
+      `ax:evform:${archiveId}:${event.id}:${version ?? event.version}:${KIND_CODES[dateKind]}${sure}`,
+    )
     .setTitle(shorten(`Edit event ${event.id.slice(0, 8)}`, 45))
     .addComponents(
       ...rows(
@@ -280,55 +284,67 @@ export async function openEventEdit(interaction: ButtonInteraction): Promise<voi
 export async function submitEventForm(interaction: ModalSubmitInteraction): Promise<void> {
   const [, , archiveId = "", eventId = "", version = "", codes = "sx"] =
     interaction.customId.split(":");
-  const context = archivist();
   const actor = await actorOf(interaction);
-  const field = (id: string) => interaction.fields.getTextInputValue(id);
+  await interaction.deferReply(ephemeral);
   const dateKind = KIND_FROM_CODE[codes[0] ?? "s"]!;
-  const current = getEvent(context, actor, { archiveId, id: eventId });
-  const updated = updateEvent(context, actor, {
-    archiveId,
-    id: eventId,
-    expectedVersion: Number(version),
-    title: field("title"),
-    description:
-      field("description") ||
-      (current.description.length > 4000 ? undefined : field("description")),
-    dateKind,
-    certainty: codes[1] === "e" ? "estimated" : "exact",
-    start: field("start"),
-    end: dateKind === "single" ? null : field("end"),
-    disputedReason: field("disputed"),
-  });
-  await interaction.reply({
-    ...ephemeral,
-    ...eventReply(
-      context,
-      archiveId,
-      updated,
+  const [archive, current] = await Promise.all([
+    buttonArchive(actor, archiveId),
+    getEvent(actor, archiveId, eventId),
+  ]);
+  const description = optionalField(interaction, "description");
+  const updated = await archivistApi().patch<EventDetails>(
+    actor.userId,
+    archivePath(archiveId, "events", current.id),
+    {
+      expectedVersion: Number(version),
+      title: interaction.fields.getTextInputValue("title"),
+      // A description too long for the form was left out of it and stays as it is.
+      description: description || undefined,
+      dateKind,
+      certainty: codes[1] === "e" ? "estimated" : "exact",
+      start: interaction.fields.getTextInputValue("start"),
+      end: dateKind === "single" ? null : interaction.fields.getTextInputValue("end"),
+      disputedReason: interaction.fields.getTextInputValue("disputed"),
+    },
+  );
+  await interaction.editReply(
+    await eventReply(
+      actor,
+      archive,
+      updated.id,
       updated.version === current.version
         ? "Nothing changed."
         : `Updated event \`${updated.id.slice(0, 8)}\`.`,
     ),
-  });
+  );
 }
 
+/**
+ * Asks to confirm deleting an event. The service checks first whether a
+ * missing-media request uses it as its date, so a delete it would refuse is
+ * refused before the Delete permanently button appears.
+ */
 export async function askDeleteEvent(
   interaction: CommandInteraction | ButtonInteraction,
   archiveId: string,
   eventId: string,
-  version: number,
+  version?: number,
 ): Promise<void> {
-  const event = getEvent(archivist(), await actorOf(interaction), { archiveId, id: eventId });
-  assertEventDeletable(openStore(archivist(), archiveId).db, event.id);
-  await interaction.reply({
-    ...ephemeral,
+  await interaction.deferReply(ephemeral);
+  const actor = await actorOf(interaction);
+  const event = await getEvent(actor, archiveId, eventId);
+  await archivistApi().get(
+    actor.userId,
+    archivePath(archiveId, "events", event.id, "deletion-check"),
+  );
+  await interaction.editReply({
     content:
       `Permanently delete event **${shorten(event.title, 100)}**? There is no trash or undo. ` +
       "Its links and its own edit history are removed. The artifacts that supported it stay.",
     components: [
       new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
-          .setCustomId(`ax:evdelc:${archiveId}:${event.id}:${version}`)
+          .setCustomId(`ax:evdelc:${archiveId}:${event.id}:${version ?? event.version}`)
           .setLabel("Delete permanently")
           .setStyle(ButtonStyle.Danger),
       ),
@@ -344,12 +360,13 @@ export async function askDeleteEventButton(interaction: ButtonInteraction): Prom
 
 export async function confirmDeleteEvent(interaction: ButtonInteraction): Promise<void> {
   const [, , archiveId = "", eventId = "", version = ""] = interaction.customId.split(":");
-  deleteEvent(archivist(), await actorOf(interaction), {
-    archiveId,
-    id: eventId,
-    expectedVersion: Number(version),
-  });
-  await interaction.update({
+  await interaction.deferUpdate();
+  await archivistApi().delete(
+    (await actorOf(interaction)).userId,
+    archivePath(archiveId, "events", eventId),
+    { expectedVersion: Number(version) },
+  );
+  await interaction.editReply({
     content: "Deleted the event. The artifacts that supported it stay.",
     components: [],
   });
@@ -357,26 +374,29 @@ export async function confirmDeleteEvent(interaction: ButtonInteraction): Promis
 
 /* Missing-media requests */
 
-function requestReply(
-  context: ArchivistContext,
-  archiveId: string,
+async function requestReply(
+  actor: Actor,
+  archive: ArchiveSummary,
   request: RequestDetails,
   headline: string,
-): InteractionReplyOptions {
-  const db = openStore(context, archiveId).db;
+): Promise<InteractionEditReplyOptions> {
+  const names = await lookupNames(actor, archive.archiveId, {
+    characters: request.characters,
+    events: request.events,
+  });
   return {
     content: headline,
     embeds: [
       requestEmbed(request, {
-        archiveName: archiveName(context, archiveId),
-        characterNames: characterNames(db, request.characters),
-        eventNames: names(context, archiveId, "events", request.events),
+        archiveName: archive.name,
+        characterNames: request.characters.map((id) => names.characters[id]!),
+        eventNames: request.events.map((id) => names.events[id]!),
       }),
     ],
     components: [
       new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
-          .setCustomId(`ax:rqedit:${archiveId}:${request.id}:${request.version}`)
+          .setCustomId(`ax:rqedit:${archive.archiveId}:${request.id}:${request.version}`)
           .setLabel("Edit")
           .setStyle(ButtonStyle.Primary),
       ),
@@ -401,17 +421,6 @@ export async function createRequestFromCommand(
   interaction: CommandInteraction,
   options: RequestOptions,
 ): Promise<void> {
-  const context = archivist();
-  const actor = await actorOf(interaction);
-  const archive = resolveArchiveSelection(context, actor, options.archive);
-  const db = openStore(context, archive.archiveId).db;
-  const constraint: ConstraintInput = {
-    kind: options.when,
-    day: options.day,
-    start: options.start,
-    end: options.end,
-    eventId: options.event,
-  };
   const needs: Record<string, (keyof RequestOptions)[]> = {
     approximate_day: ["day"],
     before_date: ["day"],
@@ -427,48 +436,64 @@ export async function createRequestFromCommand(
       { field: missing[0] },
     );
   }
-  const request = createRequest(context, actor, {
-    archiveId: archive.archiveId,
-    description: options.description,
-    characters: resolveCharacters(db, options.characters),
-    constraint,
-    researchNotes: options.notes,
-  });
-  await interaction.reply({
-    ...ephemeral,
-    ...requestReply(
-      context,
-      archive.archiveId,
+  await interaction.deferReply(ephemeral);
+  const actor = await actorOf(interaction);
+  const archive = await selectArchive(actor, options.archive);
+  const archiveId = archive.archiveId;
+  const eventId = options.event ? (await getEvent(actor, archiveId, options.event)).id : undefined;
+  const request = await archivistApi().post<RequestDetails>(
+    actor.userId,
+    archivePath(archiveId, "requests"),
+    {
+      description: options.description,
+      characters: await lookupCharacters(actor, archiveId, options.characters),
+      constraint: {
+        kind: options.when,
+        day: options.day,
+        start: options.start,
+        end: options.end,
+        eventId,
+      },
+      researchNotes: options.notes,
+    },
+  );
+  await interaction.editReply(
+    await requestReply(
+      actor,
+      archive,
       request,
       `Added to the board in **${archive.name}** - request \`${request.id.slice(0, 8)}\``,
     ),
-  });
+  );
+}
+
+function getRequest(actor: Actor, archiveId: string, id: string): Promise<RequestDetails> {
+  return archivistApi().get<RequestDetails>(actor.userId, archivePath(archiveId, "requests", id));
 }
 
 export async function showRequestCommand(
   interaction: CommandInteraction,
   options: { archive?: string; id: string },
 ): Promise<void> {
-  const context = archivist();
+  await interaction.deferReply(ephemeral);
   const actor = await actorOf(interaction);
-  const archive = resolveArchiveSelection(context, actor, options.archive);
-  const request = getRequest(context, actor, { archiveId: archive.archiveId, id: options.id });
-  await interaction.reply({
-    ...ephemeral,
-    ...requestReply(context, archive.archiveId, request, `Request \`${request.id.slice(0, 8)}\``),
-  });
+  const archive = await selectArchive(actor, options.archive);
+  const request = await getRequest(actor, archive.archiveId, options.id);
+  await interaction.editReply(
+    await requestReply(actor, archive, request, `Request \`${request.id.slice(0, 8)}\``),
+  );
 }
 
 export async function showRequestForm(
   interaction: CommandInteraction | ButtonInteraction,
   archiveId: string,
   requestId: string,
-  version: number,
+  version?: number,
 ): Promise<void> {
-  const request = getRequest(archivist(), await actorOf(interaction), { archiveId, id: requestId });
+  const request = await getRequest(await actorOf(interaction), archiveId, requestId);
   await interaction.showModal(
     new ModalBuilder()
-      .setCustomId(`ax:rqform:${archiveId}:${request.id}:${version}`)
+      .setCustomId(`ax:rqform:${archiveId}:${request.id}:${version ?? request.version}`)
       .setTitle(shorten(`Edit request ${request.id.slice(0, 8)}`, 45))
       .addComponents(
         ...rows(
@@ -501,27 +526,30 @@ export async function openRequestEdit(interaction: ButtonInteraction): Promise<v
 
 export async function submitRequestForm(interaction: ModalSubmitInteraction): Promise<void> {
   const [, , archiveId = "", requestId = "", version = ""] = interaction.customId.split(":");
-  const context = archivist();
   const actor = await actorOf(interaction);
-  const updated = updateRequest(context, actor, {
-    archiveId,
-    id: requestId,
-    expectedVersion: Number(version),
-    description: optionalField(interaction, "description"),
-    researchNotes: interaction.fields.getTextInputValue("notes"),
-  });
-  await interaction.reply({
-    ...ephemeral,
-    ...requestReply(context, archiveId, updated, `Updated request \`${updated.id.slice(0, 8)}\`.`),
-  });
+  await interaction.deferReply(ephemeral);
+  const updated = await archivistApi().patch<RequestDetails>(
+    actor.userId,
+    archivePath(archiveId, "requests", requestId),
+    {
+      expectedVersion: Number(version),
+      description: optionalField(interaction, "description"),
+      researchNotes: interaction.fields.getTextInputValue("notes"),
+    },
+  );
+  await interaction.editReply(
+    await requestReply(
+      actor,
+      await buttonArchive(actor, archiveId),
+      updated,
+      `Updated request \`${updated.id.slice(0, 8)}\`.`,
+    ),
+  );
 }
 
 /* Suggestions */
 
-async function respond(
-  interaction: AutocompleteInteraction,
-  hits: { id: string; label: string }[],
-) {
+async function respond(interaction: AutocompleteInteraction, hits: SearchHit[]) {
   await interaction.respond(
     hits.map((hit) => ({
       name: shorten(`${hit.label.replace(/\s+/g, " ")} (${hit.id.slice(0, 8)})`, 100),
@@ -531,19 +559,15 @@ async function respond(
 }
 
 export async function suggestEventIds(interaction: AutocompleteInteraction): Promise<void> {
-  const archiveId = await typedArchive(interaction);
-  if (!archiveId) return interaction.respond([]);
   await respond(
     interaction,
-    searchEvents(openStore(archivist(), archiveId).db, String(interaction.options.getFocused())),
+    await searchRecords(interaction, "event", String(interaction.options.getFocused())),
   );
 }
 
 export async function suggestRequestIds(interaction: AutocompleteInteraction): Promise<void> {
-  const archiveId = await typedArchive(interaction);
-  if (!archiveId) return interaction.respond([]);
   await respond(
     interaction,
-    searchRequests(openStore(archivist(), archiveId).db, String(interaction.options.getFocused())),
+    await searchRecords(interaction, "request", String(interaction.options.getFocused())),
   );
 }

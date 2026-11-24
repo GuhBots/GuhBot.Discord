@@ -9,41 +9,35 @@ import {
   MessageFlags,
   type User,
 } from "discord.js";
-import { ButtonComponent, Discord, Guard, Guild, Slash, SlashGroup, SlashOption } from "discordx";
-import {
-  type ArchiveDetails,
-  createArchive,
-  getArchive,
-  listArchives,
-  registerArchive,
-  renameArchive,
-  unregisterArchive,
-  updateArchiveSettings,
-} from "../archivist/archives.js";
-import { dayText } from "../archivist/dates.js";
-import { type ExportJob, listExports, startExport } from "../archivist/exports.js";
-import { addMember, listMembers, removeMember } from "../archivist/members.js";
+import { ButtonComponent, Discord, Guild, Slash, SlashGroup, SlashOption } from "discordx";
 import { config } from "../config.js";
-import {
-  actorOf,
-  archivist,
-  MAX_SUGGESTIONS,
-  runArchivist,
-  suggestArchives,
-} from "../lib/archivist.js";
+import { actorOf, MAX_SUGGESTIONS, runArchivist, suggestArchives } from "../lib/archivist.js";
+import { archivePath, archivistApi } from "../lib/archivist-api.js";
+import { dayText } from "../lib/archivist-dates.js";
+import { ArchivistError } from "../lib/archivist-errors.js";
 import { recall, remember } from "../lib/archivist-pending.js";
+import type {
+  ArchiveDetails,
+  ArchiveSummary,
+  ExportJob,
+  Me,
+  Member,
+} from "../lib/archivist-types.js";
 import { GUILD_ONLY } from "../lib/categories.js";
 import { baseEmbed } from "../lib/embeds.js";
-import { IsOwner } from "../lib/owner.js";
-import { startWeb, stopWeb, webStatus } from "../lib/archivist-web.js";
-import type { WebStatus } from "../archivist/web/listener.js";
 
 /**
- * Owner-only Archivist administration: archives, whitelists, and settings.
- * Registered only in OWNER_GUILD_ID, like the other owner commands.
+ * Archivist administration: archives, whitelists, and exports, as a client of
+ * the Archivist service. Registered only in OWNER_GUILD_ID, like the other
+ * owner commands. The service decides who is an owner from its own
+ * ARCHIVIST_OWNER_IDS, so these commands have no guard of their own: the
+ * service refuses anyone else, and the reply says so.
  */
 
 const MEMBERS_PER_PAGE = 40;
+/** How often an export's progress is checked, and for how long the reply can still be edited. */
+const EXPORT_POLL_MS = 5_000;
+const EXPORT_WATCH_MS = 14 * 60_000;
 const ephemeral = { flags: MessageFlags.Ephemeral } as const;
 
 const archiveOption = {
@@ -82,6 +76,14 @@ function describeArchive(interaction: CommandInteraction, archive: ArchiveDetail
     );
 }
 
+function archivePathOf(archiveId: string): string {
+  return archivePath(archiveId);
+}
+
+function getArchive(userId: string, archiveId: string): Promise<ArchiveDetails> {
+  return archivistApi().get<ArchiveDetails>(userId, archivePathOf(archiveId));
+}
+
 function megabytes(bytes: number): string {
   return `${(bytes / 1_048_576).toFixed(1)} MB`;
 }
@@ -102,23 +104,27 @@ function exportLine(job: ExportJob): string {
   }
 }
 
-/** Resolves an omitted version to the archive's current one. */
-function versionOrCurrent(interaction: CommandInteraction, archiveId: string, version?: number) {
-  return (
-    version ??
-    getArchive(archivist(), { userId: interaction.user.id, isOwner: true }, archiveId).version
-  );
+/** Resolves an omitted version to the archive's current one. Only owners run these commands. */
+async function versionOrCurrent(userId: string, archiveId: string, version?: number) {
+  return version ?? (await getArchive(userId, archiveId)).version;
 }
 
-/** Where the listener's socket is, which differs from the browser address behind a proxy. */
-function webWhere(status: WebStatus): string {
-  return status.listening ? `It listens on ${status.listening.host}:${status.listening.port}.` : "";
+/** Waits for an export to finish writing, up to `until`. */
+async function waitForExport(userId: string, job: ExportJob, until: number): Promise<ExportJob> {
+  let current = job;
+  while (current.state !== "ready" && current.state !== "failed" && Date.now() < until) {
+    await new Promise((resolve) => setTimeout(resolve, EXPORT_POLL_MS));
+    current = await archivistApi().get<ExportJob>(
+      userId,
+      `/api/exports/${encodeURIComponent(job.id)}`,
+    );
+  }
+  return current;
 }
 
 @Discord()
 @Guild(config.ownerGuildId!)
-@Guard(IsOwner)
-@SlashGroup({ name: "archivist-admin", description: "Archivist administration for the bot owner" })
+@SlashGroup({ name: "archivist-admin", description: "Archivist administration for its owners" })
 @SlashGroup({ name: "archive", description: "Create and manage archives", root: "archivist-admin" })
 @SlashGroup({
   name: "whitelist",
@@ -127,12 +133,7 @@ function webWhere(status: WebStatus): string {
 })
 @SlashGroup({
   name: "export",
-  description: "Zip a whole archive on the bot's host",
-  root: "archivist-admin",
-})
-@SlashGroup({
-  name: "web",
-  description: "Start, stop, or check Archivist's website",
+  description: "Zip a whole archive on the Archivist service's host",
   root: "archivist-admin",
 })
 export class ArchivistAdmin {
@@ -151,7 +152,11 @@ export class ArchivistAdmin {
   ): Promise<void> {
     await runArchivist(interaction, async () => {
       await interaction.deferReply(ephemeral);
-      const archive = createArchive(archivist(), await actorOf(interaction), { name });
+      const archive = await archivistApi().post<ArchiveDetails>(
+        (await actorOf(interaction)).userId,
+        "/api/archives",
+        { name },
+      );
       await interaction.editReply({
         content: "Archive created. Add members with `/archivist-admin whitelist add`.",
         embeds: [describeArchive(interaction, archive)],
@@ -163,10 +168,13 @@ export class ArchivistAdmin {
   @SlashGroup("archive", "archivist-admin")
   async list(interaction: CommandInteraction): Promise<void> {
     await runArchivist(interaction, async () => {
-      const archives = listArchives(archivist(), await actorOf(interaction));
+      await interaction.deferReply(ephemeral);
+      const { archives } = await archivistApi().get<{ archives: ArchiveSummary[] }>(
+        interaction.user.id,
+        "/api/archives",
+      );
       const lines = archives.map((archive) => `**${archive.name}**  \`${archive.archiveId}\``);
-      await interaction.reply({
-        ...ephemeral,
+      await interaction.editReply({
         embeds: [
           baseEmbed(interaction)
             .setTitle("🗄️ Archives")
@@ -200,11 +208,12 @@ export class ArchivistAdmin {
   ): Promise<void> {
     await runArchivist(interaction, async () => {
       await interaction.deferReply(ephemeral);
-      const archive = renameArchive(archivist(), await actorOf(interaction), {
-        archiveId,
-        name,
-        expectedVersion: versionOrCurrent(interaction, archiveId, version),
-      });
+      const userId = interaction.user.id;
+      const archive = await archivistApi().put<ArchiveDetails>(
+        userId,
+        archivePath(archiveId, "name"),
+        { name, expectedVersion: await versionOrCurrent(userId, archiveId, version) },
+      );
       await interaction.editReply({
         content: "Archive renamed.",
         embeds: [describeArchive(interaction, archive)],
@@ -242,12 +251,16 @@ export class ArchivistAdmin {
   ): Promise<void> {
     await runArchivist(interaction, async () => {
       await interaction.deferReply(ephemeral);
-      const archive = updateArchiveSettings(archivist(), await actorOf(interaction), {
-        archiveId,
-        expectedVersion: versionOrCurrent(interaction, archiveId, version),
-        timezone,
-        laneGapDays,
-      });
+      const userId = interaction.user.id;
+      const archive = await archivistApi().patch<ArchiveDetails>(
+        userId,
+        archivePath(archiveId, "settings"),
+        {
+          expectedVersion: await versionOrCurrent(userId, archiveId, version),
+          timezone,
+          laneGapDays,
+        },
+      );
       await interaction.editReply({
         content: "Settings saved.",
         embeds: [describeArchive(interaction, archive)],
@@ -282,7 +295,11 @@ export class ArchivistAdmin {
   ): Promise<void> {
     await runArchivist(interaction, async () => {
       await interaction.deferReply(ephemeral);
-      const result = registerArchive(archivist(), await actorOf(interaction), { archiveId, name });
+      const result = await archivistApi().post<{ archive: ArchiveDetails; warnings: string[] }>(
+        interaction.user.id,
+        "/api/archives/register",
+        { archiveId, name },
+      );
       const notes = result.warnings.length ? `\n${result.warnings.slice(0, 10).join("\n")}` : "";
       await interaction.editReply({
         content: `Archive registered. Nobody else can open it until you add members.${notes}`,
@@ -302,7 +319,8 @@ export class ArchivistAdmin {
     interaction: CommandInteraction,
   ): Promise<void> {
     await runArchivist(interaction, async () => {
-      const archive = getArchive(archivist(), await actorOf(interaction), archiveId);
+      await interaction.deferReply(ephemeral);
+      const archive = await getArchive(interaction.user.id, archiveId);
       const token = remember(interaction.user.id, { archiveId: archive.archiveId });
       const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
@@ -310,8 +328,7 @@ export class ArchivistAdmin {
           .setLabel(`Unregister ${archive.name}`.slice(0, 80))
           .setStyle(ButtonStyle.Danger),
       );
-      await interaction.reply({
-        ...ephemeral,
+      await interaction.editReply({
         content:
           `Unregistering **${archive.name}** removes its whitelist, announcement channel, and remembered selections. ` +
           "Its folder and files stay where they are, and you can register it again later. This button expires in 15 minutes.",
@@ -325,8 +342,9 @@ export class ArchivistAdmin {
     await runArchivist(interaction, async () => {
       const token = interaction.customId.split(":")[2] ?? "";
       const { archiveId } = recall<{ archiveId: string }>(token, interaction.user.id);
-      unregisterArchive(archivist(), await actorOf(interaction), { archiveId });
-      await interaction.update({
+      await interaction.deferUpdate();
+      await archivistApi().delete(interaction.user.id, archivePath(archiveId));
+      await interaction.editReply({
         content: "Archive unregistered. Its files were kept.",
         components: [],
       });
@@ -347,12 +365,12 @@ export class ArchivistAdmin {
     interaction: CommandInteraction,
   ): Promise<void> {
     await runArchivist(interaction, async () => {
-      const { added } = addMember(archivist(), await actorOf(interaction), {
-        archiveId,
-        userId: user.id,
-      });
-      await interaction.reply({
-        ...ephemeral,
+      await interaction.deferReply(ephemeral);
+      const { added } = await archivistApi().put<{ added: boolean }>(
+        interaction.user.id,
+        archivePath(archiveId, "members", user.id),
+      );
+      await interaction.editReply({
         content: added
           ? `${user} can now use this archive.`
           : `${user} could already use this archive.`,
@@ -374,12 +392,12 @@ export class ArchivistAdmin {
     interaction: CommandInteraction,
   ): Promise<void> {
     await runArchivist(interaction, async () => {
-      const { removed } = removeMember(archivist(), await actorOf(interaction), {
-        archiveId,
-        userId: user.id,
-      });
-      await interaction.reply({
-        ...ephemeral,
+      await interaction.deferReply(ephemeral);
+      const { removed } = await archivistApi().delete<{ removed: boolean }>(
+        interaction.user.id,
+        archivePath(archiveId, "members", user.id),
+      );
+      await interaction.editReply({
         content: removed
           ? `${user} can no longer use this archive, starting with their next request.`
           : `${user} was not on this archive's whitelist.`,
@@ -402,22 +420,24 @@ export class ArchivistAdmin {
     interaction: CommandInteraction,
   ): Promise<void> {
     await runArchivist(interaction, async () => {
-      const actor = await actorOf(interaction);
-      const archive = getArchive(archivist(), actor, archiveId);
-      const members = listMembers(archivist(), actor, { archiveId });
+      await interaction.deferReply(ephemeral);
+      const userId = interaction.user.id;
+      const [archive, { members }] = await Promise.all([
+        getArchive(userId, archiveId),
+        archivistApi().get<{ members: Member[] }>(userId, archivePath(archiveId, "members")),
+      ]);
       const pages = Math.max(1, Math.ceil(members.length / MEMBERS_PER_PAGE));
       const current = Math.min(page ?? 1, pages);
       const shown = members.slice((current - 1) * MEMBERS_PER_PAGE, current * MEMBERS_PER_PAGE);
       const lines = shown.map(
         (member) => `<@${member.userId}>  added ${dayText(member.grantedAt.slice(0, 10))}`,
       );
-      await interaction.reply({
-        ...ephemeral,
+      await interaction.editReply({
         allowedMentions: { parse: [] },
         embeds: [
           baseEmbed(interaction)
             .setTitle(`👥 ${archive.name} members`)
-            .setDescription(lines.join("\n") || "Nobody yet. Only you can use this archive.")
+            .setDescription(lines.join("\n") || "Nobody yet. Only owners can use this archive.")
             .setFooter({ text: `Page ${current} of ${pages}, ${members.length} members` }),
         ],
       });
@@ -426,7 +446,7 @@ export class ArchivistAdmin {
 
   @Slash({
     name: "create",
-    description: "Zip a whole archive into the bot's data folder",
+    description: "Zip a whole archive on the Archivist service's host",
     ...GUILD_ONLY,
   })
   @SlashGroup("export", "archivist-admin")
@@ -436,33 +456,29 @@ export class ArchivistAdmin {
   ): Promise<void> {
     await runArchivist(interaction, async () => {
       await interaction.deferReply(ephemeral);
-      const { job, done } = startExport(archivist(), await actorOf(interaction), { archiveId });
+      const userId = interaction.user.id;
+      const started = Date.now();
+      const job = await archivistApi().post<ExportJob>(userId, archivePath(archiveId, "exports"));
       await interaction.editReply({
         content:
-          `Writing the export of **${job.archiveName}** to \`${job.path}\`. ` +
+          `Writing the export of **${job.archiveName}** on the Archivist service's host, at \`${job.path}\`. ` +
           "The snapshot is taken, so later changes are not in it. This reply updates when the zip is done. " +
           "Large archives can take a while, so check `/archivist-admin export list` if it does not.",
       });
-      // The reply token lasts 15 minutes. A longer export still finishes, and
+      // The reply can be edited for 15 minutes. A longer export still finishes, and
       // the list shows it.
-      done.then(
-        (finished) =>
-          interaction
-            .editReply({
-              content:
-                `The export of **${finished.archiveName}** is ready: \`${finished.path}\` ` +
-                `(${megabytes(finished.byteLength ?? 0)}). It stays there until you delete it.`,
-            })
-            .catch(() => undefined),
-        (error: unknown) =>
-          interaction
-            .editReply({
-              content: `The export of **${job.archiveName}** failed. ${
-                error instanceof Error ? error.message : ""
-              }`,
-            })
-            .catch(() => undefined),
-      );
+      const finished = await waitForExport(userId, job, started + EXPORT_WATCH_MS).catch(() => job);
+      if (finished.state === "ready") {
+        await interaction.editReply({
+          content:
+            `The export of **${finished.archiveName}** is ready on the Archivist service's host: ` +
+            `\`${finished.path}\` (${megabytes(finished.byteLength ?? 0)}). It stays there until you delete it.`,
+        });
+      } else if (finished.state === "failed") {
+        await interaction.editReply({
+          content: `The export of **${job.archiveName}** failed (${finished.errorCode ?? "unknown"}).`,
+        });
+      }
     });
   }
 
@@ -470,14 +486,17 @@ export class ArchivistAdmin {
   @SlashGroup("export", "archivist-admin")
   async exportList(interaction: CommandInteraction): Promise<void> {
     await runArchivist(interaction, async () => {
-      const jobs = listExports(archivist(), await actorOf(interaction));
-      await interaction.reply({
-        ...ephemeral,
+      await interaction.deferReply(ephemeral);
+      const { exports } = await archivistApi().get<{ exports: ExportJob[] }>(
+        interaction.user.id,
+        "/api/exports",
+      );
+      await interaction.editReply({
         embeds: [
           baseEmbed(interaction)
             .setTitle("🗜️ Recent exports")
             .setDescription(
-              jobs.map(exportLine).join("\n") ||
+              exports.map(exportLine).join("\n") ||
                 "No exports yet. Make one with `/archivist-admin export create`.",
             ),
         ],
@@ -485,48 +504,32 @@ export class ArchivistAdmin {
     });
   }
 
-  @Slash({ name: "start", description: "Start the website", ...GUILD_ONLY })
-  @SlashGroup("web", "archivist-admin")
-  async webStart(interaction: CommandInteraction): Promise<void> {
-    await runArchivist(interaction, async () => {
-      await interaction.deferReply(ephemeral);
-      const before = webStatus(await actorOf(interaction)).running;
-      const status = await startWeb(interaction.client, await actorOf(interaction));
-      await interaction.editReply({
-        content: `${before ? "The website was already running" : "The website is running"} at ${status.url}. ${webWhere(status)}`,
-      });
-    });
-  }
-
   @Slash({
-    name: "stop",
-    description: "Stop the website. Discord commands keep working",
+    name: "status",
+    description: "Check that the bot reaches Archivist, and whether you are one of its owners",
     ...GUILD_ONLY,
   })
-  @SlashGroup("web", "archivist-admin")
-  async webStop(interaction: CommandInteraction): Promise<void> {
+  @SlashGroup("archivist-admin")
+  async status(interaction: CommandInteraction): Promise<void> {
     await runArchivist(interaction, async () => {
       await interaction.deferReply(ephemeral);
-      const before = webStatus(await actorOf(interaction)).running;
-      await stopWeb(await actorOf(interaction));
+      const address = config.archivistApi.url ?? "not set";
+      let me: Me;
+      try {
+        me = await archivistApi().get<Me>(interaction.user.id, "/api/me");
+      } catch (error) {
+        const reason = error instanceof ArchivistError ? error.message : String(error);
+        await interaction.editReply({
+          content: `The bot could not use Archivist at ${address}. ${reason}`,
+        });
+        return;
+      }
       await interaction.editReply({
-        content: before
-          ? "The website is stopped. Discord commands and saved archives are unaffected."
-          : "The website was already stopped.",
-      });
-    });
-  }
-
-  @Slash({ name: "status", description: "Show whether the website is running", ...GUILD_ONLY })
-  @SlashGroup("web", "archivist-admin")
-  async webStatusCommand(interaction: CommandInteraction): Promise<void> {
-    await runArchivist(interaction, async () => {
-      const status = webStatus(await actorOf(interaction));
-      await interaction.reply({
-        ...ephemeral,
-        content: status.running
-          ? `The website is running at ${status.url}, since <t:${Math.floor(status.since!.getTime() / 1000)}:R>. ${webWhere(status)}`
-          : "The website is stopped. Start it with `/archivist-admin web start`.",
+        content:
+          `The bot reaches Archivist at ${address}. ` +
+          (me.isOwner
+            ? "You are one of its owners."
+            : "You are not one of its owners, so it refuses these commands for you. Owners are set by ARCHIVIST_OWNER_IDS on the Archivist service."),
       });
     });
   }

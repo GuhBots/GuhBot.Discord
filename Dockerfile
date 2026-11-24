@@ -76,8 +76,7 @@ WORKDIR /home/dev/src
 COPY --chown=dev:dev package.json package-lock.json ./
 RUN npm ci
 
-# Compile the TypeScript and build the website, then keep only what the bot
-# needs at run time.
+# Compile the TypeScript, then keep only what the bot needs at run time.
 COPY --chown=dev:dev . .
 RUN npm run build \
     && npm prune --omit=dev \
@@ -91,14 +90,11 @@ RUN npm run build \
 FROM ubuntu:${UBUNTU_VERSION} AS runtime
 
 # Install only what the service needs at run time. CA certificates let it
-# make HTTPS connections. Perl runs ExifTool, which Archivist uses to read
-# photo and video metadata. The base image's minimal Perl lacks modules
-# ExifTool needs for dates, text encodings, and compressed metadata.
+# make HTTPS connections to Discord and to the Archivist service.
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         ca-certificates \
-        perl \
     && rm -rf /var/lib/apt/lists/*
 
 # Run as an unprivileged user. /data holds files that must survive updates,

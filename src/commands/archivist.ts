@@ -24,33 +24,18 @@ import {
   SlashOption,
 } from "discordx";
 import { Category } from "@discordx/utilities";
-import { requireArchiveAccess } from "../archivist/access.js";
-import { removeAnnouncementChannel, setAnnouncementChannel } from "../archivist/announcements.js";
-import { listArchives } from "../archivist/archives.js";
-import { getArtifact } from "../archivist/artifacts.js";
-import { getEntity } from "../archivist/entities.js";
-import { getEvent } from "../archivist/events.js";
-import { getRequest } from "../archivist/requests.js";
-import { openStore } from "../archivist/context.js";
-import { ArchivistError } from "../archivist/errors.js";
-import { suggestCharacters } from "../archivist/lookup.js";
-import {
-  getDateOrder,
-  getTimeZone,
-  resetPreferences,
-  resolveArchiveSelection,
-  setDateOrder,
-  setTimeZone,
-} from "../archivist/preferences.js";
-import type { DateOrder } from "../archivist/dates.js";
 import { config } from "../config.js";
 import {
   actorOf,
-  archivist,
+  autocompleteArchive,
   MAX_SUGGESTIONS,
   runArchivist,
+  selectArchive,
   suggestArchives,
 } from "../lib/archivist.js";
+import { archivePath, archivistApi } from "../lib/archivist-api.js";
+import { ArchivistError } from "../lib/archivist-errors.js";
+import type { ArchiveSummary, DateOrder, Me } from "../lib/archivist-types.js";
 import {
   askDeleteEntity,
   confirmDeleteEntity,
@@ -88,6 +73,7 @@ import {
   cancelZone,
   confirmDelete,
   confirmZone,
+  getArtifact,
   openAddLinks,
   openEdit,
   selectDifferences,
@@ -102,9 +88,10 @@ import { Cooldown } from "../lib/cooldown.js";
 import { baseEmbed } from "../lib/embeds.js";
 
 /**
- * Contributor commands for the archives a member is whitelisted for. The
- * module loads only when ARCHIVIST_GUILD_IDS lists a server, and its commands
- * register only there.
+ * Contributor commands for the archives a member is whitelisted for, as
+ * clients of the Archivist service. The module loads only when
+ * ARCHIVIST_GUILD_IDS lists a server, and its commands register only there.
+ * The service checks every contributor's access on each request.
  */
 
 const ephemeral = { flags: MessageFlags.Ephemeral } as const;
@@ -131,31 +118,24 @@ const archiveOption = {
   autocomplete: suggestArchives,
 } as const;
 
-/**
- * The archive an autocomplete request is about: the one typed in the
- * command's archive field, or the contributor's remembered one. Suggestions never
- * change the remembered archive.
- */
-async function suggestionArchive(interaction: AutocompleteInteraction): Promise<string | null> {
-  const actor = await actorOf(interaction);
-  const typed = interaction.options.getString("archive");
-  try {
-    return typed
-      ? requireArchiveAccess(archivist(), actor, typed).archiveId
-      : resolveArchiveSelection(archivist(), actor, undefined).archiveId;
-  } catch {
-    return null;
-  }
-}
-
+/** Completes the last character name typed in a comma-separated list. */
 async function suggestCharacterNames(interaction: AutocompleteInteraction): Promise<void> {
-  const archiveId = await suggestionArchive(interaction);
-  if (!archiveId) {
-    await interaction.respond([]);
-    return;
+  const archiveId = await autocompleteArchive(interaction);
+  let suggestions: { name: string; value: string }[] = [];
+  if (archiveId) {
+    try {
+      suggestions = (
+        await archivistApi().get<{ suggestions: { name: string; value: string }[] }>(
+          interaction.user.id,
+          archivePath(archiveId, "lookup", "character-suggestions"),
+          { typed: interaction.options.getFocused().slice(0, 200) },
+        )
+      ).suggestions;
+    } catch {
+      // An unreachable service shows no suggestions rather than an error.
+    }
   }
-  const db = openStore(archivist(), archiveId).db;
-  await interaction.respond(suggestCharacters(db, interaction.options.getFocused()));
+  await interaction.respond(suggestions.slice(0, MAX_SUGGESTIONS));
 }
 
 const KIND_CHOICES = [
@@ -230,10 +210,11 @@ async function commandArtifact(
   id: string,
 ) {
   const actor = await actorOf(interaction);
-  const selected = resolveArchiveSelection(archivist(), actor, archive);
+  const selected = await selectArchive(actor, archive);
   return {
+    archive: selected,
     archiveId: selected.archiveId,
-    artifact: getArtifact(archivist(), actor, { archiveId: selected.archiveId, id }),
+    artifact: await getArtifact(actor, selected.archiveId, id),
   };
 }
 
@@ -267,10 +248,10 @@ function checkLogsChannel(interaction: CommandInteraction, channel: GuildBasedCh
 }
 
 /**
- * Builds the contributor commands under a root name. The owner asked on
- * 2026-11-23 for `/a` as a short alias of `/archivist`, so the same commands
- * are registered under both. Only `/archivist` has a /help category, so /help
- * lists each command once. Buttons, forms, and the logs-channel commands are
+ * Builds the contributor commands under a root name. The owner chose `/archive`
+ * with `/a` as its short alias on 2026-11-24, so the same commands are
+ * registered under both. Only `/archive` has a /help category, so /help lists
+ * each command once. Buttons, forms, and the logs-channel commands are
  * registered once, in `ArchivistComponents`.
  */
 function contributorCommands(
@@ -298,15 +279,18 @@ function contributorCommands(
     @Guard(Cooldown(3))
     async archiveList(interaction: CommandInteraction): Promise<void> {
       await runArchivist(interaction, async () => {
-        const archives = listArchives(archivist(), await actorOf(interaction));
-        await interaction.reply({
-          ...ephemeral,
+        await interaction.deferReply(ephemeral);
+        const { archives } = await archivistApi().get<{ archives: ArchiveSummary[] }>(
+          interaction.user.id,
+          "/api/archives",
+        );
+        await interaction.editReply({
           embeds: [
             baseEmbed(interaction)
               .setTitle("🗄️ Your archives")
               .setDescription(
                 archives.map((archive) => `**${archive.name}**`).join("\n") ||
-                  "You are not on any archive's whitelist yet. Ask the bot owner to add you.",
+                  "You are not on any archive's whitelist yet. Ask the archive's owner to add you.",
               ),
           ],
         });
@@ -322,11 +306,11 @@ function contributorCommands(
     @Guard(Cooldown(3))
     async preferencesShow(interaction: CommandInteraction): Promise<void> {
       await runArchivist(interaction, async () => {
-        const actor = await actorOf(interaction);
-        const timezone = getTimeZone(archivist(), actor);
-        const order = getDateOrder(archivist(), actor);
-        await interaction.reply({
-          ...ephemeral,
+        await interaction.deferReply(ephemeral);
+        const me = await archivistApi().get<Me>(interaction.user.id, "/api/me");
+        const timezone = me.preferences.timeZone;
+        const order = me.preferences.dateOrder;
+        await interaction.editReply({
           content: [
             timezone
               ? `Times you type without a zone are read in **${timezone}**.`
@@ -356,9 +340,13 @@ function contributorCommands(
       interaction: CommandInteraction,
     ): Promise<void> {
       await runArchivist(interaction, async () => {
-        const saved = setTimeZone(archivist(), await actorOf(interaction), timezone);
-        await interaction.reply({
-          ...ephemeral,
+        await interaction.deferReply(ephemeral);
+        const saved = (
+          await archivistApi().put<Me["preferences"]>(interaction.user.id, "/api/me/timezone", {
+            timeZone: timezone,
+          })
+        ).timeZone;
+        await interaction.editReply({
           content: `Times you type without a zone are now read in **${saved}**. Dates you already saved keep their meaning.`,
         });
       });
@@ -387,9 +375,13 @@ function contributorCommands(
       interaction: CommandInteraction,
     ): Promise<void> {
       await runArchivist(interaction, async () => {
-        const saved = setDateOrder(archivist(), await actorOf(interaction), order);
-        await interaction.reply({
-          ...ephemeral,
+        await interaction.deferReply(ephemeral);
+        const saved = (
+          await archivistApi().put<Me["preferences"]>(interaction.user.id, "/api/me/date-order", {
+            dateOrder: order,
+          })
+        ).dateOrder;
+        await interaction.editReply({
           content: `All-number dates you type are now read as **${DATE_ORDER_NAMES[saved]}**. Dates you already saved keep their meaning.`,
         });
       });
@@ -404,9 +396,9 @@ function contributorCommands(
     @Guard(Cooldown(3))
     async preferencesReset(interaction: CommandInteraction): Promise<void> {
       await runArchivist(interaction, async () => {
-        resetPreferences(archivist(), await actorOf(interaction));
-        await interaction.reply({
-          ...ephemeral,
+        await interaction.deferReply(ephemeral);
+        await archivistApi().delete(interaction.user.id, "/api/me/preferences");
+        await interaction.editReply({
           content:
             "Your preferences are cleared. Times are read in each archive's timezone, and all-number dates as year, month, day.",
         });
@@ -508,13 +500,13 @@ function contributorCommands(
     ): Promise<void> {
       await runArchivist(interaction, async () => {
         await interaction.deferReply(ephemeral);
-        const { archiveId, artifact } = await commandArtifact(interaction, archive, id);
+        const found = await commandArtifact(interaction, archive, id);
         await interaction.editReply(
-          artifactReply(
-            archivist(),
-            archiveId,
-            artifact,
-            `Artifact \`${artifact.id.slice(0, 8)}\``,
+          await artifactReply(
+            await actorOf(interaction),
+            found.archive,
+            found.artifact,
+            `Artifact \`${found.artifact.id.slice(0, 8)}\` in **${found.archive.name}**`,
           ),
         );
       });
@@ -529,8 +521,8 @@ function contributorCommands(
       interaction: CommandInteraction,
     ): Promise<void> {
       await runArchivist(interaction, async () => {
-        const { archiveId, artifact } = await commandArtifact(interaction, archive, id);
-        await showEditForm(interaction, archiveId, artifact.id, artifact.version);
+        const selected = await selectArchive(await actorOf(interaction), archive);
+        await showEditForm(interaction, selected.archiveId, id);
       });
     }
 
@@ -543,8 +535,8 @@ function contributorCommands(
       interaction: CommandInteraction,
     ): Promise<void> {
       await runArchivist(interaction, async () => {
-        const { archiveId, artifact } = await commandArtifact(interaction, archive, id);
-        await askDeleteFor(interaction, archiveId, artifact.id, artifact.version);
+        const selected = await selectArchive(await actorOf(interaction), archive);
+        await askDeleteFor(interaction, selected.archiveId, id);
       });
     }
 
@@ -721,15 +713,17 @@ function contributorCommands(
       interaction: CommandInteraction,
     ): Promise<void> {
       await runArchivist(interaction, async () => {
-        const actor = await actorOf(interaction);
-        const selected = resolveArchiveSelection(archivist(), actor, archive);
-        const entity = getEntity(archivist(), actor, { archiveId: selected.archiveId, kind, id });
+        if (!["character", "account", "server", "channel"].includes(kind)) {
+          throw new ArchivistError("invalid_input", "Choose a kind from the list.", {
+            field: "kind",
+          });
+        }
+        const selected = await selectArchive(await actorOf(interaction), archive);
         await showEntityForm(
           interaction,
           selected.archiveId,
-          entity.kind,
-          entity.id,
-          entity.version,
+          kind as "character" | "account" | "server" | "channel",
+          id,
         );
       });
     }
@@ -878,17 +872,8 @@ function contributorCommands(
       interaction: CommandInteraction,
     ): Promise<void> {
       await runArchivist(interaction, async () => {
-        const actor = await actorOf(interaction);
-        const selected = resolveArchiveSelection(archivist(), actor, archive);
-        const event = getEvent(archivist(), actor, { archiveId: selected.archiveId, id });
-        await showEventForm(
-          interaction,
-          selected.archiveId,
-          event.id,
-          event.version,
-          kind,
-          certainty,
-        );
+        const selected = await selectArchive(await actorOf(interaction), archive);
+        await showEventForm(interaction, selected.archiveId, id, undefined, kind, certainty);
       });
     }
 
@@ -901,10 +886,8 @@ function contributorCommands(
       interaction: CommandInteraction,
     ): Promise<void> {
       await runArchivist(interaction, async () => {
-        const actor = await actorOf(interaction);
-        const selected = resolveArchiveSelection(archivist(), actor, archive);
-        const event = getEvent(archivist(), actor, { archiveId: selected.archiveId, id });
-        await askDeleteEvent(interaction, selected.archiveId, event.id, event.version);
+        const selected = await selectArchive(await actorOf(interaction), archive);
+        await askDeleteEvent(interaction, selected.archiveId, id);
       });
     }
 
@@ -1018,10 +1001,8 @@ function contributorCommands(
       interaction: CommandInteraction,
     ): Promise<void> {
       await runArchivist(interaction, async () => {
-        const actor = await actorOf(interaction);
-        const selected = resolveArchiveSelection(archivist(), actor, archive);
-        const request = getRequest(archivist(), actor, { archiveId: selected.archiveId, id });
-        await showRequestForm(interaction, selected.archiveId, request.id, request.version);
+        const selected = await selectArchive(await actorOf(interaction), archive);
+        await showRequestForm(interaction, selected.archiveId, id);
       });
     }
   }
@@ -1032,11 +1013,11 @@ function contributorCommands(
 const noCategory: ReturnType<typeof Category> = () => undefined;
 
 export const Archivist = contributorCommands(
-  "archivist",
+  "archive",
   "Archive this community's history",
   Category("Archivist"),
 );
-export const ArchivistShort = contributorCommands("a", "Short for /archivist", noCategory);
+export const ArchivistShort = contributorCommands("a", "Short for /archive", noCategory);
 
 /** Buttons, forms, and the logs-channel commands, registered once for both command names. */
 @Discord()
@@ -1162,8 +1143,10 @@ export class ArchivistComponents {
     interaction: CommandInteraction,
   ): Promise<void> {
     await runArchivist(interaction, async () => {
+      await interaction.deferReply(ephemeral);
       const actor = await actorOf(interaction);
-      const selected = resolveArchiveSelection(archivist(), actor, archive);
+      const selected = await selectArchive(actor, archive);
+      // The bot checks the channel here, because only it can see Discord permissions.
       const target = checkLogsChannel(
         interaction,
         channel ??
@@ -1171,13 +1154,12 @@ export class ArchivistComponents {
             ? null
             : (interaction.channel as GuildBasedChannel | null)),
       );
-      setAnnouncementChannel(archivist(), actor, {
-        archiveId: selected.archiveId,
-        guildId: target.guild.id,
-        channelId: target.id,
-      });
-      await interaction.reply({
-        ...ephemeral,
+      await archivistApi().put(
+        actor.userId,
+        archivePath(selected.archiveId, "artifact-logs-channel"),
+        { guildId: target.guild.id, channelId: target.id },
+      );
+      await interaction.editReply({
         content: `New artifacts in **${selected.name}** will be announced in ${target}, for everyone's uploads. Earlier posts are unchanged.`,
       });
     });
@@ -1194,13 +1176,14 @@ export class ArchivistComponents {
     interaction: CommandInteraction,
   ): Promise<void> {
     await runArchivist(interaction, async () => {
+      await interaction.deferReply(ephemeral);
       const actor = await actorOf(interaction);
-      const selected = resolveArchiveSelection(archivist(), actor, archive);
-      const { removed } = removeAnnouncementChannel(archivist(), actor, {
-        archiveId: selected.archiveId,
-      });
-      await interaction.reply({
-        ...ephemeral,
+      const selected = await selectArchive(actor, archive);
+      const { removed } = await archivistApi().delete<{ removed: boolean }>(
+        actor.userId,
+        archivePath(selected.archiveId, "artifact-logs-channel"),
+      );
+      await interaction.editReply({
         content: removed
           ? `New artifacts in **${selected.name}** will no longer be announced. Earlier posts stay where they are.`
           : `**${selected.name}** had no announcement channel.`,

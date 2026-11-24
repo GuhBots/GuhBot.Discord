@@ -6,62 +6,21 @@ import {
   type ModalSubmitInteraction,
   type StringSelectMenuInteraction,
 } from "discord.js";
-import { settleInterruptedAnnouncements } from "../archivist/announcements.js";
-import { listArchives } from "../archivist/archives.js";
-import {
-  type Actor,
-  type ArchivistContext,
-  closeArchivistContext,
-  createArchivistContext,
-} from "../archivist/context.js";
-import { ArchivistError, type ErrorCode } from "../archivist/errors.js";
-import { settleInterruptedExports } from "../archivist/exports.js";
-import { cleanStaging } from "../archivist/media.js";
-import { closeMetadataReader } from "../archivist/metadata.js";
-import { config } from "../config.js";
-import { getDatabase } from "./database.js";
+import { archivePath, archivistApi } from "./archivist-api.js";
+import { ArchivistError, type ErrorCode } from "./archivist-errors.js";
+import type { ArchiveDetails, ArchiveSummary } from "./archivist-types.js";
 import { replyError } from "./embeds.js";
-import { onShutdown } from "./lifecycle.js";
-import { isApplicationOwner } from "./owner.js";
 
 /**
- * The Discord side of Archivist: one shared context for every command, the
- * acting contributor, and error replies. The archive rules live in `src/archivist/`.
+ * The Discord side of Archivist. The Archivist service holds the archives
+ * and applies every rule. These commands send what the contributor typed to
+ * its API, as that contributor, and turn the answers into replies. The
+ * service decides who may do what, so the bot never checks owner status or
+ * whitelists itself.
  */
 
 /** Discord shows at most this many autocomplete suggestions. */
 export const MAX_SUGGESTIONS = 25;
-
-const SWEEP_INTERVAL_MS = 5 * 60_000;
-
-let context: ArchivistContext | undefined;
-
-/** The shared Archivist context, created on first use. */
-export function archivist(): ArchivistContext {
-  if (!context) {
-    context = createArchivistContext({ dataDir: config.dataDir, botDb: getDatabase() });
-    cleanStaging(context);
-    settleInterruptedExports(context);
-    const unknown = settleInterruptedAnnouncements(context);
-    if (unknown > 0) {
-      console.warn(
-        `Archivist: ${unknown} announcement(s) were interrupted and will not be resent.`,
-      );
-    }
-    const sweeper = setInterval(() => {
-      if (!context) return;
-      cleanStaging(context);
-    }, SWEEP_INTERVAL_MS);
-    sweeper.unref();
-    onShutdown(async () => {
-      clearInterval(sweeper);
-      if (context) closeArchivistContext(context);
-      context = undefined;
-      await closeMetadataReader();
-    });
-  }
-  return context;
-}
 
 type AnyInteraction =
   | CommandInteraction
@@ -70,12 +29,47 @@ type AnyInteraction =
   | StringSelectMenuInteraction
   | ModalSubmitInteraction;
 
-/** The contributor behind an interaction. Owner status is re-checked at most every five minutes. */
+/** The contributor a request acts for: the Discord user behind the interaction. */
+export interface Actor {
+  userId: string;
+}
+
 export async function actorOf(interaction: AnyInteraction): Promise<Actor> {
-  return {
-    userId: interaction.user.id,
-    isOwner: await isApplicationOwner(interaction.client, interaction.user.id),
-  };
+  return { userId: interaction.user.id };
+}
+
+/**
+ * The archive a contributor command uses. An archive given in the command is
+ * checked and remembered by the service. Without one, the service returns the
+ * contributor's remembered archive, or asks them to choose.
+ */
+export function selectArchive(actor: Actor, archive?: string | null): Promise<ArchiveSummary> {
+  return archivistApi().post<ArchiveSummary>(actor.userId, "/api/me/archive-selection", {
+    archiveId: archive || undefined,
+  });
+}
+
+/** An archive's name, timezone, and display settings. */
+export function getArchiveDetails(actor: Actor, archiveId: string): Promise<ArchiveDetails> {
+  return archivistApi().get<ArchiveDetails>(actor.userId, archivePath(archiveId));
+}
+
+/**
+ * The archive an autocomplete request is about: the one typed in the
+ * command's archive option, or the contributor's remembered one. Asking for
+ * the remembered archive never changes it. Null when there is none, so the
+ * suggestion list is empty rather than an error.
+ */
+export async function autocompleteArchive(
+  interaction: AutocompleteInteraction,
+): Promise<string | null> {
+  const typed = interaction.options.getString("archive");
+  if (typed) return typed;
+  try {
+    return (await selectArchive(await actorOf(interaction))).archiveId;
+  } catch {
+    return null;
+  }
 }
 
 const ERROR_TITLES: Record<ErrorCode, string> = {
@@ -91,13 +85,13 @@ const ERROR_TITLES: Record<ErrorCode, string> = {
   media_too_large: "File too large",
   unsupported_media_type: "Unsupported file",
   upstream_rate_limited: "Try again shortly",
-  dependency_unavailable: "Archive unavailable",
+  dependency_unavailable: "Archivist unavailable",
+  internal_error: "Something went wrong",
 };
 
 /**
  * Runs an Archivist command, replying privately with a readable message when
- * it fails. Unexpected errors are logged and reported without their details,
- * which can include file paths.
+ * it fails. Unexpected errors are logged and reported without their details.
  */
 export async function runArchivist(
   interaction:
@@ -135,11 +129,19 @@ export async function runArchivist(
 /** Suggests the archives the contributor can open, matching what they typed. */
 export async function suggestArchives(interaction: AutocompleteInteraction): Promise<void> {
   const typed = interaction.options.getFocused().toLowerCase();
-  const archives = listArchives(archivist(), await actorOf(interaction))
-    .filter((archive) => archive.name.toLowerCase().includes(typed))
-    .slice(0, MAX_SUGGESTIONS);
+  let archives: ArchiveSummary[] = [];
+  try {
+    archives = (
+      await archivistApi().get<{ archives: ArchiveSummary[] }>(interaction.user.id, "/api/archives")
+    ).archives;
+  } catch {
+    // An unreachable service shows no suggestions rather than an error.
+  }
   await interaction.respond(
-    archives.map((archive) => ({ name: archive.name.slice(0, 100), value: archive.archiveId })),
+    archives
+      .filter((archive) => archive.name.toLowerCase().includes(typed))
+      .slice(0, MAX_SUGGESTIONS)
+      .map((archive) => ({ name: archive.name.slice(0, 100), value: archive.archiveId })),
   );
 }
 

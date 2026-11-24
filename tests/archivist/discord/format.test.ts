@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { mock, test } from "node:test";
-import type { ArtifactDetails } from "../../../src/archivist/artifacts.js";
-import type { EventDetails } from "../../../src/archivist/events.js";
-import type { RequestDetails } from "../../../src/archivist/requests.js";
-import { ArchivistError } from "../../../src/archivist/errors.js";
+import { ArchivistError } from "../../../src/lib/archivist-errors.js";
+import type {
+  ArtifactDetails,
+  EventDetails,
+  RequestDetails,
+} from "../../../src/lib/archivist-types.js";
 import {
   artifactEmbed,
   dateText,

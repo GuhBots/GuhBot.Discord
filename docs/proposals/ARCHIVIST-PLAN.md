@@ -52,7 +52,7 @@ The current bot implementation at `1f83f66` has archive storage and migrations, 
 
 The website already has its shell, timeline, album, artifact and event forms, calendar, Places, and Heatmap. Graph, Board, and the character page remain incomplete. The existing schema is not being redesigned as part of this split.
 
-A sibling `GuhBot.Archivist` repository exists on `feat/service`. Commit `317ffe2` imported the core and website routes from the bot's earlier `d4b46a8` checkpoint into `apps/server`. Uncommitted work there includes a service entry point, service authentication, owner administration routes, an announcement queue, and an operational-state importer. These files are work in progress, not verified evidence that migration is complete. Reconcile them with later bot-side changes through `1f83f66`, including the frontend and entity picture uploads, before applying patches.
+The sibling `GuhBot.Archivist` repository on `feat/service` now holds the service. It carries the core, routes, and website from the bot through `2e7c752` (formerly `1f83f66`), the standalone entry point, admission, owner IDs, the bot credential, the announcement queue, the operational-state importer, the container, and its tests. On the bot's `feat/archivist`, the Archivist commands are API clients, and the in-bot core, website, and their tests and dependencies are removed. The real archive data has not been moved yet. [Migration Sequence](#migration-sequence) tracks what remains.
 
 | Repository And Area | Target Responsibility |
 | --- | --- |
@@ -436,7 +436,7 @@ Retain group-qualified raw tag names and values in `metadata_json`. Do not combi
 
 ### Archive Schema Draft
 
-This is the initial archive schema. It is implemented as migration version 1 in [archive-schema.ts](../../src/archivist/migrations/archive-schema.ts), which must match this block. Additional migrations must update the embedded version and `PRAGMA user_version` together, preserve existing data, and back up before destructive changes. Refuse writes to a newer unsupported schema. Version checks use `>= 1` so later migrations need not rebuild the metadata table. Code refuses versions newer than it supports. There is no automatic downgrade.
+This is the initial archive schema. It is implemented as migration version 1 in [archive-schema.ts](https://github.com/GuhBots/GuhBot.Archivist/blob/feat/service/apps/server/src/archivist/migrations/archive-schema.ts) in the service, which must match this block. Additional migrations must update the embedded version and `PRAGMA user_version` together, preserve existing data, and back up before destructive changes. Refuse writes to a newer unsupported schema. Version checks use `>= 1` so later migrations need not rebuild the metadata table. Code refuses versions newer than it supports. There is no automatic downgrade.
 
 ```sql
 PRAGMA foreign_keys = ON;
@@ -953,6 +953,25 @@ ALTER TABLE archivist_sessions ADD COLUMN display_name TEXT;
 ALTER TABLE archivist_sessions ADD COLUMN avatar_url TEXT;
 ```
 
+Operational migration version 4 belongs to the standalone service, in its `operational.db`. It adds the queue of announcements waiting for the bot, each with the channel set and a snapshot of the artifact when it was saved, and the claim identity the bot reports results under. Artifact creation queues its post through the archive mutation's journal, so recovery after a crash finishes it.
+
+```sql
+CREATE TABLE archivist_announcement_queue (
+  archive_id TEXT NOT NULL REFERENCES archivist_archives(archive_id) ON DELETE CASCADE,
+  artifact_id TEXT NOT NULL,
+  guild_id TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL CHECK (json_valid(snapshot_json)),
+  queued_at TEXT NOT NULL,
+  PRIMARY KEY (archive_id, artifact_id)
+);
+
+CREATE INDEX archivist_announcement_queue_order
+  ON archivist_announcement_queue(queued_at, archive_id, artifact_id);
+
+ALTER TABLE archivist_announcements ADD COLUMN claim_id TEXT;
+```
+
 ## Command And Interface Contract
 
 ### Discord Commands
@@ -972,7 +991,7 @@ Owner commands retain `/archivist-admin` in `OWNER_GUILD_ID`, but Archivist admi
 | `/archivist-admin whitelist remove` | Archive and Discord user. Remove idempotently, effective on next request |
 | `/archivist-admin whitelist list` | Archive. List every entry with pagination and an empty state |
 | `/archivist-admin export create`, `list` | Archive for create. Take a consistent snapshot, write the zip on the host, and report its path, size, or failure. List recent exports with their state and whether the zip is still on disk |
-| `/archivist-admin web start`, `stop`, `status` | Retire `start` and `stop` at service cutover. A status wrapper may report API reachability without controlling its lifecycle |
+| `/archivist-admin status` | Reports whether the bot reaches the service and whether the caller is a service owner. It controls nothing. `web start` and `stop` are retired |
 | `/archive archive list` | List only accessible archives, or all for the owner |
 | `/archive artifact add` | Archive, description, and exactly one attachment or Drive file link. Optional dates and links to existing records. Return saved record or duplicate review |
 | `/archive artifact show`, `edit`, `delete` | Archive and artifact ID. Edit requires current version. Delete follows confirmation and cleanup rules |
@@ -1028,7 +1047,7 @@ The bracket notation in the table abbreviates separate collection and item route
 
 ### Service API Extensions
 
-The service also needs the following contracts to replace direct calls made by the existing bot. Their implementations in the sibling repository are still being reconciled and tested. Paths are relative to the configured service base path. Routes marked Owner require a browser owner session or a valid service credential naming a service owner. Service-only routes cannot be used with a browser session.
+The service also needs the following contracts to replace direct calls made by the existing bot. They are implemented and tested in the service, and its [Bot API](https://github.com/GuhBots/GuhBot.Archivist/blob/feat/service/docs/design/bot-api.md) document freezes their exact request and response shapes, including the multipart Discord upload fields, the lookups, and the claim and report bodies. Paths are relative to the configured service base path. Routes marked Owner require a browser owner session or a valid service credential naming a service owner. Service-only routes cannot be used with a browser session.
 
 | Route Or Capability | Authorization And Result |
 | --- | --- |
@@ -1204,10 +1223,8 @@ The earlier `Q01` through `Q19` topic discussion is resolved into the contract s
 
 ### Outstanding Verification Prerequisites
 
-* Implement the confirmed [Migration Decisions](#migration-decisions) with tests for admission, service ownership, and the renamed commands.
-* Reconcile and test the uncommitted service work and port the existing website without overwriting concurrent changes. No key-generation command, completed migration, or split deployment is claimed by this plan update.
 * Rehearse key configuration and rotation with synthetic credentials, Discord sign-in on the service callback, current whitelist revocation, and the API-backed bot before real data cutover. Live sign-in already passed in the in-bot deployment, not yet in the new service.
 * Supply representative public image, video, and audio files for the remaining Drive rehearsal, and optionally a Drive API key.
 * Verify the service container, clean restore, capacity target, and joint bot deployment. Run the relevant Compose rehearsal with the explicitly configured test bot when those implementation changes are ready.
 
-**Current state:** The existing app and schema work inside the bot, and the owner accepts the website as the primary interface. The standalone service repository has an earlier core import and in-progress migration work. The bot still opens local archive databases and starts an in-process website. This update records the target architecture and migration checks. It does not claim a completed service split, change real data, or implement API wrappers.
+**Current state (2026-11-24):** `S1` to `S3` are implemented with automated evidence. The service runs on its own with admission, owner IDs, the bot credential, the announcement queue, and its container, and the bot's Archivist commands call it, with `/archive` and `/a` in place of `/archivist`. The in-bot website and archive code are removed. Not yet done: the live joint rehearsal with the owner's Discord account and browser, the `S4` data-transfer rehearsal on copies of the owner's data, the `S5` cutover with transfer of this plan to the service repository, and `S6`. No real data was changed.

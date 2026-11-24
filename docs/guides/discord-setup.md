@@ -39,29 +39,23 @@ The `applications.commands` scope lets the bot register slash commands. A server
 | `OWNER_GUILD_ID` | Your test server's ID, to try owner commands | The server where you run owner commands |
 | `MODULES` | Empty, or only the modules you are testing | Empty for every module, or the modules to turn on |
 | `ARCHIVIST_GUILD_IDS` | Your test server's ID, to try the Archivist module | The servers that use the Archivist module |
-| `GOOGLE_DRIVE_API_KEY` | Empty | Empty, or a key restricted to the Drive API. Public Drive links work without it. With a key, Archivist uses Google's official Drive API instead |
+| `ARCHIVIST_API_URL`, `ARCHIVIST_SERVICE_TOKEN` | Your local Archivist service, such as `http://127.0.0.1:3000`, and its token | The production Archivist service and its token. See [Connecting to Archivist](#connecting-to-archivist) |
 | `STATUS_CHANNEL_ID` | Empty, or a test channel | The channel for startup and shutdown messages |
 | `SUPPORT_URL`, `WEBSITE_URL`, `TOPGG_URL`, `DISCORDBOTLIST_URL` | Optional | The links to show. Leave one empty to hide it |
 
-## Archivist's Website
+## Connecting to Archivist
 
-Archivist's website runs inside the bot. It is off until the owner runs `/archivist-admin web start`, and it refuses to start until these settings are set. Signing in with Discord works at `ARCHIVIST_BASE_URL` followed by `/auth/discord`. Its pages are still being built, so after signing in it shows a placeholder page.
+The Archivist module's commands call the separate Archivist service, GuhBot.Archivist, which holds the archives and serves the website. The bot needs two settings to reach it, and refuses to start the module without them.
 
-1. In the [Discord Developer Portal](https://discord.com/developers/applications), open the bot's application and go to **OAuth2**.
-2. Copy the **Client ID** into `DISCORD_CLIENT_ID`.
-3. Select **Reset Secret**, and copy the secret into `DISCORD_CLIENT_SECRET`. It is shown once. Keep it out of Git and chat.
-4. Under **Redirects**, add `http://localhost:3000/auth/discord/callback` for local testing, and save. A hosted website adds its own address with the same path, such as `https://archive.home.example/auth/discord/callback`.
-5. Generate a session secret with `openssl rand -hex 32` and set it as `ARCHIVIST_SESSION_SECRET`.
+1. Generate a service token on any trusted machine with `openssl rand -hex 32`. It is not the bot's Discord token.
+2. Put it in the Archivist service's `.env` as `ARCHIVIST_SERVICE_TOKEN`, and restart Archivist.
+3. Put the same value in this bot's `.env` as `ARCHIVIST_SERVICE_TOKEN`.
+4. Set `ARCHIVIST_API_URL` to Archivist's address as the bot reaches it, including any path, such as `https://guhbot.example.com/archivist`, or `http://127.0.0.1:3000` when both run on one machine.
+5. Restart the bot and run `/archivist-admin status` in the owner server. It says whether the bot reached Archivist and whether you are one of its owners.
 
-| Setting | Development | Production |
-| --- | --- | --- |
-| `ARCHIVIST_HOST` | `127.0.0.1` | `0.0.0.0` in a container, which `compose.yaml` sets |
-| `ARCHIVIST_PORT` | `3000` | The port the reverse proxy forwards to |
-| `ARCHIVIST_BASE_URL` | `http://localhost:3000` | The HTTPS address browsers use |
-| `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` | The test application's | The production application's |
-| `ARCHIVIST_SESSION_SECRET` | Any 32 or more random bytes | A different random secret |
+To change the token, generate a new one, put it in Archivist's `.env` and restart Archivist, then put it here and restart the bot. Archivist's own guide, Connecting the Bot, covers the address choices, the website's sign-in settings, and turning the bot's access off.
 
-The redirect registered in the portal must be `ARCHIVIST_BASE_URL` followed by `/auth/discord/callback`, exactly, including any path in the base address. Plain `http` addresses work only for localhost; anything else needs `https`.
+The bot sends the token with every Archivist request, along with the Discord user who ran the command. Archivist checks that user's access itself, so the token never makes anyone an owner. Archivist's owners are the Discord users in its `ARCHIVIST_OWNER_IDS`, not this application's owners.
 
 ## How Commands Are Registered
 

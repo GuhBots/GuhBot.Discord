@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { ArchivistError } from "../archivist/errors.js";
+import { ArchivistError } from "./archivist-errors.js";
 
 /**
  * Pending Discord confirmations and reviews, such as "unregister this

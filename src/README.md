@@ -10,9 +10,8 @@ The bot's TypeScript source. `npm run build` compiles it to `build/`.
 | `config.ts` | Settings read from environment variables, and paths to `assets/` |
 | `modules.ts` | The list of modules, and which ones this run loads |
 | `commands/` | One file per module, plus `owner.ts` for owner commands and `archivist-admin.ts` for Archivist administration |
-| `events/` | Gateway event listeners, such as the AFK listener |
-| `lib/` | Shared helpers for command sync, embeds, cooldowns, the database, presence, shutdown, and the Discord side of Archivist |
-| `archivist/` | Archivist's shared storage and rules, described in its [README](archivist/README.md) |
+| `events/` | Gateway event listeners, such as the AFK listener, and the poller that posts Archivist's queued announcements |
+| `lib/` | Shared helpers for command sync, embeds, cooldowns, the database, presence, shutdown, and the Archivist commands' client of the Archivist service's API |
 
 ## Modules
 

@@ -23,14 +23,9 @@ services:
       OWNER_GUILD_ID: ${OWNER_GUILD_ID:-}
       MODULES: ${MODULES:-}
       ARCHIVIST_GUILD_IDS: ${ARCHIVIST_GUILD_IDS:-}
-      GOOGLE_DRIVE_API_KEY: ${GOOGLE_DRIVE_API_KEY:-}
-      # A container must listen on 0.0.0.0 for its published port to reach it.
-      ARCHIVIST_HOST: ${ARCHIVIST_HOST:-0.0.0.0}
-      ARCHIVIST_PORT: ${ARCHIVIST_PORT:-3000}
-      ARCHIVIST_BASE_URL: ${ARCHIVIST_BASE_URL:-http://localhost:3000}
-      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
-      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-}
-      ARCHIVIST_SESSION_SECRET: ${ARCHIVIST_SESSION_SECRET:-}
+      # The separate Archivist service, needed when the Archivist module is on.
+      ARCHIVIST_API_URL: ${ARCHIVIST_API_URL:-}
+      ARCHIVIST_SERVICE_TOKEN: ${ARCHIVIST_SERVICE_TOKEN:-}
       STATUS_CHANNEL_ID: ${STATUS_CHANNEL_ID:-}
       SUPPORT_URL: ${SUPPORT_URL:-}
       WEBSITE_URL: ${WEBSITE_URL:-}
@@ -41,9 +36,8 @@ services:
     init: true
     volumes:
       - data:/data
-    # No ports are published, so a port already in use on the host can never
-    # stop the bot from starting. To reach Archivist's website, publish its
-    # port as described in docs/guides/self-hosting.md.
+    # The bot only makes outgoing connections, so it publishes no ports.
+    # Archivist's website is a separate service, GuhBot.Archivist.
     # Limit log size so that logs cannot fill the disk or wear out an SD card.
     logging:
       driver: json-file

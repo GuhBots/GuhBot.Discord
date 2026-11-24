@@ -67,7 +67,13 @@ export const ALL_MODULES: readonly BotModule[] = [
     description: "Archiving tools for this server",
     servers: { ids: config.archivistGuildIds, setting: "ARCHIVIST_GUILD_IDS" },
     load: async () => {
+      // The commands call the separate Archivist service, so its address and
+      // token must be set. This stops the start with a message naming them.
+      const { archivistApi } = await import("./lib/archivist-api.js");
+      archivistApi();
       await import("./commands/archivist.js");
+      // Posts the upload announcements Archivist queues, such as for website uploads.
+      await import("./events/archivist-announcements.js");
       // Archivist administration is an owner command, so it registers only in
       // the owner's server, and only when Archivist itself is on.
       if (config.ownerGuildId) await import("./commands/archivist-admin.js");

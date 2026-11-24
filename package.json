@@ -9,46 +9,28 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "tsc && vite build --config web/vite.config.ts",
+    "build": "tsc",
     "start": "node --env-file-if-exists=.env build/main.js",
     "dev": "tsc && npm start",
-    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json --noEmit && tsc -p web/tsconfig.json",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check": "npm run typecheck && npm run format:check",
-    "build:tests": "node -e \"require('node:fs').rmSync('.test-build', { recursive: true, force: true })\" && tsc -p tsconfig.test.json",
-    "test:archivist:core": "npm run build:tests && node --test \".test-build/tests/archivist/core/**/*.test.js\"",
-    "test:archivist:discord": "npm run build:tests && node --test \".test-build/tests/archivist/discord/**/*.test.js\"",
-    "test:archivist:web": "npm run build:tests && node --test \".test-build/tests/archivist/web/**/*.test.js\""
+    "build:tests": "node -e \"const fs = require('node:fs'); fs.rmSync('.test-build', { recursive: true, force: true })\" && tsc -p tsconfig.test.json && node -e \"require('node:fs').copyFileSync('package.json', '.test-build/package.json')\"",
+    "test:archivist:discord": "npm run build:tests && node --test \".test-build/tests/archivist/discord/**/*.test.js\""
   },
   "dependencies": {
     "@discordx/utilities": "^8.0.0",
-    "@fastify/cookie": "11.1.5",
-    "@fastify/multipart": "10.1.9",
-    "@fastify/static": "10.1.12",
-    "archiver": "8.0.0",
     "better-sqlite3": "^13.2.0",
     "discord.js": "^14.28.1",
     "discordx": "^11.13.3",
-    "exiftool-vendored": "39.4.0",
-    "fastify": "5.12.8",
     "reflect-metadata": "^0.2.2",
     "sharp": "^0.35.5"
   },
   "devDependencies": {
-    "@playwright/test": "1.65.1",
-    "@tailwindcss/vite": "4.3.5",
-    "@types/archiver": "8.0.0",
     "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^24.19.2",
-    "@types/react": "19.3.0",
-    "@types/react-dom": "19.3.0",
-    "@vitejs/plugin-react": "6.3.0",
     "prettier": "^3.10.1",
-    "react": "19.3.1",
-    "react-dom": "19.3.1",
-    "tailwindcss": "4.3.5",
-    "typescript": "~5.9.3",
-    "vite": "8.3.8"
+    "typescript": "~5.9.3"
   }
 }
