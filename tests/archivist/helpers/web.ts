@@ -2,7 +2,7 @@ import type {} from "@fastify/cookie";
 import type { TestContext } from "node:test";
 import type { FastifyInstance } from "fastify";
 import type { Actor, ArchivistContext } from "../../../src/archivist/context.js";
-import { buildWebApp } from "../../../src/archivist/web/app.js";
+import { buildWebApp, type WebAppOptions } from "../../../src/archivist/web/app.js";
 import { createSession } from "../../../src/archivist/web/sessions.js";
 import { checkWebSettings, type WebSettings } from "../../../src/archivist/web/settings.js";
 import { makeArchivist, NOW } from "./context.js";
@@ -27,10 +27,16 @@ export interface WebHarness {
   cookie(actor: Actor): string;
 }
 
+/** What a test may replace: the bot's announcer and channel check, and the network. */
+export type WebOverrides = Partial<
+  Pick<WebAppOptions, "announce" | "checkAnnouncementChannel" | "fetch" | "driveApiKey">
+>;
+
 /** The website on an in-memory request injector, with a temporary data directory. */
 export async function webHarness(
   t: TestContext,
   settings: WebSettings = WEB_SETTINGS,
+  overrides: WebOverrides = {},
 ): Promise<WebHarness> {
   checkWebSettings(settings);
   const { context } = makeArchivist(t);
@@ -45,8 +51,9 @@ export async function webHarness(
       throw new Error(`Unexpected website failure: ${message}`, { cause: error });
     },
     fetch: (async () => {
-      throw new Error("Tests do not reach Discord.");
+      throw new Error("Tests do not reach Discord or Google.");
     }) as typeof fetch,
+    ...overrides,
   });
   await app.ready();
   t.after(() => app.close());

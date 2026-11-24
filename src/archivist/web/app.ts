@@ -1,12 +1,16 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import fastifyCookie from "@fastify/cookie";
+import fastifyMultipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
 import Fastify, { type FastifyError, type FastifyInstance } from "fastify";
 import type { ArchivistContext } from "../context.js";
 import { ArchivistError } from "../errors.js";
+import { MAX_MEDIA_BYTES } from "../media.js";
 import { type Auth, createAuth } from "./auth.js";
 import { registerChangeRoutes } from "./change-routes.js";
+import { type IntakeOptions, registerIntakeRoutes } from "./intake-routes.js";
+import { registerMediaRoutes } from "./media-routes.js";
 import { registerReadRoutes } from "./read-routes.js";
 import type { Fetch } from "./discord-oauth.js";
 import { basePathOf, redirectUriOf, type WebSettings } from "./settings.js";
@@ -29,8 +33,14 @@ export interface WebAppOptions {
   frontendRoot: string;
   /** Records unexpected failures. Their details never reach the browser. */
   logError(message: string, error: unknown): void;
-  /** Replaced in tests, which stand in for Discord. */
+  /** Replaced in tests, which stand in for Discord and Google Drive. */
   fetch?: Fetch;
+  /** Posts web uploads to the logs channel. The bot provides it. */
+  announce?: IntakeOptions["announce"];
+  /** Checks a Discord channel chosen for announcements. The bot provides it. */
+  checkAnnouncementChannel?: IntakeOptions["checkAnnouncementChannel"];
+  /** Switches Drive links to Google's official API, as in Discord. */
+  driveApiKey?: string;
 }
 
 /** Requests larger than this are refused before any handler runs. Uploads use their own limit. */
@@ -138,14 +148,25 @@ export function buildWebApp(options: WebAppOptions): WebApp {
       auth.register(scope);
       registerReadRoutes(scope, options.context, auth);
       registerChangeRoutes(scope, options.context, auth);
-      if (built) {
-        // `wildcard: false` serves only files that exist, so other pages fall through to the app shell.
-        await scope.register(fastifyStatic, {
-          root: options.frontendRoot,
-          wildcard: false,
-          index: false,
-        });
-      }
+      // Serves the built frontend, and gives routes `reply.sendFile` for media either way.
+      // `wildcard: false` serves only files that exist, so other pages fall through to the app shell.
+      await scope.register(fastifyStatic, {
+        root: built ? options.frontendRoot : options.context.paths.archivesRoot,
+        serve: built,
+        wildcard: false,
+        index: false,
+      });
+      registerMediaRoutes(scope, options.context, auth);
+      await scope.register(fastifyMultipart, { limits: { fileSize: MAX_MEDIA_BYTES, files: 1 } });
+      registerIntakeRoutes(scope, {
+        context: options.context,
+        auth,
+        announce: options.announce,
+        checkAnnouncementChannel: options.checkAnnouncementChannel,
+        driveApiKey: options.driveApiKey,
+        fetch: options.fetch ?? fetch,
+        logError: options.logError,
+      });
       scope.setNotFoundHandler((request, reply) => {
         const path = (request.url.split("?")[0] ?? "").slice(basePath.length);
         if (

@@ -922,8 +922,8 @@ Serve frontend and backend from the same origin. Prefix archive routes with `/ap
 | `GET /api/archives` | Accessible archive summaries only |
 | `GET /api/archives/:archiveId` | Archive metadata and display settings |
 | `GET /artifacts`, `GET /artifacts/:id` | Paged filtered list, sorted oldest first, newest first, or most recently added, or full details |
-| `POST /artifacts/intake` | Multipart upload or a public Drive file link and description, with optional metadata. Return new artifact or a review token and differences |
-| `POST /artifacts/reviews/:token/apply` | Selected scalar replacements and relationship additions, with expected version |
+| `POST /artifacts/intake` | Multipart upload or a public Drive file link and description, with optional metadata. Fields come before the file and are checked before it is kept. A time typed without a zone needs `zoneConfirmed`. Return the new artifact and its announcement result, or a review token and differences |
+| `POST /artifacts/reviews/:token/apply` | Selected scalar replacements and relationship additions. The review keeps the version that was shown, belongs to its contributor and archive, expires after 15 minutes, and works once |
 | `PATCH /artifacts/:id`, `DELETE /artifacts/:id` | Validated edit or permanent deletion with expected version |
 | `GET`, `POST`, `PATCH`, `DELETE /events[/:id]` | Event list, creation, details, editing, or deletion according to method and ID |
 | `GET`, `POST`, `PATCH`, `DELETE /entities/:kind[/:id]` | Same for character, account, server, and channel records. The character list is paged in name order with each picture on a given day. Other kinds, and characters with a typed name, return the first matches for pickers. Details include dated history and, where a Discord ID is known, its creation time |
@@ -936,9 +936,9 @@ Serve frontend and backend from the same origin. Prefix archive routes with `/ap
 | `POST /requests/:id/status` | Needed, Resolved with found artifacts, or Unrecoverable with reason, and expected version |
 | `GET /backlog`, `POST /backlog/flags`, `PATCH /backlog/:id` | Derived and manual gap review with permitted state changes |
 | `GET /timeline`, `/calendar`, `/graph`, `/heatmap` | Bounded view data using shared filters and date rules |
-| `GET /media/:mediaId`, `GET /media/:mediaId/preview` | Authorized original or preview streaming, including retained media. Never a direct filesystem path |
+| `GET /media/:mediaId`, `GET /media/:mediaId/preview` | Authorized original or preview streaming, including retained media, with byte ranges and private, revalidated caching. Never a direct filesystem path |
 | `GET /edit-log` | Authorized log download |
-| `PUT /artifact-logs-channel`, `DELETE /artifact-logs-channel` | Equivalent contributor configuration after Discord channel access and bot-permission checks |
+| `GET`, `PUT`, `DELETE /artifact-logs-channel` | Equivalent contributor configuration after Discord channel access and bot-permission checks, which the bot performs. Without the bot connected, setting it is refused with `503` |
 
 The bracket notation in the table abbreviates separate collection and item routes, not a literal route string. Historical record and archive-setting mutations return the current record and version. Requests take `expectedVersion` on their changes and deletion. Operational membership, preference, and announcement-setting commands apply atomically without historical record versions. Source-specific fields and ordinary editable columns come from the schema and date contract. Relationship updates explicitly list additions and removals. A duplicate-review operation accepts additions only.
 
