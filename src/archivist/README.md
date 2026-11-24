@@ -36,6 +36,8 @@ Archivist is being built in milestones. This directory currently holds storage, 
 | `drive.ts` | Public Google Drive links: parsing, metadata checks, and binary downloads, directly or through the Drive API when a key is set |
 | `lookup.ts` | Picking characters by name from a comma-separated list, character suggestions, and short-ID lookup |
 | `announcements.ts` | Per-archive announcement channels and delivery state that prevents repeated posts |
+| `queries.ts` | The website's paged lists of artifacts and events, with the shared filters, album sorts, and stable cursors |
+| `entity-views.ts` | Structured characters, accounts, servers, and channels with their history, the side columns' lists, and creation times read from Discord IDs |
 | `search.ts` | Case-insensitive, Unicode-normalized search for artifacts and entities |
 | `exports.ts` | Owner-only consistent snapshots zipped into `archivist-exports/` on the host, kept until the owner deletes them |
 | `archive-database.ts` | Opens an archive's `archive.db`, refuses newer schemas, and applies migrations |

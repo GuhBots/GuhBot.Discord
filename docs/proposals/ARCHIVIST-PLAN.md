@@ -926,7 +926,9 @@ Serve frontend and backend from the same origin. Prefix archive routes with `/ap
 | `POST /artifacts/reviews/:token/apply` | Selected scalar replacements and relationship additions, with expected version |
 | `PATCH /artifacts/:id`, `DELETE /artifacts/:id` | Validated edit or permanent deletion with expected version |
 | `GET`, `POST`, `PATCH`, `DELETE /events[/:id]` | Event list, creation, details, editing, or deletion according to method and ID |
-| `GET`, `POST`, `PATCH`, `DELETE /entities/:kind[/:id]` | Same for character, account, server, and channel records |
+| `GET`, `POST`, `PATCH`, `DELETE /entities/:kind[/:id]` | Same for character, account, server, and channel records. The character list is paged in name order with each picture on a given day. Other kinds, and characters with a typed name, return the first matches for pickers. Details include dated history and, where a Discord ID is known, its creation time |
+| `GET /places` | Servers and group chats for the left column, with the name and icon in effect on a given day, main server first |
+| `GET /search` | The top bar's search: the first few matching characters, accounts, places, artifacts, and events |
 | `POST /entities/character/merge` | Reviewed same-archive character merge and expected versions |
 | `GET`, `POST`, `PATCH /requests[/:id]` | Missing-media request list, creation, details, and editing |
 | `POST /requests/:id/status` | Needed, Resolved with found artifacts, or Unrecoverable with reason, and expected version |
