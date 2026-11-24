@@ -1697,3 +1697,28 @@ body.graph-panning .graph-svg {
   color: var(--muted);
   margin-top: 6px;
 }
+.icon-entry {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.heat-months {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, max-content));
+  gap: 24px;
+  overflow-x: auto;
+}
+.heat-month {
+  display: grid;
+  gap: 3px;
+  text-align: center;
+}
+.heat-day {
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font-size: 11px;
+  cursor: pointer;
+}

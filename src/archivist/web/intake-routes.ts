@@ -22,7 +22,15 @@ import type { Actor, ArchivistContext } from "../context.js";
 import { needsZoneConfirmation } from "../dates.js";
 import { DriveClient, parseDriveLink } from "../drive.js";
 import { ArchivistError } from "../errors.js";
-import { createStagingFolder, discardStaging, MAX_MEDIA_BYTES, stageMedia } from "../media.js";
+import { entityView } from "../entity-views.js";
+import { addHistory, setPicture } from "../history.js";
+import {
+  createStagingFolder,
+  discardStaging,
+  MAX_MEDIA_BYTES,
+  type StagedMedia,
+  stageMedia,
+} from "../media.js";
 import { getDateOrder } from "../preferences.js";
 import { openForActor } from "../records.js";
 import type { Auth } from "./auth.js";
@@ -259,6 +267,100 @@ export function registerIntakeRoutes(scope: FastifyInstance, options: IntakeOpti
         expectedVersion: review.version,
         selected,
       });
+    },
+  );
+
+  /*
+   * Pictures for records: an account avatar or a server icon, dated when it
+   * was seen, or a current fallback picture for a character or icon for a
+   * group chat. The fields come before the file, like an artifact upload.
+   */
+  scope.post<{ Params: Params & { kind: string; id: string } }>(
+    `${base}/entities/:kind/:id/picture`,
+    async (request, reply) => {
+      const { actor } = await auth.requireActor(request);
+      const { archiveId, kind, id } = request.params;
+      openForActor(context, actor, archiveId);
+      if (!request.isMultipart()) {
+        throw new ArchivistError("invalid_input", "Send the picture as a form upload.", {
+          field: "file",
+        });
+      }
+      const fields: Fields = {};
+      let staging: string | null = null;
+      try {
+        let staged: StagedMedia | null = null;
+        for await (const part of request.parts({
+          limits: { fileSize: MAX_MEDIA_BYTES, files: 1, fields: 10, fieldSize: 4096 },
+        })) {
+          if (part.type !== "file") {
+            if (staged) {
+              throw new ArchivistError("invalid_input", "Send picture fields before the file.", {
+                field: part.fieldname,
+              });
+            }
+            fields[part.fieldname] = part.value;
+            continue;
+          }
+          const purpose = text(fields, "purpose");
+          const allowed: Record<string, string> = {
+            avatar: "account",
+            server_icon: "server",
+            fallback: "character",
+            icon: "channel",
+          };
+          if (!purpose || allowed[purpose] !== kind) {
+            part.file.resume();
+            throw new ArchivistError(
+              "invalid_input",
+              "Choose what the picture is for: an avatar, a server icon, a fallback picture, or a group chat icon.",
+              { field: "purpose" },
+            );
+          }
+          staging = createStagingFolder(context);
+          const path = join(staging, "original");
+          await pipeline(part.file, createWriteStream(path));
+          if (part.file.truncated) {
+            throw new ArchivistError("media_too_large", "Pictures can be at most 100 MiB.", {
+              field: "file",
+            });
+          }
+          staged = await stageMedia(context, { file: path, originalFilename: part.filename });
+          if (!staged.mimeType.startsWith("image/")) {
+            throw new ArchivistError(
+              "unsupported_media_type",
+              "Pictures must be images, such as PNG, JPEG, WebP, or GIF.",
+              { field: "file" },
+            );
+          }
+        }
+        if (!staged)
+          throw new ArchivistError("invalid_input", "Choose a picture to upload.", {
+            field: "file",
+          });
+        const purpose = text(fields, "purpose")!;
+        if (purpose === "avatar" || purpose === "server_icon") {
+          addHistory(context, actor, {
+            archiveId,
+            kind: purpose,
+            parentId: id,
+            expectedVersion: fields.expectedVersion,
+            date: text(fields, "date"),
+            media: staged,
+          });
+        } else {
+          setPicture(context, actor, {
+            archiveId,
+            kind: purpose === "fallback" ? "character" : "channel",
+            id,
+            expectedVersion: fields.expectedVersion,
+            media: staged,
+          });
+        }
+        return reply.status(201).send(entityView(context, actor, { archiveId, kind, id }));
+      } finally {
+        if (staging) discardStaging(context, staging);
+      }
     },
   );
 

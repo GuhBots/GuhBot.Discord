@@ -4,11 +4,16 @@ import { join } from "node:path";
 import { after, test, type TestContext } from "node:test";
 import { createArchive } from "../../../src/archivist/archives.js";
 import type { ArtifactDetails } from "../../../src/archivist/artifacts.js";
-import { createCharacter } from "../../../src/archivist/entities.js";
+import {
+  createAccount,
+  createChannel,
+  createCharacter,
+  createServer,
+} from "../../../src/archivist/entities.js";
 import { addMember } from "../../../src/archivist/members.js";
 import { closeMetadataReader } from "../../../src/archivist/metadata.js";
 import { MEMBER, OTHER, OWNER } from "../helpers/context.js";
-import { closeFixtureWriter, writeImage } from "../helpers/media.js";
+import { closeFixtureWriter, writeImage, writeWav } from "../helpers/media.js";
 import { makeTempDir } from "../helpers/temp-dir.js";
 import { WEB_SETTINGS, type WebOverrides, webHarness } from "../helpers/web.js";
 
@@ -279,4 +284,146 @@ test("the logs channel is set through the bot's channel check, or refused withou
     payload: { channelId: "900000000000000123" },
   });
   assert.equal(refused.statusCode, 503);
+});
+
+test("pictures for records upload with the same checks: dated avatars and icons, current fallbacks", async (t) => {
+  const { h, archiveId, sam, staging } = await setup(t);
+  const account = createAccount(h.context, MEMBER, {
+    archiveId,
+    kind: "human",
+    label: "samwise",
+    characterId: sam.id,
+  });
+  const bytes = await pngBytes(t);
+  const send = async (
+    kind: string,
+    id: string,
+    fields: Record<string, string>,
+    file: { name: string; bytes: Buffer },
+    who = h.cookie(MEMBER),
+    trailingFields: Record<string, string> = {},
+  ) => {
+    const form = new FormData();
+    for (const [name, value] of Object.entries(fields)) form.append(name, value);
+    form.append("file", new Blob([file.bytes]), file.name);
+    for (const [name, value] of Object.entries(trailingFields)) form.append(name, value);
+    const encoded = new Request("http://localhost/", { method: "POST", body: form });
+    const response = await h.app.inject({
+      method: "POST",
+      url: `/api/archives/${archiveId}/entities/${kind}/${id}/picture`,
+      headers: { origin: h.origin, "content-type": encoded.headers.get("content-type")! },
+      cookies: { archivist_session: who },
+      payload: Buffer.from(await encoded.arrayBuffer()),
+    });
+    return { status: response.statusCode, body: response.json() };
+  };
+
+  const avatar = await send(
+    "account",
+    account.id,
+    { purpose: "avatar", expectedVersion: "1", date: "2019-08-01" },
+    { name: "me.png", bytes },
+  );
+  assert.equal(avatar.status, 201, JSON.stringify(avatar.body));
+  const entry = avatar.body.history.find((e: { kind: string }) => e.kind === "avatar");
+  assert.equal(entry.date.archiveDay, "2019-08-01");
+  const media = await h.app.inject({
+    method: "GET",
+    url: `/api/archives/${archiveId}/media/${entry.mediaId}`,
+    cookies: { archivist_session: h.cookie(MEMBER) },
+  });
+  assert.deepEqual(media.rawPayload, bytes);
+
+  const fallback = await send(
+    "character",
+    sam.id,
+    { purpose: "fallback", expectedVersion: "1" },
+    { name: "sam.png", bytes },
+  );
+  assert.equal(fallback.status, 201);
+  assert.ok(fallback.body.fallbackMediaId);
+  assert.equal(fallback.body.pictures.at(-1).mediaId, fallback.body.fallbackMediaId);
+
+  const server = createServer(h.context, MEMBER, { archiveId, label: "Hangout" });
+  const icon = await send(
+    "server",
+    server.id,
+    { purpose: "server_icon", expectedVersion: "1", date: "2020-09-01" },
+    { name: "server.png", bytes },
+  );
+  assert.equal(icon.status, 201, JSON.stringify(icon.body));
+  assert.equal(
+    icon.body.history.find((entry: { kind: string }) => entry.kind === "server_icon").date
+      .archiveDay,
+    "2020-09-01",
+  );
+  const chat = createChannel(h.context, MEMBER, { archiveId, kind: "group_chat", label: "Trip" });
+  const chatIcon = await send(
+    "channel",
+    chat.id,
+    { purpose: "icon", expectedVersion: "1" },
+    { name: "chat.png", bytes },
+  );
+  assert.equal(chatIcon.status, 201, JSON.stringify(chatIcon.body));
+  assert.ok(chatIcon.body.iconMediaId);
+
+  const changedPurpose = await send(
+    "character",
+    sam.id,
+    { purpose: "fallback", expectedVersion: "2" },
+    { name: "late.png", bytes },
+    h.cookie(MEMBER),
+    { purpose: "server_icon" },
+  );
+  assert.equal(changedPurpose.status, 400);
+  assert.equal(changedPurpose.body.code, "invalid_input");
+  assert.equal(staging(), 0);
+
+  assert.equal(
+    (
+      await send(
+        "character",
+        sam.id,
+        { purpose: "avatar", expectedVersion: "2" },
+        { name: "x.png", bytes },
+      )
+    ).status,
+    400,
+  );
+  const wav = join(makeTempDir(t), "a.wav");
+  writeWav(wav);
+  assert.equal(
+    (
+      await send(
+        "character",
+        sam.id,
+        { purpose: "fallback", expectedVersion: "2" },
+        { name: "a.wav", bytes: readFileSync(wav) },
+      )
+    ).status,
+    415,
+  );
+  assert.equal(
+    (
+      await send(
+        "character",
+        sam.id,
+        { purpose: "fallback", expectedVersion: "1" },
+        { name: "late.png", bytes },
+      )
+    ).status,
+    409,
+  );
+  assert.equal(
+    (
+      await send(
+        "character",
+        sam.id,
+        { purpose: "fallback", expectedVersion: "2" },
+        { name: "x.png", bytes },
+        h.cookie(OTHER),
+      )
+    ).status,
+    404,
+  );
 });

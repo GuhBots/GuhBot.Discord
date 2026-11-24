@@ -11,7 +11,7 @@ The website's server side. It runs inside the bot process, and only the bot owne
 | `sessions.ts` | Sessions and sign-in states in the bot database, stored as token hashes |
 | `read-routes.ts` | Read routes under `/api/archives`: archives, places, artifacts, events, entities, requests, the board, and search |
 | `change-routes.ts` | Routes that change an archive: entities and their history, merge, artifacts, events, requests and their buckets, the board, and the date preview |
-| `intake-routes.ts` | Adding artifacts from the website (upload or Drive link), duplicate review, and the logs channel |
+| `intake-routes.ts` | Adding artifacts from the website (upload or Drive link), duplicate review, entity picture uploads, and the logs channel |
 | `media-routes.ts` | Media originals and previews, with byte ranges, and the edit-log download |
 | `reviews.ts` | Duplicate reviews waiting for the contributor's choices, in memory for 15 minutes |
 | `view-routes.ts` | The timeline, calendar, heatmap, and graph data |

@@ -930,6 +930,7 @@ Serve frontend and backend from the same origin. Prefix archive routes with `/ap
 | `GET /places` | Servers and group chats for the left column, with the name and icon in effect on a given day, main server first |
 | `GET /search` | The top bar's search: the first few matching characters, accounts, places, artifacts, and events |
 | `POST /entities/:kind/:id/history`, `DELETE /entities/:kind/:id/history/:entryId` | Add or remove a dated history entry with the parent's expected version. Removal names the history kind |
+| `POST /entities/:kind/:id/picture` | Upload an image with purpose `avatar`, `server_icon`, `fallback`, or `icon`, matching the entity kind, and the parent's expected version. Avatars and server icons accept an optional observation date. Fields must precede the file. Originals remain unchanged |
 | `POST /entities/character/merge/preview`, `POST /entities/character/merge` | Conflicts and links a merge would change, then the reviewed same-archive merge with both expected versions and a choice for each conflict |
 | `GET /date-preview` | How a typed date will be read with the contributor's timezone and date order, and whether a zone was assumed, so a form can show it before saving |
 | `GET`, `POST`, `PATCH /requests[/:id]` | Missing-media request list, creation, details, and editing |
