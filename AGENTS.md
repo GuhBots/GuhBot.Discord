@@ -14,6 +14,7 @@ These instructions apply to AI assistants working in this repository, regardless
 
 * Follow the branch and pull request workflow in [Contributing](CONTRIBUTING.md). Work on a separate branch and avoid direct changes to the default branch.
 * Keep commits atomic and commit messages succinct.
+* Do not credit Claude as a commit author, co-author, or repository contributor. Do not add a Claude `Co-Authored-By` trailer. Plain commit-message acknowledgments such as `Assisted-by: Claude Code` are allowed without an email address.
 * Keep an existing pull request's title and description current when its scope changes.
 * Prefix AI-generated pull request comments and replies with `AI:`.
 

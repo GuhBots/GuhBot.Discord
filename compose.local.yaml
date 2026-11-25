@@ -1,0 +1,21 @@
+# Local testing with the Archivist service running in its own container on
+# this machine. Both stacks join the shared guhbot network, where this bot
+# reaches Archivist at http://archivist:3000, so set ARCHIVIST_API_URL to that.
+# Create the network once:
+#
+#   docker network create guhbot
+#
+# Load this file with the others, for example by adding to .env:
+#
+#   COMPOSE_FILE=compose.yaml:compose.override.yaml:compose.local.yaml
+#
+# A bot on another machine than Archivist does not need it. It reaches
+# Archivist's public HTTPS address instead.
+
+services:
+  app:
+    networks: [default, guhbot]
+
+networks:
+  guhbot:
+    external: true

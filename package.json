@@ -12,10 +12,12 @@
     "build": "tsc",
     "start": "node --env-file-if-exists=.env build/main.js",
     "dev": "tsc && npm start",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "npm run typecheck && npm run format:check"
+    "check": "npm run typecheck && npm run format:check",
+    "build:tests": "node -e \"const fs = require('node:fs'); fs.rmSync('.test-build', { recursive: true, force: true })\" && tsc -p tsconfig.test.json && node -e \"require('node:fs').copyFileSync('package.json', '.test-build/package.json')\"",
+    "test:archivist:discord": "npm run build:tests && node --test \".test-build/tests/archivist/discord/**/*.test.js\""
   },
   "dependencies": {
     "@discordx/utilities": "^8.0.0",

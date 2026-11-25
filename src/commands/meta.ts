@@ -26,6 +26,9 @@ import { type BotModule, ENABLED_MODULES, isAvailableIn } from "../modules.js";
 /** Discord shows at most this many autocomplete suggestions. */
 const MAX_SUGGESTIONS = 25;
 
+/** Discord embeds hold at most this many fields. */
+const MAX_EMBED_FIELDS = 25;
+
 const CPU_SAMPLE_MS = 200;
 
 /** The permissions the original bot's invite link requested. */
@@ -37,7 +40,8 @@ function usage(command: DApplicationCommand): string {
   const options = [...command.options]
     .reverse()
     .map((option) => (option.required ? `<${option.name}>` : `[${option.name}]`));
-  return `\`/${[command.name, ...options].join(" ")}\``;
+  const path = [command.group, command.subgroup, command.name].filter(Boolean);
+  return `\`/${[...path, ...options].join(" ")}\``;
 }
 
 /** Commands in a /help module, in the order they were declared. */
@@ -177,15 +181,21 @@ export class Meta {
         );
         return;
       }
-      embed
-        .setTitle(`🚧 ${module.name} Command List`)
-        .setDescription(`**${module.name} - ${module.description}**`)
-        .addFields(
-          commandsIn(module).map((command) => ({
-            name: usage(command),
-            value: command.description,
-          })),
+      const commands = commandsIn(module);
+      embed.setTitle(`🚧 ${module.name} Command List`);
+      if (commands.length <= MAX_EMBED_FIELDS) {
+        embed
+          .setDescription(`**${module.name} - ${module.description}**`)
+          .addFields(
+            commands.map((command) => ({ name: usage(command), value: command.description })),
+          );
+      } else {
+        // Embeds hold at most 25 fields, so larger modules list one command per line.
+        const lines = commands.map((command) => `${usage(command)}\n${command.description}`);
+        embed.setDescription(
+          [`**${module.name} - ${module.description}**`, ...lines].join("\n").slice(0, 4096),
         );
+      }
     }
     await interaction.reply({ embeds: [embed] });
   }

@@ -5,8 +5,11 @@ import { config } from "../config.js";
 
 let database: Database.Database | undefined;
 
-/** Opens the database on first use and creates its tables. */
-function getDatabase(): Database.Database {
+/**
+ * Opens the database on first use and creates its tables. Archivist adds its
+ * own tables to this database through its migrations.
+ */
+export function getDatabase(): Database.Database {
   if (!database) {
     mkdirSync(config.dataDir, { recursive: true });
     database = new Database(join(config.dataDir, "guhbot.db"));

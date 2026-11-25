@@ -15,9 +15,28 @@ export async function announce(client: Client, message: string): Promise<void> {
   }
 }
 
-/** Disconnects from Discord, closes the database, and exits. */
+type ShutdownHook = () => Promise<void> | void;
+
+const shutdownHooks: ShutdownHook[] = [];
+
+/**
+ * Runs `hook` during shutdown, before the database closes. Features that hold
+ * files or child processes, such as Archivist, register one when they load.
+ */
+export function onShutdown(hook: ShutdownHook): void {
+  shutdownHooks.push(hook);
+}
+
+/** Disconnects from Discord, runs shutdown hooks, closes the database, and exits. */
 export async function shutdown(client: Client, exitCode = 0): Promise<never> {
   await client.destroy();
+  for (const hook of shutdownHooks) {
+    try {
+      await hook();
+    } catch (error) {
+      console.error("A shutdown step failed:", error);
+    }
+  }
   closeDatabase();
   process.exit(exitCode);
 }

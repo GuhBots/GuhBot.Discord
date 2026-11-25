@@ -59,10 +59,23 @@ export const config = {
    * `modules.ts` checks the names.
    */
   modules: optionalList("MODULES")?.map((name) => name.toLowerCase()),
-  /** The servers where the Archivist module works. The module is off when empty. */
+  /**
+   * The starting Archivist servers. They are copied once, when the bot first
+   * creates its server list in the database. /archivist-admin server manages
+   * the list after that, and `archivist-servers.ts` reads it.
+   */
   archivistGuildIds: idList("ARCHIVIST_GUILD_IDS"),
   /** Receives startup and shutdown announcements when set. */
   statusChannelId: optional("STATUS_CHANNEL_ID"),
+  /**
+   * The Archivist service the Archivist module calls. Both are required when
+   * the module is on. The token is the same `ARCHIVIST_SERVICE_TOKEN` the
+   * service has, and the address includes any path, such as /archivist.
+   */
+  archivistApi: {
+    url: optional("ARCHIVIST_API_URL"),
+    token: optional("ARCHIVIST_SERVICE_TOKEN"),
+  },
   /** Holds the SQLite database. The container image sets it to the /data volume. */
   dataDir: optional("DATA_DIR") ?? "data",
   /** Links shown by /support, /stats, and /upvote. Each one is hidden when unset. */

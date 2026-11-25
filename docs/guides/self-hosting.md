@@ -132,6 +132,10 @@ Add a matching `build` section for each service to `compose.override.yaml`. Ever
 
 Run only one copy of a service that logs in to an outside account, such as a chat bot. Two copies with the same token both respond to every event. When moving a service to another machine, stop it on the old machine first.
 
+## Archivist
+
+Archivist runs as its own service, from the GuhBot.Archivist repository, with its own `compose.yaml` and data volume, on this machine or another. The bot never mounts Archivist's data. It calls Archivist's API over HTTPS, or a private address on the same machine, with the settings described in [Discord Setup](discord-setup.md#connecting-to-archivist). When Archivist is unavailable, the Archivist commands say so and the rest of the bot keeps working.
+
 ## Data and Backups
 
 The service stores files that must survive updates in the `data` volume, mounted at `/data` in the container. `docker compose down` keeps the volume. `docker compose down -v` deletes it.

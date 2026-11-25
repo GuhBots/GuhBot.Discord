@@ -54,7 +54,7 @@ These rules cover `src/`. [src/README.md](../src/README.md) explains its layout.
 * **Naming:** Use `camelCase` for functions and values, `PascalCase` for classes and types, and `UPPER_SNAKE_CASE` for module-level constants. Name files in lowercase with hyphens.
 * **Commands:** Group commands by /help category, one discordx class per file. Read settings from `config.ts`, never from `process.env` directly.
 * **Errors:** Let unexpected errors propagate. The handler in `main.ts` logs them and replies with an error embed. Catch errors only where the bot can recover, such as when a member has closed their direct messages.
-* **Tests:** No automated tests exist yet. Verify command changes by running the bot against a test server, as [Discord Setup](guides/discord-setup.md) describes.
+* **Tests:** Archivist has automated tests in `tests/`, which [Tests](../tests/README.md) describes. Other commands have no automated tests. Verify their changes by running the bot against a test server, as [Discord Setup](guides/discord-setup.md) describes.
 
 Add a subsection for each further language the repository uses.
 

@@ -35,16 +35,17 @@ async function explicitGuilds(client: Client, command: DApplicationCommand): Pro
 
 /**
  * Groups the code's commands by where they belong: "global" or a guild ID.
- * A command's own `@Guild` wins. Otherwise DEV_GUILD_ID, through the client's
+ * A command's own `@Guild` wins, even when its list is empty, which keeps the
+ * command out of every server. Otherwise DEV_GUILD_ID, through the client's
  * `botGuilds`, moves it to the development server. Otherwise it is global.
  */
-async function commandsByScope(client: Client): Promise<Scopes> {
+export async function commandsByScope(client: Client): Promise<Scopes> {
   const devGuilds = await client.botResolvedGuilds;
   const scopes: Scopes = new Map();
   for (const command of client.applicationCommands) {
     if (!command.isBotAllowed(client.botId)) continue;
     const own = await explicitGuilds(client, command);
-    const targets = own.length ? own : devGuilds.length ? devGuilds : [GLOBAL];
+    const targets = command.guilds.length ? own : devGuilds.length ? devGuilds : [GLOBAL];
     const data = command.toJSON() as ApplicationCommandData;
     for (const scope of targets) {
       scopes.set(scope, [...(scopes.get(scope) ?? []), data]);

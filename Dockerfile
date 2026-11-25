@@ -90,7 +90,7 @@ RUN npm run build \
 FROM ubuntu:${UBUNTU_VERSION} AS runtime
 
 # Install only what the service needs at run time. CA certificates let it
-# make HTTPS connections.
+# make HTTPS connections to Discord and to the Archivist service.
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \

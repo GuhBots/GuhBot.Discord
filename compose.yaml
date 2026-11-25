@@ -23,6 +23,9 @@ services:
       OWNER_GUILD_ID: ${OWNER_GUILD_ID:-}
       MODULES: ${MODULES:-}
       ARCHIVIST_GUILD_IDS: ${ARCHIVIST_GUILD_IDS:-}
+      # The separate Archivist service, needed when the Archivist module is on.
+      ARCHIVIST_API_URL: ${ARCHIVIST_API_URL:-}
+      ARCHIVIST_SERVICE_TOKEN: ${ARCHIVIST_SERVICE_TOKEN:-}
       STATUS_CHANNEL_ID: ${STATUS_CHANNEL_ID:-}
       SUPPORT_URL: ${SUPPORT_URL:-}
       WEBSITE_URL: ${WEBSITE_URL:-}
@@ -33,7 +36,8 @@ services:
     init: true
     volumes:
       - data:/data
-    # The bot only makes outgoing connections to Discord, so it publishes no ports.
+    # The bot only makes outgoing connections, so it publishes no ports.
+    # Archivist's website is a separate service, GuhBot.Archivist.
     # Limit log size so that logs cannot fill the disk or wear out an SD card.
     logging:
       driver: json-file
