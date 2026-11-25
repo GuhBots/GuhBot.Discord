@@ -71,7 +71,7 @@ Each command is shown only to members with the matching permission. The bot also
 
 ## Archivist
 
-Archiving tools for specific servers, described in the [Archivist plan](proposals/ARCHIVIST-PLAN.md). The module is new and has no counterpart in the original bot. It works only in the servers Archivist's owners add with `/archivist-admin server add`, and /help shows it only there. Replies are private.
+Archiving tools for specific servers, described in the [Archivist plan](https://github.com/GuhBots/GuhBot.Archivist/blob/main/docs/proposals/ARCHIVIST-PLAN.md). The module is new and has no counterpart in the original bot. It works only in the servers Archivist's owners add with `/archivist-admin server add`, and /help shows it only there. Replies are private.
 
 The archives live in the separate Archivist service, GuhBot.Archivist, which also has the website. These commands call its API as the contributor who runs them, and the service decides what each contributor may do: only Archivist's owners and contributors on an archive's whitelist can use that archive. When the service cannot be reached, the commands say so and change nothing. [Discord Setup](guides/discord-setup.md#connecting-to-archivist) explains the two settings that connect them.
 

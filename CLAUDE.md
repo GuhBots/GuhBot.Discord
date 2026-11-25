@@ -1,6 +1,6 @@
 # Archivist Working Instructions
 
-Build Archivist according to [the Archivist plan](docs/proposals/ARCHIVIST-PLAN.md). The owner steers the work and reviews behavior. Take responsibility for implementation, verification, documentation, and keeping progress recoverable between sessions.
+Build Archivist according to [the Archivist plan](https://github.com/GuhBots/GuhBot.Archivist/blob/main/docs/proposals/ARCHIVIST-PLAN.md), which lives in `GuhBot.Archivist`. The owner steers the work and reviews behavior. Take responsibility for implementation, verification, documentation, and keeping progress recoverable between sessions.
 
 ## Read Before Working
 
@@ -11,14 +11,14 @@ Read these documents at the start of a new session and after relevant instructio
 * [Coding style](docs/coding-style.md).
 * [Documentation conventions](docs/documentation.md).
 * [Repository overview](README.md), [documentation map](docs/README.md), and the README and additional instructions for each directory being changed.
-* The complete [Archivist plan](docs/proposals/ARCHIVIST-PLAN.md), including the data contracts, permissions, failure behavior, milestones, and acceptance scenarios.
+* The complete [Archivist plan](https://github.com/GuhBots/GuhBot.Archivist/blob/main/docs/proposals/ARCHIVIST-PLAN.md), including the data contracts, permissions, failure behavior, milestones, and acceptance scenarios.
 * The local progress file `archivist-roadmap.local.md`, if present.
 
 Inspect the current branch, working tree, recent commits, and existing implementation before editing. Check the actual package scripts and installed tooling before choosing verification commands. Read the relevant source before replacing or extending it.
 
 ## Scope And Authority
 
-The canonical specification is `docs/proposals/ARCHIVIST-PLAN.md`. Do not use copies under `docs/` or `build/` as competing specifications. Do not silently weaken requirements, remove acceptance scenarios, or mark a missing feature out of scope to finish sooner.
+The canonical specification is `docs/proposals/ARCHIVIST-PLAN.md` in `GuhBot.Archivist`, the sibling checkout at `../GuhBot.Archivist`. It moved there on 2026-11-24. This repository keeps only a link to it with Discord integration notes. Do not use copies under `docs/` or `build/` as competing specifications. Do not silently weaken requirements, remove acceptance scenarios, or mark a missing feature out of scope to finish sooner.
 
 When the owner requests implementation, that request authorizes the normal development work described here. The plan's preparation-stage wording does not require another confirmation for every milestone. A request to edit instructions or refine the plan alone does not start the application build.
 
@@ -30,9 +30,9 @@ Do not reopen settled product decisions merely because a different implementatio
 
 ## Branch And Commits
 
-In `GuhBot.Discord`, work exclusively on `feat/archivist`, the existing Archivist branch. This is the branch-specific exception to starting a new branch for each piece of work in Contributing. Read the sibling service repository's own instructions before changing it. Inspect and preserve its uncommitted migration work rather than overwriting it with the older bot copy. Keep the plan canonical here until its deliberate transfer and link replacement. Do not create another implementation branch or change the default branch. If a session starts on another branch, inspect its changes and switch only when doing so preserves all work. Ask for help if switching would overwrite or misattribute changes.
+In `GuhBot.Discord`, work exclusively on `feat/archivist`, the existing Archivist branch. This is the branch-specific exception to starting a new branch for each piece of work in Contributing. Read the sibling service repository's own instructions before changing it. Inspect and preserve its uncommitted migration work rather than overwriting it with the older bot copy. Change the plan in `GuhBot.Archivist`, through that repository's pull requests. Do not create another implementation branch or change the default branch. If a session starts on another branch, inspect its changes and switch only when doing so preserves all work. Ask for help if switching would overwrite or misattribute changes.
 
-Local commits on `feat/archivist` are authorized. Commit coherent, verified increments with succinct messages describing the resulting change. Inspect the staged diff and stage explicit paths or hunks. Preserve unrelated and pre-existing work. The canonical plan and related documentation may be committed as part of the Archivist work, superseding the plan's earlier temporary instruction to keep it untracked.
+Local commits on `feat/archivist` are authorized. Commit coherent, verified increments with succinct messages describing the resulting change. Inspect the staged diff and stage explicit paths or hunks. Preserve unrelated and pre-existing work.
 
 Do not force push, rewrite shared history, discard work, merge into the default branch, publish a release, or deploy remotely without a separate request. Permission to commit locally does not imply permission to publish. Keep credentials, archive contents, local databases, logs, and the local roadmap out of commits.
 
