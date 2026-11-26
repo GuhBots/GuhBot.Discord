@@ -100,7 +100,7 @@ The archives live in the separate Archivist service, GuhBot.Archivist, which als
 | `/set-artifact-logs-channel [channel] [archive]` | None | Announces every new artifact in the archive in a channel, this one by default. The bot must be able to post embeds and files there |
 | `/remove-artifact-logs-channel [archive]` | None | Stops future announcements. Earlier posts stay |
 
-Discord is for adding to an archive quickly. The research board, moving missing-media requests between Needed, Resolved, and Unrecoverable, dated history, and character merge are on Archivist's website. Board gaps such as a missing date or an account without a character resolve by themselves when the information is added.
+Discord is for adding to an archive quickly. The research board, moving missing-media requests between Needed and Unrecoverable, deleting a request once it is found, dated history, and character merge are on Archivist's website. Board gaps such as a missing date or an account without a character clear by themselves when the information is added.
 
 `/a` is a short name for `/archive` with the same commands, such as `/a artifact add`. /help lists them once, under `/archive`.
 
