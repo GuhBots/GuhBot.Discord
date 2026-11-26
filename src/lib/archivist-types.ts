@@ -111,7 +111,7 @@ export interface EventDetails {
 
 export type ConstraintKind =
   "approximate_day" | "date_range" | "before_date" | "before_event" | "after_event";
-export type RequestStatus = "needed" | "resolved" | "unrecoverable";
+export type RequestStatus = "needed" | "unrecoverable";
 export type Priority = "critical" | "high" | "medium" | "low";
 
 export interface RequestDetails {
@@ -136,7 +136,6 @@ export interface RequestDetails {
   unrecoverableReason: string | null;
   characters: string[];
   events: string[];
-  foundArtifacts: string[];
 }
 
 export interface ArchiveSummary {

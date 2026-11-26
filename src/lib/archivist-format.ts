@@ -236,11 +236,7 @@ export function requestEmbed(
   view: { archiveName: string; characterNames: string[]; eventNames: string[] },
 ): EmbedBuilder {
   const status =
-    request.status === "resolved"
-      ? `Resolved. Found in ${request.foundArtifacts.map((id) => `\`${id.slice(0, 8)}\``).join(", ")}`
-      : request.status === "unrecoverable"
-        ? `Unrecoverable: ${request.unrecoverableReason}`
-        : "Needed";
+    request.status === "unrecoverable" ? `Unrecoverable: ${request.unrecoverableReason}` : "Needed";
   const embed = new EmbedBuilder()
     .setColor(ARCHIVIST_COLOR)
     .setTitle(shorten(request.label, 256))

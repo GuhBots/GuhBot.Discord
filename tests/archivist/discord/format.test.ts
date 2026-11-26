@@ -289,7 +289,6 @@ test("a request shows its bucket and the reason it cannot be found", () => {
     unrecoverableReason: "Nobody kept them.",
     characters: ["c1"],
     events: [],
-    foundArtifacts: [],
   };
   const fields = Object.fromEntries(
     requestEmbed(request, { archiveName: "History", characterNames: ["Sam"], eventNames: [] })
